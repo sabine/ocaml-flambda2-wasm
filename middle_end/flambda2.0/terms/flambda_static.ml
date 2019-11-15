@@ -61,11 +61,6 @@ module Of_kind_value = struct
       print (Format.formatter_of_out_channel chan) t
   end)
 
-  let needs_gc_root t =
-    match t with
-    | Symbol _ | Tagged_immediate _ -> false
-    | Dynamically_computed _ -> true
-
   let free_names t =
     match t with
     | Dynamically_computed var ->
@@ -74,6 +69,7 @@ module Of_kind_value = struct
       Name_occurrences.singleton_symbol sym Name_mode.normal
     | Tagged_immediate _ -> Name_occurrences.empty
 
+(*
   let invariant env t =
     let module E = Invariant_env in
     match t with
@@ -81,6 +77,7 @@ module Of_kind_value = struct
     | Tagged_immediate _ -> ()
     | Dynamically_computed var ->
       E.check_variable_is_bound_and_of_kind env var K.value
+*)
 end
 
 module Static_part = struct
@@ -90,13 +87,27 @@ module Static_part = struct
 
   type mutable_or_immutable = Mutable | Immutable
 
+  type code = {
+    params_and_body : Flambda.Function_params_and_body.t or_deleted;
+    newer_version_of : Code_id.t option;
+  }
+  and 'a or_deleted =
+    | Present of 'a
+    | Deleted
+
+  type code_and_set_of_closures = {
+    code : code Code_id.Map.t;
+    set_of_closures : Flambda.Set_of_closures.t option;
+  }
+
   type 'k t =
     | Block : Tag.Scannable.t * mutable_or_immutable
               * (Of_kind_value.t list) -> K.value t
     | Fabricated_block : Variable.t -> K.value t
       (* CR mshinwell: This used to say K.fabricated.  Use a different
          index from [K.t]? *)
-    | Set_of_closures : Flambda.Set_of_closures.t -> K.fabricated t
+    | Code_and_set_of_closures : code_and_set_of_closures
+        -> Flambda_kind.fabricated t
     | Boxed_float : Numbers.Float_by_bit_pattern.t or_variable
                     -> K.value t
     | Boxed_int32 : Int32.t or_variable -> K.value t
@@ -108,26 +119,23 @@ module Static_part = struct
                        -> K.value t
     | Immutable_string : string or_variable -> K.value t
 
-  let _needs_gc_root (type k) (t : k t) =
+  let get_pieces_of_code (type k) (t : k t) =
     match t with
-    | Block (_tag, mut, fields) ->
-      begin match mut with
-      | Mutable ->
-        (* CR mshinwell: The GC does not support this case yet.  There is an
-           old unfinished patch from Damien. *)
-        true
-      | Immutable -> List.exists Of_kind_value.needs_gc_root fields
-      end
-    | Fabricated_block _ -> true
-    | Set_of_closures set ->
-      not (Flambda.Set_of_closures.has_empty_environment set)
+    | Code_and_set_of_closures { code; set_of_closures = _; } ->
+      Code_id.Map.filter_map code
+        ~f:(fun _code_id { params_and_body; newer_version_of; } ->
+          match params_and_body with
+          | Present params_and_body -> Some (params_and_body, newer_version_of)
+          | Deleted -> None)
+    | Block _
+    | Fabricated_block _
     | Boxed_float _
     | Boxed_int32 _
     | Boxed_int64 _
     | Boxed_nativeint _
     | Immutable_float_array _
     | Mutable_string _
-    | Immutable_string _ -> false
+    | Immutable_string _ -> Code_id.Map.empty
 
   let free_names (type k) (t : k t) =
     match t with
@@ -138,7 +146,36 @@ module Static_part = struct
         fields
     | Fabricated_block v ->
       Name_occurrences.singleton_variable v Name_mode.normal
-    | Set_of_closures set -> Flambda.Set_of_closures.free_names set
+    | Code_and_set_of_closures { code; set_of_closures; } ->
+      let from_set_of_closures =
+        match set_of_closures with
+        | None -> Name_occurrences.empty
+        | Some set -> Flambda.Set_of_closures.free_names set
+      in
+      Code_id.Map.fold
+        (fun code_id { params_and_body; newer_version_of; } free_names ->
+          let from_newer_version_of =
+            match newer_version_of with
+            | None -> Name_occurrences.empty
+            | Some older ->
+              Name_occurrences.add_newer_version_of_code_id
+                Name_occurrences.empty older Name_mode.normal
+          in
+          let from_params_and_body =
+            match params_and_body with
+            | Deleted -> Name_occurrences.empty
+            | Present params_and_body ->
+              Flambda.Function_params_and_body.free_names params_and_body
+          in
+          Name_occurrences.union_list [
+            (Name_occurrences.add_code_id Name_occurrences.empty
+              code_id Name_mode.normal);
+            from_params_and_body;
+            from_newer_version_of;
+            free_names;
+          ])
+        code
+        from_set_of_closures
     | Boxed_float (Var v)
     | Boxed_int32 (Var v)
     | Boxed_int64 (Var v)
@@ -161,6 +198,22 @@ module Static_part = struct
         (Name_occurrences.empty)
         fields
 
+  let print_params_and_body_with_cache ~cache ppf params_and_body =
+    match params_and_body with
+    | Deleted -> Format.fprintf ppf "@[<hov 1>(params_and_body@ Deleted)@]"
+    | Present params_and_body ->
+      Flambda.Function_params_and_body.print_with_cache ~cache ppf
+        params_and_body
+
+  let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
+    (* CR mshinwell: elide "newer_version_of" when None *)
+    Format.fprintf ppf "@[<hov 1>(\
+        @[(newer_version_of@ %a)@]@ \
+        %a\
+        )@]"
+      (Misc.Stdlib.Option.print Code_id.print) newer_version_of
+      (print_params_and_body_with_cache ~cache) params_and_body
+
   let print_with_cache (type k) ~cache ppf (t : k t) =
     let print_float_array_field ppf = function
       | Const f -> fprintf ppf "%a" Numbers.Float_by_bit_pattern.print f
@@ -180,11 +233,17 @@ module Static_part = struct
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         Variable.print field
-    | Set_of_closures set_of_closures ->
-      fprintf ppf "@[<hov 1>(@<0>%sSet_of_closures@<0>%s@ (%a))@]"
+    | Code_and_set_of_closures { code; set_of_closures; } ->
+      fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
+          @[<hov 1>(code@ (%a))@]@ \
+          @[<hov 1>(set_of_closures@ (%a))@]\
+          ))@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
-        (Flambda.Set_of_closures.print_with_cache ~cache) set_of_closures
+        (Code_id.Map.print (print_code_with_cache ~cache)) code
+        (Misc.Stdlib.Option.print
+          (Flambda.Set_of_closures.print_with_cache ~cache))
+          set_of_closures
     | Boxed_float (Const f) ->
       fprintf ppf "@[@<0>%sBoxed_float@<0>%s %a)@]"
         (Flambda_colours.static_part ())
@@ -257,6 +316,7 @@ module Static_part = struct
   let print ppf t =
     print_with_cache ~cache:(Printing_cache.create ()) ppf t
 
+(*
   let _invariant (type k) env (t : k t) =
     try
       let module E = Invariant_env in
@@ -294,6 +354,7 @@ module Static_part = struct
           fields
     with Misc.Fatal_error ->
       Misc.fatal_errorf "(during invariant checks) Context is:@ %a" print t
+*)
 end
 
 type static_part_iterator = {
@@ -339,7 +400,8 @@ module Program_body = struct
   module Bound_symbols = struct
     type 'k t =
       | Singleton : Symbol.t -> K.value t
-      | Set_of_closures : {
+      | Code_and_set_of_closures : {
+          code_ids : Code_id.Set.t;
           closure_symbols : Symbol.t Closure_id.Map.t;
         } -> K.fabricated t
 
@@ -357,8 +419,12 @@ module Program_body = struct
           K.print K.value
           (Flambda_colours.elide ())
           (Flambda_colours.normal ())
-      | Set_of_closures { closure_symbols; } ->
-        Format.fprintf ppf "@[<hov 1>(closure_symbols@ %a)@]"
+      | Code_and_set_of_closures { code_ids; closure_symbols; } ->
+        Format.fprintf ppf "@[<hov 1>\
+            @[<hov 1>(code_ids@ %a)@]@ \
+            @[<hov 1>(closure_symbols@ {%a})@]\
+            @]"
+          Code_id.Set.print code_ids
           (Format.pp_print_list ~pp_sep:Format.pp_print_space
             print_closure_binding)
           (Closure_id.Map.bindings closure_symbols)
@@ -369,17 +435,13 @@ module Program_body = struct
     let being_defined (type k) (t : k t) =
       match t with
       | Singleton sym -> Symbol.Set.singleton sym
-      | Set_of_closures { closure_symbols; } ->
+      | Code_and_set_of_closures { code_ids = _; closure_symbols; } ->
         Symbol.Set.of_list (Closure_id.Map.data closure_symbols)
 
     let code_being_defined (type k) (t : k t) =
       match t with
       | Singleton _ -> Code_id.Set.empty
-      | Set_of_closures { closure_symbols = _; } ->
-        (* To be continued... *)
-        Code_id.Set.empty
-
-    let _gc_roots (type k) (_t : k t) = Misc.fatal_error "NYI"
+      | Code_and_set_of_closures { code_ids; closure_symbols = _; } -> code_ids
   end
 
   module Static_structure = struct
@@ -429,12 +491,43 @@ module Program_body = struct
         Name_occurrences.empty
         t
 
-    let delete_bindings t ~allowed =
-      List.filter (fun (S (bound_syms, _static_part)) ->
-          not (Symbol.Set.is_empty (
-            Symbol.Set.inter (Bound_symbols.being_defined bound_syms)
-              allowed)))
-        t
+    let delete_bindings t ~free_names_after code_age_relation =
+      let rec delete t ~free_names_after ~result =
+        match t with
+        | [] -> result
+        | ((S (bound_syms, static_part)) as part)::t ->
+          let symbols_after = Name_occurrences.symbols free_names_after in
+          let can_delete_symbols =
+            Symbol.Set.is_empty (
+              Symbol.Set.inter (Bound_symbols.being_defined bound_syms)
+                symbols_after)
+          in
+          let code_ids_being_defined =
+            Bound_symbols.code_being_defined bound_syms
+          in
+          let code_ids_after = Name_occurrences.code_ids free_names_after in
+          let code_unused =
+            Code_id.Set.is_empty
+              (Code_id.Set.inter code_ids_being_defined code_ids_after)
+          in
+          let can_delete_code =
+            code_unused
+              &&
+              Code_id.Set.for_all (fun code_id ->
+                  Code_age_relation.newer_versions_form_linear_chain
+                    code_age_relation code_id)
+                code_ids_being_defined
+          in
+          let free_names_after =
+            Name_occurrences.union free_names_after
+              (Static_part.free_names static_part)
+          in
+          if can_delete_code && can_delete_symbols then
+            delete t ~free_names_after ~result
+          else
+            delete t ~free_names_after ~result:(part :: result)
+      in
+      delete (List.rev t) ~free_names_after ~result:[]
 
     let iter_static_parts t (iter : static_part_iterator) =
       List.iter (fun (S (_bound_syms, static_part)) ->
@@ -445,6 +538,51 @@ module Program_body = struct
       List.map (fun (S (bound_syms, static_part)) ->
           S (bound_syms, mapper.f static_part))
         t
+
+    let get_pieces_of_code t =
+      let code =
+        List.fold_left (fun code (S (_bound_syms, static_part)) ->
+            Code_id.Map.disjoint_union code
+              (Static_part.get_pieces_of_code static_part))
+          Code_id.Map.empty
+          t
+      in
+      assert (Code_id.Set.equal (Code_id.Map.keys code)
+        (code_being_defined t));
+      code
+
+    let pieces_of_code ?newer_versions_of ?set_of_closures code =
+      let newer_versions_of =
+        Option.value newer_versions_of ~default:Code_id.Map.empty
+      in
+      let code =
+        Code_id.Map.mapi (fun id params_and_body : Static_part.code ->
+            let newer_version_of =
+              Code_id.Map.find_opt id newer_versions_of
+            in
+            { params_and_body = Present params_and_body;
+              newer_version_of;
+            })
+          code
+      in
+      let static_part : K.fabricated Static_part.t =
+        let set_of_closures = Option.map snd set_of_closures in
+        Code_and_set_of_closures {
+          code;
+          set_of_closures;
+        }
+      in
+      let bound_symbols : K.fabricated Bound_symbols.t =
+        let closure_symbols =
+          Option.value (Option.map fst set_of_closures)
+            ~default:Closure_id.Map.empty
+        in
+        Code_and_set_of_closures {
+          code_ids = Code_id.Map.keys code;
+          closure_symbols;
+        }
+      in
+      S (bound_symbols, static_part)
   end
 
   module Definition = struct
@@ -478,9 +616,19 @@ module Program_body = struct
       in
       Name_occurrences.union free_in_computation free_in_static_structure
 
+    let static_structure t = t.static_structure
+
     let singleton_symbol symbol static_part =
       { computation = None;
         static_structure = [S (Singleton symbol, static_part)];
+      }
+
+    let pieces_of_code ?newer_versions_of code =
+      let static_structure_part : Static_structure.t0 =
+        Static_structure.pieces_of_code ?newer_versions_of code
+      in
+      { computation = None;
+        static_structure = [static_structure_part];
       }
 
     let iter_computation t ~f =
@@ -510,10 +658,22 @@ module Program_body = struct
 
     let code_being_defined t =
       Static_structure.code_being_defined t.static_structure
+
+    let get_pieces_of_code t =
+      Static_structure.get_pieces_of_code t.static_structure
+
+    let delete_bindings t ~free_names_after code_age_relation =
+      let static_structure =
+        Static_structure.delete_bindings t.static_structure ~free_names_after
+          code_age_relation
+      in
+      { computation = t.computation;
+        static_structure;
+      }
   end
 
   type t =
-    | Define_symbol of {
+    | Definition of {
         free_names : Name_occurrences.t;
         defn : Definition.t;
         body : t;
@@ -522,8 +682,8 @@ module Program_body = struct
 
   let rec print_with_cache ~cache ppf t =
     match t with
-    | Define_symbol { free_names = _; defn; body; } ->
-      Format.fprintf ppf "@[<v 2>(@<0>%sDefine_symbol@<0>%s@ %a)@]@;"
+    | Definition { free_names = _; defn; body; } ->
+      Format.fprintf ppf "@[<v 2>(@<0>%sDefinition@<0>%s@ %a)@]@;"
         (Flambda_colours.static_keyword ())
         (Flambda_colours.normal ())
         (Definition.print_with_cache ~cache) defn;
@@ -541,22 +701,24 @@ module Program_body = struct
 
   let free_names t =
     match t with
-    | Define_symbol { free_names; _ } -> free_names
+    | Definition { free_names; _ } -> free_names
     | Root sym -> Name_occurrences.singleton_symbol sym Name_mode.normal
 
   let used_closure_vars t =
     match t with
-    | Define_symbol { free_names; _ } ->
+    | Definition { free_names; _ } ->
       Name_occurrences.closure_vars free_names
     | Root _ -> Var_within_closure.Set.empty
 
-  let define_symbol defn ~body =
-    let being_defined = Definition.being_defined defn in
+  let define_symbol defn ~body code_age_relation =
     let free_names_of_body = free_names body in
-    let free_syms_of_body = Name_occurrences.symbols free_names_of_body in
+    let defn =
+      Definition.delete_bindings defn ~free_names_after:free_names_of_body
+        code_age_relation
+    in
     let can_delete =
-      Symbol.Set.is_empty (Symbol.Set.inter being_defined free_syms_of_body)
-        && Definition.only_generative_effects defn
+      Definition.only_generative_effects defn
+        && Static_structure.is_empty (Definition.static_structure defn)
     in
     if can_delete then body
     else
@@ -564,49 +726,25 @@ module Program_body = struct
         Name_occurrences.union (Definition.free_names defn)
           free_names_of_body
       in
-      Define_symbol { free_names; defn; body; }
+      Definition { free_names; defn; body; }
 
   let root sym = Root sym
 
-(*
-  let gc_roots t =
-    let rec gc_roots t roots =
-      match t with
-      | Root _ -> roots
-      | Define_symbol { defn; body; _; } ->
-        let roots =
-          match defn.static_structure with
-          | S pieces ->
-            List.fold_left (fun roots (bound_symbols, static_part) ->
-                (* CR mshinwell: check [kind] against the result of
-                   [needs_gc_root] *)
-                if Static_part.needs_gc_root static_part then
-                  Symbol.Set.union (Bound_symbols.gc_roots bound_symbols) roots
-                else
-                  roots)
-              roots
-              pieces
-        in
-        gc_roots body roots
-    in
-    gc_roots t Symbol.Set.empty
-*)
-
   let rec iter_definitions t ~f =
     match t with
-    | Define_symbol { defn; body; _ } ->
+    | Definition { defn; body; _ } ->
       f defn;
       iter_definitions body ~f
     | Root _ -> ()
 
   type descr =
-    | Define_symbol of Definition.t * t
+    | Definition of Definition.t * t
     | Root of Symbol.t
 
   let descr (t : t) : descr =
     match t with
-    | Define_symbol { defn; body; free_names = _; } ->
-      Define_symbol (defn, body)
+    | Definition { defn; body; free_names = _; } ->
+      Definition (defn, body)
     | Root sym -> Root sym
 end
 
@@ -621,23 +759,6 @@ module Program = struct
       (Symbol.Map.print K.print) t.imported_symbols
       Program_body.print t.body
 
-(*
-  let gc_roots t =
-    let syms = Program_body.gc_roots t.body in
-    if !Clflags.flambda_invariant_checks then begin
-      Symbol.Set.iter (fun sym ->
-          if not (Compilation_unit.equal (Compilation_unit.get_current_exn ())
-            (Symbol.compilation_unit sym))
-          then begin
-            Misc.fatal_errorf "Symbol %a deemed as needing a GC root yet it \
-                comes from another compilation unit"
-              Symbol.print sym
-          end)
-        syms;
-    end;
-    syms
-*)
-
   let free_names t =
     (* N.B. [imported_symbols] are not treated as free. *)
     Program_body.free_names t.body
@@ -650,7 +771,7 @@ module Program = struct
   let root_symbol t =
     let rec loop (body : Program_body.t) =
       match body with
-      | Define_symbol { body; _ } -> loop body
+      | Definition { body; _ } -> loop body
       | Root root -> root
     in
     loop t.body

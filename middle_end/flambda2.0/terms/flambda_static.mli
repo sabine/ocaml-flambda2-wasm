@@ -40,14 +40,37 @@ module Static_part : sig
   (** The mutability status of a block field. *)
   type mutable_or_immutable = Mutable | Immutable
 
+  (** A piece of code, comprising of the parameters and body of a function,
+      together with a field indicating whether the piece of code is a newer
+      version of one that existed previously (and may still exist), for
+      example after a round of simplification. *)
+  type code = {
+    params_and_body : Flambda.Function_params_and_body.t or_deleted;
+    newer_version_of : Code_id.t option;
+  }
+  and 'a or_deleted =
+    | Present of 'a
+    | Deleted
+
+  (* CR mshinwell: Code_id.t to Symbol.t needs to be doable without any
+     state *)
+
+  (** The possibly-recursive declaration of pieces of code and any associated
+      set of closures. *)
+  type code_and_set_of_closures = {
+    code : code Code_id.Map.t;
+    (* CR mshinwell: Check the free names of the set of closures *)
+    set_of_closures : Flambda.Set_of_closures.t option;
+  }
+
   (** The static structure of a symbol, possibly with holes, ready to be
       filled with values computed at runtime. *)
   type 'k t =
     | Block : Tag.Scannable.t * mutable_or_immutable
         * (Of_kind_value.t list) -> Flambda_kind.value t
     | Fabricated_block : Variable.t -> Flambda_kind.value t
-    (* CR mshinwell: Check the free names of the set of closures *)
-    | Set_of_closures : Flambda.Set_of_closures.t -> Flambda_kind.fabricated t
+    | Code_and_set_of_closures : code_and_set_of_closures
+        -> Flambda_kind.fabricated t
     | Boxed_float : Numbers.Float_by_bit_pattern.t or_variable
         -> Flambda_kind.value t
     | Boxed_int32 : Int32.t or_variable -> Flambda_kind.value t
@@ -105,11 +128,13 @@ module Program_body : sig
     type 'k t =
       | Singleton : Symbol.t -> Flambda_kind.value t
         (** A binding of a single symbol of kind [Value]. *)
-      | Set_of_closures : {
+      | Code_and_set_of_closures : {
+          code_ids : Code_id.Set.t;
           closure_symbols : Symbol.t Closure_id.Map.t;
         } -> Flambda_kind.fabricated t
-        (** A binding of possibly multiple symbols to the individual closures
-            within a set of closures. *)
+        (** A recursive binding of possibly multiple symbols to the individual
+            closures within a set of closures; and/or bindings of code to
+            code IDs. *)
 
     val print : Format.formatter -> _ t -> unit
 
@@ -136,9 +161,22 @@ module Program_body : sig
 
     val being_defined : t -> Symbol.Set.t
 
-    val delete_bindings : t -> allowed:Symbol.Set.t -> t
+    val delete_bindings
+       : t
+      -> free_names_after:Name_occurrences.t
+      -> Code_age_relation.t
+      -> t
 
     val free_names : t -> Name_occurrences.t
+
+    (** If [newer_versions_of] maps [id1] to [id2] then [id1] is a newer
+        version of [id2]. *)
+    val pieces_of_code
+       : ?newer_versions_of:Code_id.t Code_id.Map.t
+      -> ?set_of_closures:
+           (Symbol.t Closure_id.Map.t * Flambda.Set_of_closures.t)
+      -> Flambda.Function_params_and_body.t Code_id.Map.t
+      -> t0
   end
 
   module Definition : sig
@@ -157,6 +195,17 @@ module Program_body : sig
     val print : Format.formatter -> t -> unit
 
     val singleton_symbol : Symbol.t -> Flambda_kind.value Static_part.t -> t
+
+    (** If [newer_versions_of] maps [id1] to [id2] then [id1] is a newer
+        version of [id2]. *)
+    val pieces_of_code
+       : ?newer_versions_of:Code_id.t Code_id.Map.t
+      -> Flambda.Function_params_and_body.t Code_id.Map.t
+      -> t
+
+    val get_pieces_of_code
+       : t
+      -> (Flambda.Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 
     val being_defined : t -> Symbol.Set.t
 
@@ -179,7 +228,7 @@ module Program_body : sig
   (** Define the given symbol(s).  No symbol defined by the
       [definition] may be referenced by the same definition, only by
       subsequent [define_symbol] constructs. *)
-  val define_symbol : Definition.t -> body:t -> t
+  val define_symbol : Definition.t -> body:t -> Code_age_relation.t -> t
 
   (** The module block symbol for the compilation unit. *)
   val root : Symbol.t -> t
@@ -189,7 +238,9 @@ module Program_body : sig
   val iter_definitions : t -> f:(Definition.t -> unit) -> unit
 
   type descr = private
-    | Define_symbol of Definition.t * t
+    (* CR mshinwell: Rename [Definition] to [Definition].  It doesn't
+       always define a symbol now. *)
+    | Definition of Definition.t * t
     | Root of Symbol.t
 
   val descr : t -> descr
@@ -208,12 +259,6 @@ module Program : sig
 
   (** Print a program to a formatter. *)
   val print : Format.formatter -> t -> unit
-
-(*
-  (** All symbols from the given program which must be registered as roots
-      with the GC.  (This does not count any imported symbols.) *)
-  val gc_roots : t -> Symbol.Set.t
-*)
 
   (** All free names in the given program.  Imported symbols are not treated
       as free. *)

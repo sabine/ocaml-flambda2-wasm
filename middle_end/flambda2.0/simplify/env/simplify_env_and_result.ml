@@ -282,15 +282,25 @@ end = struct
     (* CR mshinwell: Convert [Typing_env] to map from [Simple]s. *)
     | Const _ -> ()
 
-  let define_code t id code =
-    if Code_id.Map.mem id t.code then begin
+  let define_code t ?newer_version_of ~code_id ~params_and_body:code =
+    if Code_id.Map.mem code_id t.code then begin
       Misc.fatal_errorf "Code ID %a is already defined, cannot redefine to@ %a"
-        Code_id.print id
+        Code_id.print code_id
         Function_params_and_body.print code
     end;
+    let typing_env =
+      match newer_version_of with
+      | None -> t.typing_env
+      | Some older ->
+        TE.add_to_code_age_relation t.typing_env ~newer:code_id ~older
+    in
     { t with
-      code = Code_id.Map.add id code t.code;
+      typing_env;
+      code = Code_id.Map.add code_id code t.code;
     }
+
+  let mem_code t id =
+    Code_id.Map.mem id t.code
 
   let find_code t id =
     match Code_id.Map.find id t.code with
@@ -299,6 +309,8 @@ end = struct
     | code -> code
 
   (* CR mshinwell: The label should state what order is expected. *)
+  (* CR mshinwell: Rework lifted constant handling so we don't try to add
+     lifted constants we already know about. *)
   let add_lifted_constants t ~lifted =
     (*
     Format.eprintf "Adding lifted:@ %a\n%!"
@@ -317,23 +329,24 @@ end = struct
           Symbol.Set.filter (fun sym -> mem_symbol denv sym)
             being_defined
         in
-        if Symbol.Set.equal being_defined already_bound then denv
-        else if not (Symbol.Set.is_empty already_bound) then
-          Misc.fatal_errorf "Expected all or none of the following symbols \
-              to be found:@ %a@ denv:@ %a"
-            LC.print lifted_constant
-            print denv
-        else
-          let typing_env =
-            Symbol.Map.fold (fun sym typ typing_env ->
-                let sym =
-                  Name_in_binding_pos.create (Name.symbol sym) Name_mode.normal
-                in
-                TE.add_definition typing_env sym (T.kind typ))
-              types_of_symbols
-              denv.typing_env
-          in
-          let typing_env =
+        let typing_env =
+          if Symbol.Set.equal being_defined already_bound then denv.typing_env
+          else if not (Symbol.Set.is_empty already_bound) then
+            Misc.fatal_errorf "Expected all or none of the following symbols \
+                to be found:@ %a@ denv:@ %a"
+              LC.print lifted_constant
+              print denv
+          else
+            let typing_env =
+              Symbol.Map.fold (fun sym typ typing_env ->
+                  let sym =
+                    Name_in_binding_pos.create (Name.symbol sym)
+                      Name_mode.normal
+                  in
+                  TE.add_definition typing_env sym (T.kind typ))
+                types_of_symbols
+                denv.typing_env
+            in
             Symbol.Map.fold (fun sym typ typing_env ->
                 let sym = Name.symbol sym in
                 let env_extension =
@@ -345,11 +358,14 @@ end = struct
                 TE.add_env_extension typing_env ~env_extension)
               types_of_symbols
               typing_env
-          in
-          Code_id.Map.fold (fun code_id params_and_body denv ->
-              define_code denv code_id params_and_body)
-            (LC.pieces_of_code lifted_constant)
-            (with_typing_env denv typing_env))
+        in
+        Code_id.Map.fold
+          (fun code_id (params_and_body, newer_version_of) denv ->
+            if mem_code denv code_id then denv
+            else define_code denv ?newer_version_of ~code_id ~params_and_body)
+          (Flambda_static.Program_body.Definition.get_pieces_of_code
+             definition)
+          (with_typing_env denv typing_env))
       t
       (List.rev lifted)
 
@@ -602,17 +618,15 @@ end = struct
     denv : Downwards_env.t;
     definition : Definition.t;
     types_of_symbols : Flambda_type.t Symbol.Map.t;
-    pieces_of_code : Function_params_and_body.t Code_id.Map.t;
   }
 
-  let print ppf
-        { denv = _ ; definition; types_of_symbols = _; pieces_of_code = _; } =
+  let print ppf { denv = _ ; definition; types_of_symbols = _; } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(definition@ %a)@]\
         )@]"
       Definition.print definition
 
-  let create denv definition ~types_of_symbols ~pieces_of_code =
+  let create denv definition ~types_of_symbols =
     let being_defined = Definition.being_defined definition in
     if not (Symbol.Set.subset (Symbol.Map.keys types_of_symbols) being_defined)
     then begin
@@ -621,23 +635,27 @@ end = struct
         (Symbol.Map.print T.print) types_of_symbols
         Definition.print definition
     end;
-    let code_being_defined = Definition.code_being_defined definition in
-    if not (Code_id.Set.subset (Code_id.Map.keys pieces_of_code)
-      code_being_defined)
-    then begin
-      Misc.fatal_errorf "[pieces_of_code]:@ %a@ does not cover all code IDs \
-          in the [Definition]:@ %a"
-        (Code_id.Map.print Function_params_and_body.print) pieces_of_code
-        Definition.print definition
-    end;
     { denv;
       definition;
       types_of_symbols;
-      pieces_of_code;
     }
+
+  let create_pieces_of_code denv ?newer_versions_of code =
+    { denv;
+      definition = Definition.pieces_of_code ?newer_versions_of code;
+      types_of_symbols = Symbol.Map.empty;
+    }
+
+  let create_piece_of_code denv ?newer_version_of code_id params_and_body =
+    let newer_versions_of =
+      match newer_version_of with
+      | None -> None
+      | Some older -> Some (Code_id.Map.singleton code_id older)
+    in
+    create_pieces_of_code denv ?newer_versions_of
+      (Code_id.Map.singleton code_id params_and_body)
 
   let denv_at_definition t = t.denv
   let definition t = t.definition
   let types_of_symbols t = t.types_of_symbols
-  let pieces_of_code t = t.pieces_of_code
 end

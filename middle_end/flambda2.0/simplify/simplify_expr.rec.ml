@@ -56,7 +56,7 @@ let rec simplify_let
   let module L = Flambda.Let in
   (* CR mshinwell: Find out if we need the special fold function for lets. *)
   L.pattern_match let_expr ~f:(fun ~bound_vars ~body ->
-    let bindings, dacc =
+    let { Simplify_named. bindings_outermost_first = bindings; dacc; } =
       Simplify_named.simplify_named dacc ~bound_vars (L.defining_expr let_expr)
     in
     let body, user_data, uacc = simplify_expr dacc body k in
@@ -258,7 +258,8 @@ and simplify_let_cont
     simplify_recursive_let_cont_handlers dacc handlers k
 
 and simplify_direct_full_application
-  : 'a. DA.t -> Apply.t -> (Function_declaration.t * Rec_info.t) option
+  : 'a. DA.t -> Apply.t
+    -> (T.Function_declaration_type.Inlinable.t * Rec_info.t) option
     -> result_arity:Flambda_arity.t
     -> 'a k -> Expr.t * 'a * UA.t
 = fun dacc apply function_decl_opt ~result_arity k ->
@@ -327,11 +328,12 @@ Format.eprintf "Simplifying inlined body with DE depth delta = %d\n%!"
     expr, user_data, uacc
 
 and simplify_direct_partial_application
-  : 'a. DA.t -> Apply.t -> callee's_closure_id:Closure_id.t
+  : 'a. DA.t -> Apply.t -> callee's_code_id:Code_id.t
+    -> callee's_closure_id:Closure_id.t
     -> param_arity:Flambda_arity.t -> result_arity:Flambda_arity.t
     -> recursive:Recursive.t -> 'a k -> Expr.t * 'a * UA.t
-= fun dacc apply ~callee's_closure_id ~param_arity ~result_arity
-      ~recursive k ->
+= fun dacc apply ~callee's_code_id ~callee's_closure_id
+      ~param_arity ~result_arity ~recursive k ->
   (* For simplicity, we disallow [@inline] attributes on partial
      applications.  The user may always write an explicit wrapper instead
      with such an attribute. *)
@@ -374,7 +376,7 @@ and simplify_direct_partial_application
   let wrapper_closure_id =
     Closure_id.wrap compilation_unit (Variable.create "closure")
   in
-  let wrapper_taking_remaining_args =
+  let wrapper_taking_remaining_args, dacc =
     let return_continuation = Continuation.create () in
     let remaining_params =
       List.map (fun kind ->
@@ -384,7 +386,7 @@ and simplify_direct_partial_application
     in
     let args = applied_args @ (List.map KP.simple remaining_params) in
     let call_kind =
-      Call_kind.direct_function_call callee's_closure_id
+      Call_kind.direct_function_call callee's_code_id callee's_closure_id
         ~return_arity:result_arity
     in
     let applied_args_with_closure_vars = (* CR mshinwell: rename *)
@@ -430,8 +432,14 @@ and simplify_direct_partial_application
         ~body
         ~my_closure
     in
+    let code_id =
+      Code_id.create
+        ~name:(Closure_id.to_string callee's_closure_id ^ "_partial")
+        (Compilation_unit.get_current_exn ())
+    in
     let function_decl =
-      Function_declaration.create ~params_and_body
+      Function_declaration.create ~code_id
+        ~params_arity:(KP.List.arity remaining_params)
         ~result_arity
         ~stub:true
         ~dbg
@@ -446,7 +454,18 @@ and simplify_direct_partial_application
     let closure_elements =
       Var_within_closure.Map.of_list applied_args_with_closure_vars
     in
-    Set_of_closures.create function_decls ~closure_elements
+    (* CR mshinwell: Factor out this next part into a helper function *)
+    let code =
+      Lifted_constant.create_piece_of_code (DA.denv dacc) code_id
+        params_and_body
+    in
+    let dacc =
+      dacc
+      |> DA.map_r ~f:(fun r -> R.new_lifted_constant r code)
+      |> DA.map_denv ~f:(fun denv ->
+        DE.add_lifted_constants denv ~lifted:[code])
+    in
+    Set_of_closures.create function_decls ~closure_elements, dacc
   in
   let apply_cont =
     Apply_cont.create (Apply.continuation apply)
@@ -513,13 +532,16 @@ and simplify_direct_over_application
   simplify_expr dacc expr k
 
 and simplify_direct_function_call
-  : 'a. DA.t -> Apply.t -> callee's_closure_id:Closure_id.t
+  : 'a. DA.t -> Apply.t -> callee's_code_id_from_type:Code_id.t
+    -> callee's_code_id_from_call_kind:Code_id.t option
+    -> callee's_closure_id:Closure_id.t
     -> param_arity:Flambda_arity.t -> result_arity:Flambda_arity.t
     -> recursive:Recursive.t -> arg_types:T.t list
-    -> (Function_declaration.t * Rec_info.t) option
+    -> (T.Function_declaration_type.Inlinable.t * Rec_info.t) option
     -> 'a k -> Expr.t * 'a * UA.t
-= fun dacc apply ~callee's_closure_id ~param_arity ~result_arity
-      ~recursive ~arg_types:_ function_decl_opt k ->
+= fun dacc apply ~callee's_code_id_from_type ~callee's_code_id_from_call_kind
+      ~callee's_closure_id ~param_arity ~result_arity ~recursive ~arg_types:_
+      function_decl_opt k ->
   let result_arity_of_application =
     Call_kind.return_arity (Apply.call_kind apply)
   in
@@ -531,28 +553,41 @@ and simplify_direct_function_call
       Flambda_arity.print result_arity_of_application
       Apply.print apply
   end;
-  let call_kind =
-    Call_kind.direct_function_call callee's_closure_id
-      ~return_arity:result_arity
+  let callee's_code_id : _ Or_bottom.t =
+    match callee's_code_id_from_call_kind with
+    | None -> Ok callee's_code_id_from_type
+    | Some callee's_code_id_from_call_kind ->
+      let code_age_rel = TE.code_age_relation (DE.typing_env (DA.denv dacc)) in
+      Code_age_relation.meet code_age_rel callee's_code_id_from_call_kind
+        callee's_code_id_from_type
   in
-  let apply = Apply.with_call_kind apply call_kind in
-  let args = Apply.args apply in
-  let provided_num_args = List.length args in
-  let num_params = List.length param_arity in
-  if provided_num_args = num_params then
-    simplify_direct_full_application dacc apply function_decl_opt
-      ~result_arity k
-  else if provided_num_args > num_params then
-    simplify_direct_over_application dacc apply ~param_arity ~result_arity k
-  else if provided_num_args > 0 && provided_num_args < num_params then
-    simplify_direct_partial_application dacc apply
-      ~callee's_closure_id ~param_arity ~result_arity ~recursive k
-  else
-    Misc.fatal_errorf "Function with %d params when simplifying \
-        direct OCaml function call with %d arguments: %a"
-      num_params
-      provided_num_args
-      Apply.print apply
+  match callee's_code_id with
+  | Bottom ->
+    let user_data, uacc = k (DA.continuation_uses_env dacc) (DA.r dacc) in
+    Expr.create_invalid (), user_data, uacc
+  | Ok callee's_code_id ->
+    let call_kind =
+      Call_kind.direct_function_call callee's_code_id callee's_closure_id
+        ~return_arity:result_arity
+    in
+    let apply = Apply.with_call_kind apply call_kind in
+    let args = Apply.args apply in
+    let provided_num_args = List.length args in
+    let num_params = List.length param_arity in
+    if provided_num_args = num_params then
+      simplify_direct_full_application dacc apply function_decl_opt
+        ~result_arity k
+    else if provided_num_args > num_params then
+      simplify_direct_over_application dacc apply ~param_arity ~result_arity k
+    else if provided_num_args > 0 && provided_num_args < num_params then
+      simplify_direct_partial_application dacc apply ~callee's_code_id
+        ~callee's_closure_id ~param_arity ~result_arity ~recursive k
+    else
+      Misc.fatal_errorf "Function with %d params when simplifying \
+          direct OCaml function call with %d arguments: %a"
+        num_params
+        provided_num_args
+        Apply.print apply
 
 and simplify_function_call_where_callee's_type_unavailable
   : 'a. DA.t -> Apply.t -> Call_kind.Function_call.t -> arg_types:T.t list
@@ -651,22 +686,26 @@ and simplify_function_call
        [closures_entry] structure in the type does indeed contain the
        closure in question. *)
     begin match func_decl_type with
-    | Known (Inlinable { function_decl; rec_info; }) ->
-      begin match call with
-      | Direct { closure_id; _ } ->
-        if not (Closure_id.equal closure_id callee's_closure_id) then begin
-          Misc.fatal_errorf "Closure ID %a in application doesn't match \
-              closure ID %a discovered via typing.@ Application:@ %a"
-            Closure_id.print closure_id
-            Closure_id.print callee's_closure_id
-            Apply.print apply
-        end
-      | Indirect_unknown_arity
-      | Indirect_known_arity _ -> ()
-      end;
+    | Ok (Inlinable inlinable) ->
+      let module I = T.Function_declaration_type.Inlinable in
+      let callee's_code_id_from_call_kind =
+        match call with
+        | Direct { code_id; closure_id; _ } ->
+          if not (Closure_id.equal closure_id callee's_closure_id) then begin
+            Misc.fatal_errorf "Closure ID %a in application doesn't match \
+                closure ID %a discovered via typing.@ Application:@ %a"
+              Closure_id.print closure_id
+              Closure_id.print callee's_closure_id
+              Apply.print apply
+          end;
+          Some code_id
+        | Indirect_unknown_arity
+        | Indirect_known_arity _ -> None
+      in
       (* CR mshinwell: This should go in Typing_env (ditto logic for Rec_info
          in Simplify_simple *)
       let function_decl_rec_info =
+        let rec_info = I.rec_info inlinable in
         match Simple.rec_info (Apply.callee apply) with
         | None -> rec_info
         | Some newer -> Rec_info.merge rec_info ~newer
@@ -677,17 +716,32 @@ Format.eprintf "For call to %a: callee's rec info is %a, rec info from type of f
   (Misc.Stdlib.Option.print Rec_info.print) (Simple.rec_info (Apply.callee apply))
   Rec_info.print function_decl_rec_info;
 *)
-      simplify_direct_function_call dacc apply
+      let callee's_code_id_from_type = I.code_id inlinable in
+      simplify_direct_function_call dacc apply ~callee's_code_id_from_type
+        ~callee's_code_id_from_call_kind ~callee's_closure_id ~arg_types
+        ~param_arity:(I.param_arity inlinable)
+        ~result_arity:(I.result_arity inlinable)
+        ~recursive:(I.recursive inlinable)
+        (Some (inlinable, function_decl_rec_info)) k
+    | Ok (Non_inlinable non_inlinable) ->
+      let module N = T.Function_declaration_type.Non_inlinable in
+      let callee's_code_id_from_type = N.code_id non_inlinable in
+      let callee's_code_id_from_call_kind =
+        match call with
+        | Direct { code_id; _ } -> Some code_id
+        | Indirect_unknown_arity
+        | Indirect_known_arity _ -> None
+      in
+      simplify_direct_function_call dacc apply ~callee's_code_id_from_type
+        ~callee's_code_id_from_call_kind
         ~callee's_closure_id ~arg_types
-        ~param_arity:(Function_declaration.params_arity function_decl)
-        ~result_arity:(Function_declaration.result_arity function_decl)
-        ~recursive:(Function_declaration.recursive function_decl)
-        (Some (function_decl, function_decl_rec_info)) k
-    | Known (Non_inlinable { param_arity; result_arity; recursive; }) ->
-      simplify_direct_function_call dacc apply
-        ~callee's_closure_id ~arg_types
-        ~param_arity ~result_arity ~recursive
+        ~param_arity:(N.param_arity non_inlinable)
+        ~result_arity:(N.result_arity non_inlinable)
+        ~recursive:(N.recursive non_inlinable)
         None k
+    | Bottom ->
+      let user_data, uacc = k (DA.continuation_uses_env dacc) (DA.r dacc) in
+      Expr.create_invalid (), user_data, uacc
     | Unknown -> type_unavailable ()
     end
   | Unknown -> type_unavailable ()
@@ -1149,7 +1203,7 @@ and simplify_switch
         Named.create_prim (Unary (Box_number Untagged_immediate, scrutinee))
           Debuginfo.none
       in
-      let bindings, _dacc =
+      let { Simplify_named. bindings_outermost_first = bindings; dacc = _; } =
         Simplify_named.simplify_named dacc ~bound_vars named
       in
       let body = k ~tagged_scrutinee:(Simple.var bound_to) in

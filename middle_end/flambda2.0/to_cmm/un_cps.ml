@@ -14,6 +14,8 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+[@@@ocaml.warning "-32"] (* FIXME Let_code -- just remove this *)
+
 open! Flambda.Import
 
 module Env = Un_cps_env
@@ -849,13 +851,16 @@ and apply_call env e =
   match Apply_expr.call_kind e with
   (* Effects from arguments are ignored since a function call will always be
      given arbitrary effects and coeffects. *)
-  | Call_kind.Function
-      Call_kind.Function_call.Direct { closure_id; return_arity; } ->
+  | Call_kind.Function (* FIXME Let code *)
+      Call_kind.Function_call.Direct { code_id = _; closure_id = _; return_arity = _; } ->
+      assert false
+(*
       let f_code = Un_cps_closure.(closure_code (closure_name closure_id)) in
       let f, env, _ = simple env f in
       let args, env, _ = arg_list env (Apply_expr.args e) in
       let ty = machtype_of_return_arity return_arity in
       C.direct_call ~dbg ty (C.symbol f_code) args f, env, effs
+*)
   | Call_kind.Function
       Call_kind.Function_call.Indirect_unknown_arity ->
       let f, env, _ = simple env f in
@@ -1325,11 +1330,14 @@ let static_structure_item env r
   | Singleton _, Fabricated_block _ ->
       (* CR Gbury: What are those ? *)
       todo()
-  | Set_of_closures s, Set_of_closures set ->
+  | Code_and_set_of_closures _ (* s *), Code_and_set_of_closures _ (* set *) ->
+      assert false (* FIXME Let code *)
+(*
       let data, updates =
         static_set_of_closures env s.closure_symbols set
       in
       R.wrap_init (C.sequence updates) (R.add_data data r)
+*)
   | Singleton s, Boxed_float v ->
       let default = Numbers.Float_by_bit_pattern.zero in
       let transl = Numbers.Float_by_bit_pattern.to_float in
@@ -1465,9 +1473,11 @@ let function_flags () =
   else
     [ Cmm.Reduce_code_size ]
 
-let function_decl offsets used_closure_vars fun_name _ d =
+let function_decl _offsets _used_closure_vars fun_name _ d =
   Profile.record_call ~accumulate:true fun_name (fun () ->
-    let fun_dbg = Function_declaration.dbg d in
+    let _fun_dbg = Function_declaration.dbg d in
+    assert false  (* FIXME Let code *) )
+(*
     let p = Function_declaration.params_and_body d in
     Function_params_and_body.pattern_match p
       ~f:(fun ~return_continuation:k k_exn vars ~body ~my_closure ->
@@ -1490,6 +1500,7 @@ let function_decl offsets used_closure_vars fun_name _ d =
               fun_name
               Expr.print body;
             raise e))
+*)
 
 (* Programs *)
 
@@ -1501,7 +1512,7 @@ let rec program_body offsets ~used_closure_vars acc body =
          if if has an associated computation, then it will already be included
          in the list of gc_roots, else it does not *have*  to be a root. *)
       List.fold_left (fun acc r -> R.combine r acc) R.empty acc
-  | Flambda_static.Program_body.Define_symbol (def, rest) ->
+  | Flambda_static.Program_body.Definition (def, rest) ->
       let r = definition offsets ~used_closure_vars def in
       program_body offsets ~used_closure_vars (r :: acc) rest
 

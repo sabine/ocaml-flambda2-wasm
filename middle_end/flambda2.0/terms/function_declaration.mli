@@ -21,12 +21,10 @@ type t
 (** Printing, invariant checks, name manipulation, etc. *)
 include Expr_std.S with type t := t
 
-(** Compact printer for use when printing types. *)
-val print_compact : Format.formatter -> t -> unit
-
 (** Create a function declaration. *)
 val create
-   : params_and_body:Function_params_and_body.t
+   : code_id:Code_id.t
+  -> params_arity:Flambda_arity.t
   -> result_arity:Flambda_arity.t
   -> stub:bool
   -> dbg:Debuginfo.t
@@ -35,12 +33,8 @@ val create
   -> recursive:Recursive.t
   -> t
 
-(** The alpha-equivalence class of the function's continuations and
-    parameters bound over the code of the function. *)
-val params_and_body : t -> Function_params_and_body.t
-
-(** An identifier to provide fast (conservative) equality checking for
-    function bodies. *)
+(** The identifier of the code of the function (which must be bound using
+    [Define_symbol]). *)
 val code_id : t -> Code_id.t
 
 (* CR mshinwell: Be consistent: "param_arity" or "params_arity" throughout. *)
@@ -67,8 +61,9 @@ val inline : t -> Inline_attribute.t
 (** Whether the function is known definitively to be a functor. *)
 val is_a_functor : t -> bool
 
-(** Change the parameters and code of a function declaration. *)
-val update_params_and_body : t -> Function_params_and_body.t -> t
+(** Return a function declaration that is like the supplied one except
+    that it has a new code ID. *)
+val update_code_id : t -> Code_id.t -> t
 
 (** Whether the function is recursive, in the sense of the syntactic analysis
     conducted during closure conversion. *)

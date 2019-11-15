@@ -167,16 +167,36 @@ let simplify_set_of_closures0 dacc ~result_dacc set_of_closures
   let closure_bound_names =
     Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
   in
-  let set_of_closures, closure_types_by_bound_name, dacc, result_dacc =
+  let { Simplify_named.
+        set_of_closures;
+        closure_types_by_bound_name;
+        newer_versions_of;
+        code;
+        dacc;
+        result_dacc;
+      } =
     Simplify_named.simplify_set_of_closures0 dacc ~result_dacc set_of_closures
       ~closure_bound_names ~closure_elements ~closure_element_types
   in
   let static_structure : Program_body.Static_structure.t =
+    let code =
+      Code_id.Map.mapi (fun code_id params_and_body : Static_part.code ->
+          { params_and_body = Present params_and_body;
+            newer_version_of = Code_id.Map.find_opt code_id newer_versions_of;
+          })
+        code
+    in
     let static_part : K.fabricated Static_part.t =
-      Set_of_closures set_of_closures
+      Code_and_set_of_closures {
+        code;
+        set_of_closures = Some set_of_closures;
+      }
     in
     let bound_symbols : K.fabricated Program_body.Bound_symbols.t =
-      Set_of_closures { closure_symbols; }
+      Code_and_set_of_closures {
+        code_ids = Code_id.Map.keys code;
+        closure_symbols;
+      }
     in
     [S (bound_symbols, static_part)]
   in
@@ -192,7 +212,11 @@ let simplify_set_of_closures0 dacc ~result_dacc set_of_closures
 
 let simplify_set_of_closures dacc ~result_dacc set_of_closures
       ~closure_symbols =
-  let _can_lift, closure_elements, closure_element_types =
+  let { Simplify_named.
+        can_lift = _;
+        closure_elements;
+        closure_element_types;
+      } =
     Simplify_named.type_closure_elements_and_make_lifting_decision dacc
       ~min_name_mode:Name_mode.normal set_of_closures
   in
@@ -204,10 +228,10 @@ let simplify_static_part_of_kind_value dacc ~result_dacc
       : K.value Static_part.t * DA.t * DA.t =
   (* [dacc] holds the environment for simplifying the [Static_part]; it contains
      bindings for any computed values in addition to the types of everything
-     prior to the current [Define_symbol].
+     prior to the current [Definition].
 
      [result_dacc] holds the environment, which we are computing, that will be
-     in effect immediately after the current [Define_symbol].
+     in effect immediately after the current [Definition].
 
      We have to return both a new [dacc] and a new [result_dacc] since there may
      be multiple (ordered) symbol bindings in any given [Static_structure]. For
@@ -326,16 +350,48 @@ let simplify_static_part_of_kind_value dacc ~result_dacc
 
 let simplify_static_part_of_kind_fabricated dacc ~result_dacc
       (static_part : K.fabricated Static_part.t)
-      ~closure_symbols
+      ~code_ids ~closure_symbols
     : K.fabricated Static_part.t * DA.t * DA.t =
   match static_part with
-  | Set_of_closures set_of_closures ->
-     let set_of_closures, dacc, result_dacc, _static_structure_types,
-         _static_structure =
-       simplify_set_of_closures dacc ~result_dacc set_of_closures
-         ~closure_symbols
-     in
-     Set_of_closures set_of_closures, dacc, result_dacc
+  | Code_and_set_of_closures { code; set_of_closures; } ->
+    let code_ids' = Code_id.Map.keys code in
+    if not (Code_id.Set.equal code_ids code_ids') then begin
+      Misc.fatal_errorf "Mismatch on declared code IDs (%a and %a):@ %a"
+        Code_id.Set.print code_ids
+        Code_id.Set.print code_ids'
+        Static_part.print static_part
+    end; 
+    let dacc, result_dacc =
+      Code_id.Map.fold
+        (fun code_id ({ params_and_body; newer_version_of; } : Static_part.code)
+             (dacc, result_dacc) ->
+          (* CR mshinwell: Add invariant check to ensure there are no
+             unbound names in the code, since we're not simplifying on the
+             way down. *)
+          let define_code denv =
+            match params_and_body with
+            | Deleted -> denv
+            | Present params_and_body ->
+              DE.define_code denv ?newer_version_of ~code_id ~params_and_body
+          in
+          let dacc = DA.map_denv dacc ~f:define_code in
+          let result_dacc = DA.map_denv result_dacc ~f:define_code in
+          dacc, result_dacc)
+        code
+        (dacc, result_dacc)
+    in
+    let set_of_closures, dacc, result_dacc =
+      match set_of_closures with
+      | None -> None, dacc, result_dacc
+      | Some set_of_closures ->
+        let set_of_closures, dacc, result_dacc, _static_structure_types,
+            _static_structure =
+          simplify_set_of_closures dacc ~result_dacc set_of_closures
+            ~closure_symbols
+        in
+        Some set_of_closures, dacc, result_dacc
+    in
+    Code_and_set_of_closures { code; set_of_closures; }, dacc, result_dacc
 
 let simplify_piece_of_static_structure (type k) dacc ~result_dacc
       (bound_syms : k Program_body.Bound_symbols.t)
@@ -351,9 +407,9 @@ let simplify_piece_of_static_structure (type k) dacc ~result_dacc
   | Singleton result_sym ->
     simplify_static_part_of_kind_value dacc ~result_dacc static_part
       ~result_sym
-  | Set_of_closures { closure_symbols; } ->
+  | Code_and_set_of_closures { code_ids; closure_symbols; } ->
     simplify_static_part_of_kind_fabricated dacc ~result_dacc static_part
-      ~closure_symbols
+      ~code_ids ~closure_symbols
 
 let simplify_static_structure dacc ~result_dacc pieces
       : DA.t * Program_body.Static_structure.t =
@@ -457,13 +513,53 @@ let reify_types_of_computed_values dacc ~result_dacc computed_values =
                 (Name.var var)
                 (T.alias_type_of K.value (Simple.symbol symbol)))
         in
-        let function_decls = Function_declarations.create function_decls in
+        let module I = T.Function_declaration_type.Inlinable in
+        (* The same code might be reified multiple times and we don't currently
+           dedup, so we must assign fresh code IDs. *)
+        let fresh_code_ids =
+          Closure_id.Map.map (fun inlinable ->
+              Code_id.rename (I.code_id inlinable))
+            function_decls
+        in
+        let newer_versions_of =
+          Closure_id.Map.fold (fun closure_id inlinable newer_versions_of ->
+              let code_id = I.code_id inlinable in
+              let fresh_code_id =
+                Closure_id.Map.find closure_id fresh_code_ids
+              in
+              Code_id.Map.add fresh_code_id code_id newer_versions_of)
+            function_decls
+            Code_id.Map.empty
+        in
         let set_of_closures =
+          let function_decls =
+            Closure_id.Map.mapi (fun closure_id inlinable ->
+              let code_id = Closure_id.Map.find closure_id fresh_code_ids in
+              Function_declaration.create ~code_id
+                ~params_arity:(I.param_arity inlinable)
+                ~result_arity:(I.result_arity inlinable)
+                ~stub:(I.stub inlinable)
+                ~dbg:(I.dbg inlinable)
+                ~inline:(I.inline inlinable)
+                ~is_a_functor:(I.is_a_functor inlinable)
+                ~recursive:(I.recursive inlinable))
+              function_decls
+            |> Function_declarations.create
+          in
           Set_of_closures.create function_decls ~closure_elements:closure_vars
         in
-        let static_structure_part : Static_structure.t0 =
-          S (Set_of_closures { closure_symbols; },
-             Set_of_closures set_of_closures)
+        let by_code_id =
+          Closure_id.Map.fold (fun closure_id _inlinable by_code_id ->
+              let code_id = Closure_id.Map.find closure_id fresh_code_ids in
+              let params_and_body = DE.find_code (DA.denv dacc) code_id in
+              Code_id.Map.add code_id params_and_body by_code_id)
+            function_decls
+            Code_id.Map.empty
+        in
+        let static_structure_part =
+          Static_structure.pieces_of_code ~newer_versions_of
+            ~set_of_closures:(closure_symbols, set_of_closures)
+            by_code_id
         in
         result_dacc, dacc, (var, static_structure_part) :: reified_definitions
       | Simple _ | Cannot_reify | Invalid ->
@@ -499,11 +595,8 @@ let simplify_return_continuation_handler dacc
       DE.add_lifted_constants denv ~lifted:(R.get_lifted_constants r))
   in
   let allowed_free_vars =
-    Variable.Set.union
-      (Variable.Set.of_list
-        (List.map KP.var return_cont_handler.computed_values))
-      (Variable.Set.of_list
-        (List.map KP.var extra_params_and_args.extra_params))
+    Variable.Set.union (KP.List.var_set return_cont_handler.computed_values)
+      (KP.List.var_set extra_params_and_args.extra_params)
   in
   let static_structure, result_dacc =
     let result_dacc, dacc, reified_definitions =
@@ -700,14 +793,22 @@ let simplify_definition dacc (defn : Program_body.Definition.t) =
   in
   definition, dacc
 
-let define_lifted_constants lifted_constants (body : Program_body.t) =
+(* CR mshinwell:
+   - Need to delete unused code bindings.
+   - We should only delete code if the corresponding code-age graph is
+     linear.  If it isn't linear then a subsequent join may need code that
+     is currently unused.
+   - We should simplify code on the way up if we don't delete it. *)
+
+let define_lifted_constants dacc lifted_constants (body : Program_body.t) =
   List.fold_left (fun body lifted_constant : Program_body.t ->
       let definition = Lifted_constant.definition lifted_constant in
       let static_structure =
         (* CR mshinwell: We should have deletion of unused symbols
            automatically -- needs to be done for non-lifted constants too *)
         Static_structure.delete_bindings definition.static_structure
-          ~allowed:(Name_occurrences.symbols (Program_body.free_names body))
+          ~free_names_after:(Program_body.free_names body)
+          (TE.code_age_relation (DE.typing_env (DA.denv dacc)))
       in
       if Static_structure.is_empty static_structure then body
       else
@@ -716,19 +817,23 @@ let define_lifted_constants lifted_constants (body : Program_body.t) =
             static_structure;
           }
         in
-        Program_body.define_symbol definition ~body)
+        Program_body.define_symbol definition ~body
+          (TE.code_age_relation (DE.typing_env (DA.denv dacc))))
     body
     lifted_constants
 
 let rec simplify_program_body0 dacc (body : Program_body.t) k =
   match Program_body.descr body with
-  | Define_symbol (defn, body) ->
+  | Definition (defn, body) ->
     let dacc = DA.map_r dacc ~f:(fun r -> R.clear_lifted_constants r) in
     let defn, dacc = simplify_definition dacc defn in
     let r = DA.r dacc in
     simplify_program_body0 dacc body (fun body dacc ->
-      let body = Program_body.define_symbol defn ~body in
-      let body = define_lifted_constants (R.get_lifted_constants r) body in
+      let body =
+        Program_body.define_symbol defn ~body
+          (TE.code_age_relation (DE.typing_env (DA.denv dacc)))
+      in
+      let body = define_lifted_constants dacc (R.get_lifted_constants r) body in
       k body dacc)
   | Root _ -> k body dacc
 

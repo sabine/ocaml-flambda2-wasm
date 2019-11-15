@@ -133,12 +133,20 @@ val type_for_const : Simple.Const.t -> t
 val kind_for_const : Simple.Const.t -> Flambda_kind.t
 
 val create_inlinable_function_declaration
-   : Term_language_function_declaration.t
-  -> Rec_info.t
+   : code_id:Code_id.t
+  -> param_arity:Flambda_arity.t
+  -> result_arity:Flambda_arity.t
+  -> stub:bool
+  -> dbg:Debuginfo.t
+  -> inline:Inline_attribute.t
+  -> is_a_functor:bool
+  -> recursive:Recursive.t
+  -> rec_info:Rec_info.t
   -> Function_declaration_type.t
 
 val create_non_inlinable_function_declaration
-   : param_arity:Flambda_arity.t
+   : code_id:Code_id.t
+  -> param_arity:Flambda_arity.t
   -> result_arity:Flambda_arity.t
   -> recursive:Recursive.t
   -> Function_declaration_type.t

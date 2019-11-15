@@ -22,6 +22,7 @@ module Env = Closure_conversion_aux.Env
 module Expr = Flambda.Expr
 module Function_decls = Closure_conversion_aux.Function_decls
 module Function_decl = Function_decls.Function_decl
+module Function_params_and_body = Flambda.Function_params_and_body
 module Named = Flambda.Named
 module Program_body = Flambda_static.Program_body
 module Static_part = Flambda_static.Static_part
@@ -40,6 +41,7 @@ type t = {
   mutable imported_symbols : Symbol.Set.t;
   (* All symbols in [imported_symbols] are to be of kind [Value]. *)
   mutable declared_symbols : (Symbol.t * K.value Static_part.t) list;
+  mutable code : (Code_id.t * Function_params_and_body.t) list;
 }
 
 let symbol_for_ident t id =
@@ -53,7 +55,7 @@ let symbol_for_ident t id =
 let tupled_function_call_stub
       (original_params : (Variable.t * Lambda.value_kind) list)
       (unboxed_version : Closure_id.t)
-      ~(closure_id : Closure_id.t)
+      code_id ~(closure_id : Closure_id.t)
       recursive =
   let dbg = Debuginfo.none in
   let return_continuation = Continuation.create ~sort:Return () in
@@ -73,7 +75,8 @@ let tupled_function_call_stub
   let unboxed_version_var = Variable.create "unboxed_version" in
   let call =
     let call_kind =
-      Call_kind.direct_function_call unboxed_version ~return_arity:[K.value]
+      Call_kind.direct_function_call code_id unboxed_version
+        ~return_arity:[K.value]
     in
     let apply =
       Flambda.Apply.create ~callee:(Simple.var unboxed_version_var)
@@ -129,14 +132,21 @@ let tupled_function_call_stub
       ~body
       ~my_closure
   in
-  Flambda.Function_declaration.create
-    ~params_and_body
-    ~result_arity:[K.value]
-    ~stub:true
-    ~dbg
-    ~inline:Default_inline
-    ~is_a_functor:false
-    ~recursive
+  let code_id =
+    Code_id.create ~name:((Closure_id.to_string closure_id) ^ "_tuple_stub")
+      (Compilation_unit.get_current_exn ())
+  in
+  let func_decl =
+    Flambda.Function_declaration.create ~code_id
+      ~params_arity:[K.value]
+      ~result_arity:[K.value]
+      ~stub:true
+      ~dbg
+      ~inline:Default_inline
+      ~is_a_functor:false
+      ~recursive
+  in
+  func_decl, code_id, params_and_body
 
 let register_const0 t (constant : K.value Static_part.t) name =
   let current_compilation_unit = Compilation_unit.get_current_exn () in
@@ -684,6 +694,9 @@ and close_one_function t ~external_env ~by_closure_id decl
   let closure_id = Function_decl.closure_id decl in
   let our_let_rec_ident = Function_decl.let_rec_ident decl in
   let compilation_unit = Compilation_unit.get_current_exn () in
+  let code_id =
+    Code_id.create ~name:(Closure_id.to_string closure_id) compilation_unit
+  in
   let unboxed_version =
     Closure_id.wrap compilation_unit (Variable.create (
       Ident.name (Function_decl.let_rec_ident decl)))
@@ -797,17 +810,18 @@ and close_one_function t ~external_env ~by_closure_id decl
       var_within_closures_to_bind
       body
   in
+  let exn_continuation =
+    close_exn_continuation external_env (Function_decl.exn_continuation decl)
+  in
+  let inline = LC.inline_attribute (Function_decl.inline decl) in
+  let params_and_body =
+    Flambda.Function_params_and_body.create
+      ~return_continuation:(Function_decl.return_continuation decl)
+      exn_continuation params ~body ~my_closure
+  in
   let fun_decl =
-    let exn_continuation =
-      close_exn_continuation external_env (Function_decl.exn_continuation decl)
-    in
-    let inline = LC.inline_attribute (Function_decl.inline decl) in
-    let params_and_body =
-      Flambda.Function_params_and_body.create
-        ~return_continuation:(Function_decl.return_continuation decl)
-        exn_continuation params ~body ~my_closure
-    in
-    Flambda.Function_declaration.create ~params_and_body
+    Flambda.Function_declaration.create ~code_id
+      ~params_arity:(Kinded_parameter.List.arity params)
       ~result_arity:[LC.value_kind return]
       ~stub
       ~dbg
@@ -815,13 +829,15 @@ and close_one_function t ~external_env ~by_closure_id decl
       ~is_a_functor:(Function_decl.is_a_functor decl)
       ~recursive
   in
+  t.code <- (code_id, params_and_body) :: t.code;
   match Function_decl.kind decl with
   | Curried -> Closure_id.Map.add my_closure_id fun_decl by_closure_id
   | Tupled ->
-    let generic_function_stub =
-      tupled_function_call_stub param_vars unboxed_version ~closure_id
+    let generic_function_stub, code_id, params_and_body =
+      tupled_function_call_stub param_vars unboxed_version code_id ~closure_id
         recursive
     in
+    t.code <- (code_id, params_and_body) :: t.code;
     Closure_id.Map.add unboxed_version fun_decl
       (Closure_id.Map.add closure_id generic_function_stub by_closure_id)
 
@@ -836,6 +852,7 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
       filename;
       imported_symbols = Symbol.Set.empty;
       declared_symbols = [];
+      code = [];
     }
   in
   let module_symbol = Backend.symbol_for_global' module_ident in
@@ -939,6 +956,40 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
     in
     Program_body.define_symbol definition
       ~body:(Program_body.root module_symbol)
+      Code_age_relation.empty
+  in
+  let program_body =
+    List.fold_left
+      (fun program_body (code_id, params_and_body) : Program_body.t ->
+        let bound_symbols : K.fabricated Program_body.Bound_symbols.t =
+          Code_and_set_of_closures {
+            code_ids = Code_id.Set.singleton code_id;
+            closure_symbols = Closure_id.Map.empty;
+          }
+        in
+        let static_part : K.fabricated Static_part.t =
+          let code : Static_part.code =
+            { params_and_body = Present params_and_body;
+              newer_version_of = None;
+            }
+          in
+          Code_and_set_of_closures {
+            code = Code_id.Map.singleton code_id code;
+            set_of_closures = None; 
+          }
+        in
+        let static_structure : Program_body.Static_structure.t =
+          [S (bound_symbols, static_part)]
+        in
+        let definition : Program_body.Definition.t =
+          { computation = None;
+            static_structure;
+          }
+        in
+        Program_body.define_symbol definition ~body:program_body
+          Code_age_relation.empty)
+      program_body
+      t.code
   in
   let program_body =
     (* CR mshinwell: Share with [Simplify_program] *)
@@ -954,7 +1005,7 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
             static_structure;
           }
         in
-        Program_body.define_symbol definition ~body)
+        Program_body.define_symbol definition ~body Code_age_relation.empty)
       program_body
       t.declared_symbols
   in

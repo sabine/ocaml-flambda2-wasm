@@ -123,7 +123,12 @@ module type Downwards_env = sig
       result structure. *)
   val add_lifted_constants_from_r : t -> result -> t
 
-  val define_code : t -> Code_id.t -> Function_params_and_body.t -> t
+  val define_code
+     : t
+    -> ?newer_version_of:Code_id.t
+    -> code_id:Code_id.t
+    -> params_and_body:Function_params_and_body.t
+    -> t
 
   val find_code : t -> Code_id.t -> Function_params_and_body.t
 
@@ -270,11 +275,22 @@ module type Lifted_constant = sig
      : downwards_env
     -> Flambda_static.Program_body.Definition.t
     -> types_of_symbols:Flambda_type.t Symbol.Map.t
-    -> pieces_of_code:Function_params_and_body.t Code_id.Map.t
+    -> t
+
+  val create_piece_of_code
+     : downwards_env
+    -> ?newer_version_of:Code_id.t
+    -> Code_id.t
+    -> Flambda.Function_params_and_body.t
+    -> t
+
+  val create_pieces_of_code
+     : downwards_env
+    -> ?newer_versions_of:Code_id.t Code_id.Map.t
+    -> Flambda.Function_params_and_body.t Code_id.Map.t
     -> t
 
   val denv_at_definition : t -> downwards_env
   val definition : t -> Flambda_static.Program_body.Definition.t
   val types_of_symbols : t -> Flambda_type.t Symbol.Map.t
-  val pieces_of_code : t -> Function_params_and_body.t Code_id.Map.t
 end
