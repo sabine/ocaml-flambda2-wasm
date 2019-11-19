@@ -38,6 +38,9 @@ _ocamltestd
 .merlin
 _build
 
+# flambda2 build script
+flambda2.sh
+
 # local to root directory
 /Makefile.common
 /Makefile.config
