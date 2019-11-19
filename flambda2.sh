@@ -127,7 +127,7 @@ stdlib () {
   # Building the stdlib and std compiler with flambda2
   echo "setting up the env"
   export FLAMBDA2=y
-  export OCAMLPARAM="_,flambda-invariants=0,flambda2-context-on-error=1"
+  export OCAMLPARAM="_,flambda-invariants=0"
   export PATH=${SECOND_STAGE}/_install/bin/:$PATH
   wrap "building stdlib and compiler with flambda2" "${FINAL}" "dune build @world"
 }
