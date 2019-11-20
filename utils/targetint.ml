@@ -245,8 +245,6 @@ module Int32 = struct
         let ten = 10l
         let hex_ff = 0xffl
 
-        (* XXX Implement correctly *)
-
         let min_value = Int32.min_int
         let max_value = Int32.max_int
 
