@@ -230,15 +230,20 @@ module Int32 = struct
   external swap_byte_endianness : t -> t = "%bswap_int32"
 
   module OCaml = struct
-    type nonrec t = t
-    type targetint_ocaml = t
-
     (* compute operations on 31-bits. we give the relevant
        operations on 32-bits to the functor, which then computes
        the correct corresponding operations on 31-bits. *)
     include One_bit_less.Make(struct
         type nonrec t = t
+        type targetint_ocaml = t
         type nonrec targetint = targetint
+
+        let compare = compare
+        let equal = equal
+        let hash = hash
+        let output = output
+        let print = print
+
         let minus_one = (-1l)
         let zero = 0l
         let one = 1l
@@ -319,13 +324,6 @@ module Int32 = struct
         (* CR mshinwell: implement *)
         let get_least_significant_16_bits_then_byte_swap _t = assert false
       end)
-
-
-    let compare = compare
-    let equal = equal
-    let hash = hash
-    let output = output
-    let print = print
 
     module T = T
     module Map = Map
@@ -432,15 +430,19 @@ module Int64 = struct
   external swap_byte_endianness : t -> t = "%bswap_int32"
 
   module OCaml = struct
-    type nonrec t = t
-    type targetint_ocaml = t
-
     (* compute operations on 63-bits. we give the relevant
        operations on 64-bits to the functor, which then computes
        the correct corresponding operations on 63-bits. *)
     include One_bit_less.Make(struct
         type nonrec t = t
+        type targetint_ocaml = t
         type nonrec targetint = targetint
+
+        let compare = compare
+        let equal = equal
+        let hash = hash
+        let output = output
+        let print = print
 
         let minus_one = (-1L)
         let zero = 0L
@@ -512,12 +514,6 @@ module Int64 = struct
         let get_least_significant_16_bits_then_byte_swap _t = assert false
       end)
 
-
-    let compare = compare
-    let equal = equal
-    let hash = hash
-    let output = output
-    let print = print
 
     module T = T
     module Map = Map
