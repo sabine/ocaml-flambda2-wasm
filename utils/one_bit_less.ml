@@ -1,0 +1,159 @@
+(**************************************************************************)
+(*                                                                        *)
+(*                                 OCaml                                  *)
+(*                                                                        *)
+(*                        Guillaume Bury, OCamlPro                        *)
+(*                                                                        *)
+(*   Copyright 2019--2019 OCamlPro SAS                                    *)
+(*                                                                        *)
+(*   All rights reserved.  This file is distributed under the terms of    *)
+(*   the GNU Lesser General Public License version 2.1, with the          *)
+(*   special exception on linking described in the file LICENSE.          *)
+(*                                                                        *)
+(**************************************************************************)
+
+[@@@ocaml.warning "+a-4-30-40-41-42"]
+
+module type S = sig
+  type t
+  type targetint
+  val min_value : t
+  val max_value : t
+  val max_string_length : t
+  val minus_one : t
+  val zero : t
+  val one : t
+  val ten : t
+  val hex_ff : t
+  val (<=) : t -> t -> bool
+  val (<) : t -> t -> bool
+  val bottom_byte_to_int : t -> int
+  val of_char : char -> t
+  val of_int : int -> t  (* CR mshinwell: clarify semantics *)
+  val of_int_option : int -> t option
+  val of_int32 : int32 -> t
+  val of_int64 : int64 -> t
+  val of_targetint : targetint -> t
+  val of_float : float -> t
+
+  val to_float : t -> float
+  val to_int : t -> int
+  val to_int_exn : t -> int
+  val to_int_option : t -> int option
+  val to_int32 : t -> int32
+  val to_int64 : t -> int64
+  val to_targetint : t -> targetint
+
+  val neg : t -> t
+  val get_least_significant_16_bits_then_byte_swap : t -> t
+  val swap_byte_endianness : t -> t
+
+  val add : t -> t -> t
+  val sub : t -> t -> t
+  val mul : t -> t -> t
+  val mod_ : t -> t -> t
+  val div : t -> t -> t
+
+  val and_ : t -> t -> t
+  val or_ : t -> t -> t
+  val xor : t -> t -> t
+
+  val shift_left : t -> int -> t
+  val shift_right : t -> int -> t
+  val shift_right_logical : t -> int -> t
+
+  val max : t -> t -> t
+end
+
+(* The goal of this module is to take as argument a module
+   that operates on integers of size {n} bits, and return a
+   module that operates on integers of size {n-1} bits. *)
+module Make(I : S) : S with type t := I.t
+                        and type targetint := I.targetint = struct
+
+  (* We represent a {n-1} bit integer with an {n} bit integer
+     that falls in the range of numbers representable in
+     {n-1} bits. *)
+
+  (* sign extension can "correct" an {n} bits value that has
+     overflowed over the range of {n-1} bits integer, back into
+     the range of {n-1} bits integers, by considering that
+     arithmetic operation wrap-around (i.e. arithmetic is done
+     modulo 2^{n-2} bits. *)
+  let sextend t =
+    I.shift_right (I.shift_left t 1) 1
+
+  (* min and max values cannot use the sign extension because
+     we do not want the wrap-around to take place specifically. *)
+  let min_value = I.shift_right I.min_value 1
+  let max_value = I.shift_right I.max_value 1
+
+  (* sextend is not used to ensure that this value is still positive. *)
+  let max_string_length =
+    I.max max_value I.max_string_length
+
+
+  (* constants need not be changed (we assume that {n} >= 9, so that
+     {n-1} >= 8 and thus hex_ff is representable).
+     CR Gbury: add an assertiont that {n} is indeed > 9 ? *)
+  let minus_one = I.minus_one
+  let zero = I.zero
+  let one = I.one
+  let ten = I.ten
+  let hex_ff = I.hex_ff
+
+  let (<=) = I.(<=)
+  let (<) = I.(<)
+
+  let bottom_byte_to_int = I.bottom_byte_to_int
+  (* We assume that {n} >= 8 to ensure that all ascii characters
+     can still be represented in {n-1}>=7 bits.*)
+  let of_char = I.of_char
+
+  let of_int t = sextend (I.of_int t)
+
+  let of_int_option t =
+    Option.map sextend (I.of_int_option t)
+
+  let of_int32 t =
+    sextend (I.of_int32 t)
+
+  let of_int64 t =
+    sextend (I.of_int64 t)
+
+  let of_targetint t =
+    sextend (I.of_targetint t)
+
+  let of_float t =
+    sextend (I.of_float t)
+
+  let to_float = I.to_float
+  let to_int = I.to_int
+  let to_int_exn = I.to_int_exn
+  let to_int_option = I.to_int_option
+  let to_int32 = I.to_int32
+  let to_int64 = I.to_int64
+  let to_targetint = I.to_targetint
+
+  let neg t = sextend (I.neg t)
+  let get_least_significant_16_bits_then_byte_swap =
+    I.get_least_significant_16_bits_then_byte_swap
+  let swap_byte_endianness = I.swap_byte_endianness
+
+  let add x y = sextend (I.add x y)
+  let sub x y = sextend (I.sub x y)
+  let mul x y = sextend (I.mul x y)
+  let mod_ x y = sextend (I.mod_ x y)
+  let div x y = sextend (I.div x y)
+
+  let and_ = I.and_
+  let or_ = I.or_
+  let xor = I.xor
+
+  let shift_left t i = sextend (I.shift_left t i)
+  let shift_right t i = sextend (I.shift_right t i)
+  let shift_right_logical t i =
+    I.shift_right_logical (I.shift_left t 1) (i + 1)
+
+  let max = I.max
+end

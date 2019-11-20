@@ -231,87 +231,97 @@ module Int32 = struct
 
   module OCaml = struct
     type nonrec t = t
-
     type targetint_ocaml = t
 
-    let minus_one = (-1l)
-    let zero = 0l
-    let one = 1l
-    let ten = 10l
-    let hex_ff = 0xffl
+    (* compute operations on 31-bits. we give the relevant
+       operations on 32-bits to the functor, which then computes
+       the correct corresponding operations on 31-bits. *)
+    include One_bit_less.Make(struct
+        type nonrec t = t
+        type nonrec targetint = targetint
+        let minus_one = (-1l)
+        let zero = 0l
+        let one = 1l
+        let ten = 10l
+        let hex_ff = 0xffl
 
-    (* XXX Implement correctly *)
+        (* XXX Implement correctly *)
 
-    let min_value = Int32.min_int
-    let max_value = Int32.max_int
+        let min_value = Int32.min_int
+        let max_value = Int32.max_int
 
-    let sub = Int32.sub
-    let neg = Int32.neg
+        let sub = Int32.sub
+        let neg = Int32.neg
 
-    let swap_byte_endianness = swap_byte_endianness
+        let swap_byte_endianness = swap_byte_endianness
 
-    let shift_left = Int32.shift_left
-    let shift_right = Int32.shift_right
-    let shift_right_logical = Int32.shift_right_logical
+        let shift_left = Int32.shift_left
+        let shift_right = Int32.shift_right
+        let shift_right_logical = Int32.shift_right_logical
 
-    let xor = Int32.logxor
-    let or_ = Int32.logor
-    let and_ = Int32.logand
-    let mod_ = Int32.rem
-    let div = Int32.div
-    let mul = Int32.mul
-    let add = Int32.add
+        let xor = Int32.logxor
+        let or_ = Int32.logor
+        let and_ = Int32.logand
+        let mod_ = Int32.rem
+        let div = Int32.div
+        let mul = Int32.mul
+        let add = Int32.add
 
-    let bottom_byte_to_int t =
-      Int32.to_int (Int32.logand t hex_ff)
+        let bottom_byte_to_int t =
+          Int32.to_int (Int32.logand t hex_ff)
 
-    let of_char c =
-      Int32.of_int (Char.code c)
+        let of_char c =
+          Int32.of_int (Char.code c)
 
-    let of_int = Int32.of_int
-    let to_int = Int32.to_int
+        let of_int = Int32.of_int
+        let to_int = Int32.to_int
 
-    let of_int32 t = t (* CR mshinwell: Overflow semantics? *)
-    let of_int64 t = Int64.to_int32 t (* CR mshinwell: Overflow semantics? *)
+        let of_int32 t = t (* CR mshinwell: Overflow semantics? *)
+        let of_int64 t = Int64.to_int32 t (* CR mshinwell: Overflow semantics? *)
 
-    let to_int32 t = t
-    let to_int64 t = Int64.of_int32 t
-    let to_targetint t = t
+        let to_int32 t = t
+        let to_int64 t = Int64.of_int32 t
+        let to_targetint t = t
 
-    let of_float t = of_int64 (Int64.bits_of_float t)
-    let to_float t = Int64.float_of_bits (to_int64 t)
+        let of_float t = of_int64 (Int64.bits_of_float t)
+        let to_float t = Int64.float_of_bits (to_int64 t)
 
-    let of_int_option i =
-      let t = of_int i in
-      let via_t = Int64.of_int32 t in
-      let not_via_t = Int64.of_int i in
-      if Int64.equal via_t not_via_t then Some t
-      else None
+        let of_int_option i =
+          let t = of_int i in
+          let via_t = Int64.of_int32 t in
+          let not_via_t = Int64.of_int i in
+          if Int64.equal via_t not_via_t then Some t
+          else None
 
-    let to_int_option t = (* XXX this is wrong, implement correctly *)
-      Some (to_int t)
+        let to_int_option t = (* XXX this is wrong, implement correctly *)
+          Some (to_int t)
 
-    let to_int_exn t =
-      match to_int_option t with
-      | Some i -> i
-      | None -> Misc.fatal_errorf "Targetint.OCaml.to_int_exn %ld" t
+        let to_int_exn t =
+          match to_int_option t with
+          | Some i -> i
+          | None -> Misc.fatal_errorf "Targetint.OCaml.to_int_exn %ld" t
 
-    (* CR mshinwell: Overflow semantics? *)
-    let of_targetint t = t
+        (* CR mshinwell: Overflow semantics? *)
+        let of_targetint t = t
 
-    (* XXX This needs to be retrieved properly.
-       Also, there are bugs in asmcomp/closure.ml and cmmgen.ml where max_wosize
-       is being calculated ignoring any PROFINFO_WIDTH *)
-    let max_array_length = Int32.sub (Int32.shift_left 1l 22) 1l
+        (* XXX This needs to be retrieved properly.
+           Also, there are bugs in asmcomp/closure.ml and cmmgen.ml where max_wosize
+           is being calculated ignoring any PROFINFO_WIDTH *)
+        let max_array_length = Int32.sub (Int32.shift_left 1l 22) 1l
 
-    let max_string_length =
-      Int32.sub (Int32.mul 4l max_array_length) 1l
+        let max_string_length =
+          Int32.sub (Int32.mul 4l max_array_length) 1l
 
-    let max t1 t2 =
-      if Stdlib.compare t1 t2 < 0 then t2 else t1
+        let max t1 t2 =
+          if Stdlib.compare t1 t2 < 0 then t2 else t1
 
-    (* CR mshinwell: implement *)
-    let get_least_significant_16_bits_then_byte_swap _t = assert false
+        let (<=) t1 t2 = Int32.compare t1 t2 <= 0
+        let (<) t1 t2 = Int32.compare t1 t2 < 0
+
+        (* CR mshinwell: implement *)
+        let get_least_significant_16_bits_then_byte_swap _t = assert false
+      end)
+
 
     let compare = compare
     let equal = equal
@@ -364,8 +374,6 @@ module Int32 = struct
       end)
     end
 
-    let (<=) t1 t2 = Int32.compare t1 t2 <= 0
-    let (<) t1 t2 = Int32.compare t1 t2 < 0
   end
 end
 
@@ -427,78 +435,85 @@ module Int64 = struct
 
   module OCaml = struct
     type nonrec t = t
-
     type targetint_ocaml = t
 
-    let minus_one = (-1L)
-    let zero = 0L
-    let one = 1L
-    let ten = 10L
-    let hex_ff = 0xffL
+    (* compute operations on 63-bits. we give the relevant
+       operations on 64-bits to the functor, which then computes
+       the correct corresponding operations on 63-bits. *)
+    include One_bit_less.Make(struct
+        type nonrec t = t
+        type nonrec targetint = targetint
 
-    (* XXX Implement correctly *)
-    let min_value = Int64.min_int
-    let max_value = Int64.max_int
+        let minus_one = (-1L)
+        let zero = 0L
+        let one = 1L
+        let ten = 10L
+        let hex_ff = 0xffL
+        let min_value = Int64.min_int
+        let max_value = Int64.max_int
+        let sub = Int64.sub
+        let neg = Int64.neg
 
-    (* XXX Implement correctly *)
-    let sub = Int64.sub
-    let neg = Int64.neg
+        let shift_left = Int64.shift_left
+        let shift_right = Int64.shift_right
+        let shift_right_logical = Int64.shift_right_logical
 
-    let shift_left = Int64.shift_left
-    let shift_right = Int64.shift_right
-    let shift_right_logical = Int64.shift_right_logical
+        let xor = Int64.logxor
+        let or_ = Int64.logor
+        let and_ = Int64.logand
+        let mod_ = Int64.rem
+        let div = Int64.div
+        let mul = Int64.mul
+        let add = Int64.add
 
-    let xor = Int64.logxor
-    let or_ = Int64.logor
-    let and_ = Int64.logand
-    let mod_ = Int64.rem
-    let div = Int64.div
-    let mul = Int64.mul
-    let add = Int64.add
+        let swap_byte_endianness = swap_byte_endianness
 
-    let swap_byte_endianness = swap_byte_endianness
+        let bottom_byte_to_int t =
+          Int64.to_int (Int64.logand t hex_ff)
 
-    let bottom_byte_to_int t =
-      Int64.to_int (Int64.logand t hex_ff)
+        let of_char c =
+          Int64.of_int (Char.code c)
 
-    let of_char c =
-      Int64.of_int (Char.code c)
+        let of_int = Int64.of_int
+        let to_int = Int64.to_int
 
-    let of_int = Int64.of_int
-    let to_int = Int64.to_int
+        let to_int_option t = (* XXX this is wrong, implement correctly *)
+          Some (to_int t)
 
-    let to_int_option t = (* XXX this is wrong, implement correctly *)
-      Some (to_int t)
+        let to_int_exn t =
+          match to_int_option t with
+          | Some i -> i
+          | None -> Misc.fatal_errorf "Targetint.OCaml.to_int_exn %Ld" t
 
-    let to_int_exn t =
-      match to_int_option t with
-      | Some i -> i
-      | None -> Misc.fatal_errorf "Targetint.OCaml.to_int_exn %Ld" t
+        let of_int32 t = Int64.of_int32 t
+        let of_int64 t = t (* CR mshinwell: Overflow semantics? *)
+        let of_float t = Int64.bits_of_float t
 
-    let of_int32 t = Int64.of_int32 t
-    let of_int64 t = t (* CR mshinwell: Overflow semantics? *)
-    let of_float t = Int64.bits_of_float t
+        let to_int32 t = Int64.to_int32 t
+        let to_int64 t = t
+        let to_targetint t = t
+        let to_float t = Int64.float_of_bits t
 
-    let to_int32 t = Int64.to_int32 t
-    let to_int64 t = t
-    let to_targetint t = t
-    let to_float t = Int64.float_of_bits t
+        let of_int_option i = Some (of_int i)
 
-    let of_int_option i = Some (of_int i)
+        (* CR mshinwell: Overflow semantics? *)
+        let of_targetint t = t
 
-    (* CR mshinwell: Overflow semantics? *)
-    let of_targetint t = t
+        let max_array_length = Int64.sub (Int64.shift_left 1L 54) 1L
 
-    let max_array_length = Int64.sub (Int64.shift_left 1L 54) 1L
+        let max_string_length =
+          Int64.sub (Int64.mul 8L max_array_length) 1L
 
-    let max_string_length =
-      Int64.sub (Int64.mul 8L max_array_length) 1L
+        let max t1 t2 =
+          if Stdlib.compare t1 t2 < 0 then t2 else t1
 
-    let max t1 t2 =
-      if Stdlib.compare t1 t2 < 0 then t2 else t1
+        let (<=) t1 t2 = Stdlib.(<=) (compare t1 t2) 0
+        let (<) t1 t2 = Stdlib.(<) (compare t1 t2) 0
 
-    (* CR mshinwell: implement *)
-    let get_least_significant_16_bits_then_byte_swap _t = assert false
+        (* CR mshinwell: implement *)
+        let get_least_significant_16_bits_then_byte_swap _t = assert false
+      end)
+
 
     let compare = compare
     let equal = equal
@@ -526,34 +541,32 @@ module Int64 = struct
       let unknown () = Unknown
 
       include Identifiable.Make (struct
-        type nonrec t = t
+          type nonrec t = t
 
-        let compare t1 t2 =
-          match t1, t2 with
-          | Ok _, Unknown -> -1
-          | Unknown, Ok _ -> 1
-          | Unknown, Unknown -> 0
-          | Ok imm1, Ok imm2 -> compare imm1 imm2
+          let compare t1 t2 =
+            match t1, t2 with
+            | Ok _, Unknown -> -1
+            | Unknown, Ok _ -> 1
+            | Unknown, Unknown -> 0
+            | Ok imm1, Ok imm2 -> compare imm1 imm2
 
-        let equal t1 t2 = (compare t1 t2 = 0)
+          let equal t1 t2 = (compare t1 t2 = 0)
 
-        let hash t =
-          match t with
-          | Ok imm -> Hashtbl.hash (0, hash imm)
-          | Unknown -> Hashtbl.hash 1
+          let hash t =
+            match t with
+            | Ok imm -> Hashtbl.hash (0, hash imm)
+            | Unknown -> Hashtbl.hash 1
 
-        let print ppf t =
-          match t with
-          | Ok imm -> print ppf imm
-          | Unknown -> Format.pp_print_string ppf "Unknown"
+          let print ppf t =
+            match t with
+            | Ok imm -> print ppf imm
+            | Unknown -> Format.pp_print_string ppf "Unknown"
 
-        let output chan t =
-          print (Format.formatter_of_out_channel chan) t
-      end)
+          let output chan t =
+            print (Format.formatter_of_out_channel chan) t
+        end)
     end
 
-    let (<=) t1 t2 = Stdlib.(<=) (compare t1 t2) 0
-    let (<) t1 t2 = Stdlib.(<) (compare t1 t2) 0
   end
 end
 
