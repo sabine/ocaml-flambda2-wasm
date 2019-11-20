@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# parralelism
+# parallelism
 J=8
 # number of errors lines to show from the log file
 N=15
-# tmpfile for logigng command output
+# tmpfile for logging command output
 TMPFILE=$(mktemp /tmp/flambda2-build.XXXXXX)
 
 # ##### WARNING !! ############################
@@ -15,7 +15,7 @@ TMPFILE=$(mktemp /tmp/flambda2-build.XXXXXX)
 FIRST_STAGE=
 # second stage build (4.10 branch)
 SECOND_STAGE=
-# developpement repo (flambda2.0-stable branch)
+# development repo (flambda2.0-stable branch)
 DEV=
 # final repo where the optimized compiler is built (flambda2.0-stable branch)
 FINAL=
@@ -23,7 +23,7 @@ FINAL=
 # ##############
 # Check function
 # ##############
-# Check that all avriabels have been correctly set before trying to execute anything
+# Check that all variables have been correctly set before trying to execute anything
 check_aux () {
    if [ -z "$1" ]; then
      echo -e "\e[31mERROR !\e[0m variable $2 is empty"
@@ -42,7 +42,7 @@ check () {
 # Auxiliary function
 # ##################
 # Run a command in a directory and print some output message if it fails
-# $1 : messgae to announce the beginiing
+# $1 : message to announce the beginning
 # $2 : directory to cd into before running
 # $3 : command to run inside of $2
 wrap () {
@@ -214,7 +214,7 @@ case "$1" in
     echo "see ./flambda2.sh help"
     ;;
 esac
-# finaly, cleanup the tmpfile
+# finally, cleanup the tmpfile
 rm -rf $TMPFILE
 
 
