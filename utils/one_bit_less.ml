@@ -99,15 +99,11 @@ module Make(I : S) : S with type t = I.t
   let sign_extend t =
     I.shift_right (I.shift_left t 1) 1
 
-  (* min and max values cannot use the sign extension because
-     we do not want the wrap-around to take place specifically. *)
   let min_value = I.shift_right I.min_value 1
   let max_value = I.shift_right I.max_value 1
 
-  (* sign_extend is not used to ensure that this value is still positive. *)
   let max_string_length =
-    I.max max_value I.max_string_length
-
+    I.min max_value I.max_string_length
 
   (* constants need not be changed (we assume that {n} >= 9, so that
      {n-1} >= 8 and thus hex_ff is representable).
