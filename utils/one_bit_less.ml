@@ -71,6 +71,7 @@ module type S = sig
   val shift_right_logical : t -> int -> t
 
   val max : t -> t -> t
+  val min : t -> t -> t
 end
 
 (* The goal of this module is to take as argument a module
@@ -168,4 +169,5 @@ module Make(I : S) : S with type t = I.t
     I.shift_right_logical (I.shift_left t 1) (i + 1)
 
   let max = I.max
+  let min = I.min
 end

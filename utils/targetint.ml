@@ -317,6 +317,8 @@ module Int32 = struct
 
         let max t1 t2 =
           if Stdlib.compare t1 t2 < 0 then t2 else t1
+        let min t1 t2 =
+          if Stdlib.compare t1 t2 < 0 then t1 else t2
 
         let (<=) t1 t2 = Int32.compare t1 t2 <= 0
         let (<) t1 t2 = Int32.compare t1 t2 < 0
@@ -506,6 +508,8 @@ module Int64 = struct
 
         let max t1 t2 =
           if Stdlib.compare t1 t2 < 0 then t2 else t1
+        let min t1 t2 =
+          if Stdlib.compare t1 t2 < 0 then t1 else t2
 
         let (<=) t1 t2 = Stdlib.(<=) (compare t1 t2) 0
         let (<) t1 t2 = Stdlib.(<) (compare t1 t2) 0
