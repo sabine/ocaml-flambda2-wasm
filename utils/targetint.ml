@@ -136,7 +136,7 @@ module Int32 = struct
     (* compute operations on 31-bits. we give the relevant
        operations on 32-bits to the functor, which then computes
        the correct corresponding operations on 31-bits. *)
-    include One_bit_less.Make(struct
+    include One_bit_fewer.Make(struct
         type nonrec t = t
         type targetint_ocaml = t
         type nonrec targetint = targetint
@@ -174,7 +174,7 @@ module Int32 = struct
         let bottom_byte_to_int t =
           Int32.to_int (Int32.logand t hex_ff)
 
-        (* the {!One_bit_less} functor will add adequate checks for conversions. *)
+        (* the {!One_bit_fewer} functor will add adequate checks for conversions. *)
         let of_char c =
           Int32.of_int (Char.code c)
 
@@ -334,7 +334,7 @@ module Int64 = struct
     (* compute operations on 63-bits. we give the relevant
        operations on 64-bits to the functor, which then computes
        the correct corresponding operations on 63-bits. *)
-    include One_bit_less.Make(struct
+    include One_bit_fewer.Make(struct
         type nonrec t = t
         type targetint_ocaml = t
         type nonrec targetint = targetint
