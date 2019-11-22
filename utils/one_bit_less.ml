@@ -54,7 +54,6 @@ module type S = sig
 
   val neg : t -> t
   val get_least_significant_16_bits_then_byte_swap : t -> t
-  val swap_byte_endianness : t -> t
 
   val add : t -> t -> t
   val sub : t -> t -> t
@@ -76,7 +75,10 @@ end
 
 (* The goal of this module is to take as argument a module
    that operates on integers of size {n} bits, and return a
-   module that operates on integers of size {n-1} bits. *)
+   module that operates on integers of size {n-1} bits.
+   We assume that {n} > 16, so that all constants can be
+   represented and the get_least_significant_16_bits_then_byte_swap
+   function actually has a defined semantics.*)
 module Make(I : S) : S with type t = I.t
                         and type targetint := I.targetint = struct
 
@@ -106,9 +108,6 @@ module Make(I : S) : S with type t = I.t
   let max_string_length =
     I.min max_value I.max_string_length
 
-  (* constants need not be changed (we assume that {n} >= 9, so that
-     {n-1} >= 8 and thus hex_ff is representable).
-     CR Gbury: add an assertiont that {n} is indeed > 9 ? *)
   let minus_one = I.minus_one
   let zero = I.zero
   let one = I.one
@@ -118,9 +117,9 @@ module Make(I : S) : S with type t = I.t
   let (<=) = I.(<=)
   let (<) = I.(<)
 
+  let is_in_range n = n >= min_value && n <= max_value
+
   let bottom_byte_to_int = I.bottom_byte_to_int
-  (* We assume that {n} >= 8 to ensure that all ascii characters
-     can still be represented in {n-1}>=7 bits.*)
   let of_char = I.of_char
 
   let of_int t = sign_extend (I.of_int t)
@@ -129,16 +128,24 @@ module Make(I : S) : S with type t = I.t
     Option.map sign_extend (I.of_int_option t)
 
   let of_int32 t =
-    sign_extend (I.of_int32 t)
+    let x = I.of_int32 t in
+    if is_in_range x then x
+    else assert false (* TODO: adapt to specification, once it is defined *)
 
   let of_int64 t =
-    sign_extend (I.of_int64 t)
+    let x = I.of_int64 t in
+    if is_in_range x then x
+    else assert false (* TODO: adapt to specification, once it is defined *)
 
   let of_targetint t =
-    sign_extend (I.of_targetint t)
+    let x = I.of_targetint t in
+    if is_in_range x then x
+    else assert false (* TODO: adapt to specification, once it is defined *)
 
   let of_float t =
-    sign_extend (I.of_float t)
+    let x = I.of_float t in
+    if is_in_range x then x
+    else assert false (* TODO: adapt to specification, once it is defined *)
 
   let to_float = I.to_float
   let to_int = I.to_int
@@ -149,9 +156,11 @@ module Make(I : S) : S with type t = I.t
   let to_targetint = I.to_targetint
 
   let neg t = sign_extend (I.neg t)
-  let get_least_significant_16_bits_then_byte_swap =
-    I.get_least_significant_16_bits_then_byte_swap
-  let swap_byte_endianness = I.swap_byte_endianness
+
+  let get_least_significant_16_bits_then_byte_swap t =
+    let res = I.get_least_significant_16_bits_then_byte_swap t in
+    assert (is_in_range res);
+    res
 
   let add x y = sign_extend (I.add x y)
   let sub x y = sign_extend (I.sub x y)
