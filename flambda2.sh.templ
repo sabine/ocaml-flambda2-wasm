@@ -2,6 +2,8 @@
 
 # parallelism
 J=8
+# Color for ocamlopt output
+COLOR=auto
 # number of errors lines to show from the log file
 N=15
 # tmpfile for logging command output
@@ -139,6 +141,7 @@ stdlib () {
 
 compile () {
   export FLAMBDA2=y
+  export OCAML_COLOR=${COLOR}
   export OCAMLPARAM="_,flambda2-context-on-error=1"
   local COMP="${DEV}/_build/default/ocamlopt.opt"
   ${COMP} -cclib -lm -cclib -ldl -cclib ${DEV}/_build/default/runtime/libasmrun.a \
@@ -148,6 +151,7 @@ compile () {
 # compile with the flambda2 compiled stdlib
 ocamlopt () {
   export FLAMBDA2=y
+  export OCAML_COLOR=${COLOR}
   export OCAMLPARAM="_,flambda2-context-on-error=1"
   local COMP="${DEV}/_build/default/ocamlopt.opt"
   ${COMP} -cclib -lm -cclib -ldl -cclib ${DEV}/_build/default/runtime/libasmrun.a -nopervasives -nostdlib \
