@@ -142,7 +142,7 @@ compile () {
   export OCAMLPARAM="_,flambda2-context-on-error=1"
   local COMP="${DEV}/_build/default/ocamlopt.opt"
   ${COMP} -cclib -lm -cclib -ldl -cclib ${DEV}/_build/default/runtime/libasmrun.a \
-    -nopervasives -nostdlib "$@"
+    -nopervasives -nostdlib -g "$@"
 }
 
 # compile with the flambda2 compiled stdlib
@@ -154,7 +154,7 @@ ocamlopt () {
     -I ${FINAL}/_build/default/stdlib/.stdlib.objs/native \
     -I ${FINAL}/_build/default/stdlib/.stdlib.objs/byte \
     ${FINAL}/_build/default/stdlib/stdlib.cmxa \
-    -open Stdlib "$@"
+    -open Stdlib -g "$@"
 }
 
 # #################
