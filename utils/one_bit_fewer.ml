@@ -129,23 +129,19 @@ module Make(I : S) : S with type t = I.t
 
   let of_int32 t =
     let x = I.of_int32 t in
-    if is_in_range x then x
-    else assert false (* TODO: adapt to specification, once it is defined *)
+    sign_extend x
 
   let of_int64 t =
     let x = I.of_int64 t in
-    if is_in_range x then x
-    else assert false (* TODO: adapt to specification, once it is defined *)
+    sign_extend x
 
   let of_targetint t =
     let x = I.of_targetint t in
-    if is_in_range x then x
-    else assert false (* TODO: adapt to specification, once it is defined *)
+    sign_extend x
 
   let of_float t =
     let x = I.of_float t in
-    if is_in_range x then x
-    else assert false (* TODO: adapt to specification, once it is defined *)
+    sign_extend x
 
   let to_float = I.to_float
   let to_int = I.to_int

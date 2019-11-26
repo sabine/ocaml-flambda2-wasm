@@ -308,8 +308,8 @@ module OCaml : sig
 
   val of_int32 : int32 -> t
   (** Convert the given 32-bit integer (type [int32])
-      to a target ocaml integer.
-      @raise Assertion_failure it if is outside of range. *)
+      to a target ocaml integer, modulo the size of a target
+      ocaml integer. *)
 
   val to_int32 : t -> int32
   (** Convert the given ocaml target integer to a
@@ -320,10 +320,8 @@ module OCaml : sig
 
   val of_int64 : int64 -> t
   (** Convert the given 64-bit integer (type [int64])
-      to a target native integer, modulo the target word size,
-      and then convert that native integer to an ocaml target integer.
-      @raise Assertion_failure if the intermediate target native integer is not
-                            in the range of representable ocaml target integers. *)
+      to a target native integer, modulo the size of a target
+      ocaml integer. *)
 
   val to_int64 : t -> int64
   (** Convert the given ocaml target integer to a
@@ -331,8 +329,8 @@ module OCaml : sig
 
   val of_targetint : targetint -> t
   (** Convert the given target native integer (type [targetint])
-      to an ocaml target integer.
-      @raise Assertion_failure if it is not in range. *)
+      to an ocaml target integer, modulo the size of an ocaml
+      target integer. *)
 
   val to_targetint : t -> targetint
   (** Convert the given ocaml target integer (type [t]) to a target
