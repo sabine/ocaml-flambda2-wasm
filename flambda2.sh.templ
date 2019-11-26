@@ -158,7 +158,8 @@ ocamlopt () {
     -I ${FINAL}/_build/default/stdlib/.stdlib.objs/native \
     -I ${FINAL}/_build/default/stdlib/.stdlib.objs/byte \
     ${FINAL}/_build/default/stdlib/stdlib.cmxa \
-    -open Stdlib -g "$@"
+    -open Stdlib -g "$@" \
+    ${FINAL}/_build/default/stdlib/std_exit.cmx
 }
 
 # #################
