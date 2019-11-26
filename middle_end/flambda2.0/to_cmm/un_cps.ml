@@ -735,6 +735,9 @@ and let_cont_inline env k h body =
      raise/trywith cmm mechanism
    - regular continuations use static jumps, through the
      exit/catch cmm mechanism *)
+(* CR Gbury: "split" the environment according to which variables the
+             handler and the body uses, to allow for inlining to proceed
+             within each expression. *)
 and let_cont_jump env k h body =
   let wrap, env = Env.flush_delayed_lets env in
   let vars, handle = continuation_handler env h in
