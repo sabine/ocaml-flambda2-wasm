@@ -352,6 +352,9 @@ let binary_int_shift_primitive _env dbg kind op x y =
       todo() (* caml primitives for these have no native/unboxed version *)
   | Naked_int64, Asr when C.arch32 ->
       todo() (* caml primitives for these have no native/unboxed version *)
+  (* Int32 special case *)
+  | Naked_int32, Lsr when C.arch64 ->
+      C.asr_int (C.zero_extend_32 dbg x) y dbg
   (* Tagged integers *)
   | Tagged_immediate, Lsl -> C.lsl_int_caml x y dbg
   | Tagged_immediate, Lsr -> C.lsr_int_caml x y dbg
