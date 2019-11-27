@@ -141,11 +141,11 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
   | Pxorint, [arg1; arg2] ->
     Binary (Int_arith (I.Tagged_immediate, Xor), arg1, arg2)
   | Plslint, [arg1; arg2] ->
-    Binary (Int_shift (I.Tagged_immediate, Lsl), arg1, untag_int arg2)
+    Binary (Int_shift (I.Tagged_immediate, Lsl), arg1, arg2)
   | Plsrint, [arg1; arg2] ->
-    Binary (Int_shift (I.Tagged_immediate, Lsr), arg1, untag_int arg2)
+    Binary (Int_shift (I.Tagged_immediate, Lsr), arg1, arg2)
   | Pasrint, [arg1; arg2] ->
-    Binary (Int_shift (I.Tagged_immediate, Asr), arg1, untag_int arg2)
+    Binary (Int_shift (I.Tagged_immediate, Asr), arg1, arg2)
   | Pnot, [arg] ->
     Unary (Boolean_not, arg)
   | Pintcomp comp, [arg1; arg2] ->
