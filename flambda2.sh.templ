@@ -10,10 +10,10 @@ N=15
 TMPFILE=$(mktemp /tmp/flambda2-build.XXXXXX)
 
 # ##### WARNING !! ############################
-# These 4 build directories should be distinct
+# These 5 build directories should be distinct
 # for the script to work correctly
 # #############################################
-# first stage build (4.10 branch)
+# first stage build (branch hack_ocamltest on flambda repo)
 FIRST_STAGE=
 # second stage build (4.10 branch)
 SECOND_STAGE=
@@ -21,6 +21,8 @@ SECOND_STAGE=
 DEV=
 # final repo where the optimized compiler is built (flambda2.0-stable branch)
 FINAL=
+# empty/non-existing directory that the script will use to make a pseudo clone for tests
+TESTS=
 
 # ##############
 # Check function
@@ -74,8 +76,13 @@ clean_tmpfiles () {
   rm -rf /tmp/flambda2-build.*
 }
 
+clean_testdir () {
+  rm -rf ${TESTS}
+}
+
 clean () {
   clean_tmpfiles
+  clean_testdir
   clean_aux "${FIRST_STAGE}"
   clean_aux "${SECOND_STAGE}"
   clean_aux "${DEV}"
@@ -134,6 +141,69 @@ stdlib () {
   wrap "building stdlib and compiler with flambda2" "${FINAL}" "dune build @world"
 }
 
+# #######
+# Testing
+# #######
+
+ocamltest () {
+  # compile ocamltest
+  wrap "building first stage ocamltest.opt" "${FIRST_STAGE}" "make ocamltest.opt" "-j ${J}"
+
+  wrap "setting up the test directory" "" "mkdir -p ${TESTS} ${TESTS}/runtime ${TESTS}/stdlib ${TESTS}/testsuite/tests ${TESTS}/testsuite/tools"
+  wrap "copying ocamltest" "${TESTS}" "cp ${FIRST_STAGE}/ocamltest/ocamltest.opt ./"
+  wrap "copying ocamltest summarize script" "${TESTS}" "cp ${FIRST_STAGE}/testsuite/summarize.awk ./testsuite/"
+  wrap "copying the bytecode compile" "${TESTS}" "cp ${DEV}/_build/default/ocamlc.byte ./ocamlc"
+  wrap "copying the native compiler" "${TESTS}" "cp ${DEV}/_build/default/ocamlopt.opt ./"
+  wrap "copying the flambda2 enabled runtime" "${TESTS}" "cp -r ${DEV}/_build/default/runtime/* runtime/"
+  wrap "copying the flambda2 compiled stdlib" "${TESTS}" "cp ${FINAL}/_build/default/stdlib/stdlib.* stdlib/"
+  wrap "copying the flambda2 compiled stdlib artefacts (byte)" "${TESTS}" "cp ${FINAL}/_build/default/stdlib/.stdlib.objs/byte/* stdlib/"
+  wrap "copying the flambda2 compiled stdlib artefacts (native)" "${TESTS}" "cp ${FINAL}/_build/default/stdlib/.stdlib.objs/native/* stdlib/"
+  wrap "copying the testsuite (for convenience)" "${TESTS}" "cp -r ${DEV}/testsuite/tests/* ./testsuite/tests/"
+  # create a dummy ocamlrun script
+  echo -ne "creating dummy ocamlrun script ..."
+  echo "#!/bin/bash" > ${TESTS}/runtime/ocamlrun
+  echo "\"\$@\"" >> ${TESTS}/runtime/ocamlrun
+  chmod +x ${TESTS}/runtime/ocamlrun
+  echo "done"
+}
+
+test () {
+  export OCAMLSRCDIR=${TESTS}
+  echo -e "\e[1m(TESTS) ${TESTS} \$ ./ocamltest.opt ${@}\e[0m"
+  cd ${TESTS} && ./ocamltest.opt "${@}"
+}
+
+test-dir () {
+  # call ocamltest
+  echo "Running tests from ${ROOT}/$1"
+  export OCAMLSRCDIR=${TESTS}
+  cd ${TESTS}
+  ./ocamltest.opt -list-tests $1 | while read testfile; do
+    ./ocamltest.opt $1/$testfile "${@:2}" | tee -a ${TMPFILE}
+  done
+}
+
+tests_aux () {
+  cd ${TESTS}
+  if ./ocamltest.opt -list-tests $1 >/dev/null 2>&1; then
+    test-dir $1
+  else
+    for dir in $1/*; do
+      if [ -d $dir ]; then
+        tests_aux "$dir" "${@:2}"
+      fi
+    done
+  fi
+}
+
+tests () {
+  case $1 in
+    /*) DIR=$1;;
+    *) DIR=$(pwd)/$1;;
+  esac
+  tests_aux "${DIR}" "${@:2}"
+  awk -f testsuite/summarize.awk < ${TMPFILE}
+}
 
 # #####################
 # Compilation functions
@@ -199,23 +269,38 @@ case "$1" in
   'ocamlopt' )
     ocamlopt "${@:2}"
     ;;
+  'ocamltest' )
+    ocamltest
+    ;;
+  'test' )
+    test "${@:2}"
+    ;;
+  'tests' )
+    tests "${@:2}"
+    ;;
+  'testsuite' )
+    tests "${TESTS}/testsuite/tests" "${@:2}"
+    ;;
   'help' )
     echo "usages:"
     echo "### Base commands"
     echo "./flambda2.sh clean                     : git clean -dfx all 4 git repositories"
     echo "./flambda2.sh configure                 : configure all 4 repositories with the correct options"
     echo "./flambda2.sh build                     : build everything"
+    echo "./flambda2.sh testsuite                 : run the testsuite using the flambda2 enabled compiler"
     echo "### Advanced commands"
     echo "./flambda2.sh clean_tmp                 : clean the tmp files used for logs"
     echo "./flambda2.sh base                      : build the first and second stages"
     echo "./flambda2.sh flambda2                  : build the flambda2 compiler (and override second stage compiler)"
     echo "./flambda2.sh stdlib                    : build the stdlib (and compiler) with the flambda2 compiler"
+    echo "./flamdba2.sh test [file] [args..]      : run ocamltest on a file to test the flambda2 enabled compiler"
+    echo "./flambda2.sh tests [dir] [args..]      : run ocamltest on a directory (recursively) to test the flambda2 enabled compiler"
     echo "### Compile commands"
     echo "./flambda2.sh compile [file] [args..]   : compile the given file with the flambda2 compiler and no stdlib (assumes the flambda2 compiler has been built)"
     echo "./flambda2.sh ocamlopt [file] [args..]  : compile the given file with the flambda2 compiler and flambda2-built stdlib (assumes the compiler and stdlib have been build)"
     ;;
   *)
-    echo "available commands are: help, clean, clean_tmp, configure, build, base, flambda2, stdlib, compiler, ocamlopt"
+    echo "unknown command $1"
     echo "see ./flambda2.sh help"
     ;;
 esac
