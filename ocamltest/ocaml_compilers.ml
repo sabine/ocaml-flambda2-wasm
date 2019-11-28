@@ -40,14 +40,20 @@ class compiler
   method target = target
 
   method program_variable =
+    Builtin_variables.program
+    (*
     if Ocaml_backends.is_native host
     then Builtin_variables.program2
     else Builtin_variables.program
+    *)
 
   method program_output_variable =
+    Some Builtin_variables.output
+    (*
     if Ocaml_backends.is_native host
     then None
     else Some Builtin_variables.output
+    *)
 
   method ! reference_file env prefix =
     let default = tool#reference_file env prefix in

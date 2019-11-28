@@ -22,36 +22,44 @@ open Ocaml_actions
 let bytecode =
   let opt_actions =
   [
+(*
     setup_ocamlc_opt_build_env;
     ocamlc_opt;
     check_ocamlc_opt_output;
     compare_bytecode_programs
+*)
   ] in
 {
   test_name = "bytecode";
-  test_run_by_default = true;
+  test_run_by_default = false;
   test_actions =
-  [
+    [
+(*
     setup_ocamlc_byte_build_env;
     ocamlc_byte;
     check_ocamlc_byte_output;
     run;
     check_program_output;
+*)
   ] @ (if Ocamltest_config.arch<>"none" then opt_actions else [])
 }
 
 let native =
   let opt_actions =
   [
+(*
     setup_ocamlopt_byte_build_env;
     ocamlopt_byte;
     check_ocamlopt_byte_output;
-    run;
-    check_program_output;
+*)
     setup_ocamlopt_opt_build_env;
     ocamlopt_opt;
     check_ocamlopt_opt_output;
+    run;
+    check_program_output;
+(*
     compare_native_programs;
+*)
   ] in
   {
     test_name = "native";
