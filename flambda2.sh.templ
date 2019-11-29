@@ -51,14 +51,14 @@ check () {
 # $3 : command to run inside of $2
 wrap () {
   echo -ne "$1 ..."
-  cd $2 && $3 &> $TMPFILE
-  if [ $? -eq 0 ]; then
+  cd "$2" || (echo "folder $2 does not exists" && exit 2)
+  if $3 &> "$TMPFILE"; then
     echo " done"
   else
     echo " failed !"
     echo -e "\e[31mERROR !\e[0m see full log file ${TMPFILE}, but here's an excerpt:"
     echo -e "\e[1m(DEV) $2 \$ $3\e[0m"
-    tail -n ${N} ${TMPFILE}
+    tail -n ${N} "${TMPFILE}"
     exit 1
   fi
 }
@@ -169,7 +169,7 @@ ocamltest () {
 
 test () {
   export OCAMLSRCDIR=${TESTS}
-  echo -e "\e[1m(TESTS) ${TESTS} \$ ./ocamltest.opt ${@}\e[0m"
+  echo -e "\e[1m(TESTS) ${TESTS} \$ ./ocamltest.opt ${*}\e[0m"
   cd ${TESTS} && ./ocamltest.opt "${@}"
 }
 
@@ -177,19 +177,19 @@ test-dir () {
   # call ocamltest
   echo "Running tests from ${ROOT}/$1"
   export OCAMLSRCDIR=${TESTS}
-  cd ${TESTS}
-  ./ocamltest.opt -list-tests $1 | while read testfile; do
-    ./ocamltest.opt $1/$testfile "${@:2}" | tee -a ${TMPFILE}
+  cd "${TESTS}" || (echo "folder ${TESTS} does not exist, please run ./flamdba2.sh ocamltest first" && exit 2)
+  ./ocamltest.opt -list-tests "$1" | while read -r testfile; do
+    ./ocamltest.opt "$1/$testfile" "${@:2}" | tee -a "${TMPFILE}"
   done
 }
 
 tests_aux () {
-  cd ${TESTS}
-  if ./ocamltest.opt -list-tests $1 >/dev/null 2>&1; then
-    test-dir $1
+  cd "${TESTS}" || (echo "folder ${TESTS} does not exist, please run ./flambda2.sh ocamltest first" && exit 2)
+  if ./ocamltest.opt -list-tests "$1" >/dev/null 2>&1; then
+    test-dir "$1"
   else
-    for dir in $1/*; do
-      if [ -d $dir ]; then
+    for dir in "$1"/*; do
+      if [ -d "$dir" ]; then
         tests_aux "$dir" "${@:2}"
       fi
     done
@@ -202,7 +202,7 @@ tests () {
     *) DIR=$(pwd)/$1;;
   esac
   tests_aux "${DIR}" "${@:2}"
-  awk -f testsuite/summarize.awk < ${TMPFILE}
+  awk -f testsuite/summarize.awk < "${TMPFILE}"
 }
 
 # #####################
@@ -305,6 +305,6 @@ case "$1" in
     ;;
 esac
 # finally, cleanup the tmpfile
-rm -rf $TMPFILE
+rm -rf "${TMPFILE}"
 
 
