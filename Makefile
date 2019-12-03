@@ -41,6 +41,7 @@ CAMLOPT=$(CAMLRUN) ./ocamlopt -g -nostdlib -I stdlib -I otherlibs/dynlink
 ARCHES=amd64 i386 arm arm64 power s390x
 INCLUDES=-I utils -I parsing -I typing -I bytecomp -I file_formats \
         -I lambda -I middle_end -I middle_end/closure \
+        -I middle_end/flambda2.0/compilenv_deps \
         -I middle_end/flambda2.0 \
         -I middle_end/flambda2.0/basic \
         -I middle_end/flambda2.0/from_lambda \
@@ -219,11 +220,11 @@ MIDDLE_END_CLOSURE=\
   middle_end/closure/closure_middle_end.cmo
 
 MIDDLE_END_FLAMBDA2_COMPILENV_DEPS=\
-  middle_end/flambda2.0/utils/flambda_colours.cmo \
-  middle_end/flambda2.0/basic/linkage_name.cmo \
-  middle_end/flambda2.0/basic/compilation_unit.cmo \
-  middle_end/flambda2.0/basic/variable.cmo \
-  middle_end/flambda2.0/basic/symbol.cmo
+  middle_end/flambda2.0/compilenv_deps/flambda_colours.cmo \
+  middle_end/flambda2.0/compilenv_deps/linkage_name.cmo \
+  middle_end/flambda2.0/compilenv_deps/compilation_unit.cmo \
+  middle_end/flambda2.0/compilenv_deps/variable.cmo \
+  middle_end/flambda2.0/compilenv_deps/symbol.cmo
 
 MIDDLE_END_FLAMBDA2_BASIC=\
   middle_end/flambda2.0/basic/closure_element.cmo \
@@ -1490,6 +1491,7 @@ partialclean::
 	for d in utils parsing typing bytecomp asmcomp middle_end file_formats \
            lambda middle_end/closure middle_end/flambda \
            middle_end/flambda/base_types asmcomp/debug \
+           middle_end/flambda2.0/compilenv_deps \
            middle_end/flambda2.0 \
            middle_end/flambda2.0/basic \
            middle_end/flambda2.0/from_lambda \
@@ -1521,6 +1523,7 @@ depend: beforedepend
 	(for d in utils parsing typing bytecomp asmcomp middle_end \
          lambda file_formats middle_end/closure middle_end/flambda \
          middle_end/flambda/base_types asmcomp/debug \
+         middle_end/flambda2.0/compilenv_deps \
          middle_end/flambda2.0 \
          middle_end/flambda2.0/basic \
          middle_end/flambda2.0/from_lambda \
