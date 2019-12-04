@@ -347,6 +347,8 @@ MIDDLE_END_FLAMBDA2_SIMPLIFY=\
   middle_end/flambda2.0/simplify/simplify_primitive.cmo \
   middle_end/flambda2.0/simplify/typing_helpers/continuation_handler_like_intf.cmo \
   middle_end/flambda2.0/simplify/typing_helpers/reification.cmo \
+  middle_end/flambda2.0/utils/monad.cmo \
+  middle_end/flambda2.0/utils/top_closure.cmo \
   middle_end/flambda2.0/simplify/simplify.cmo
 
 MIDDLE_END_FLAMBDA2_FROM_LAMBDA=\
