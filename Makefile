@@ -407,6 +407,8 @@ BYTESTART=driver/main.cmo
 
 OPTSTART=driver/optmain.cmo
 
+ILAMBDASTART=driver/ilambdac.cmo
+
 TOPLEVELSTART=toplevel/topstart.cmo
 
 OPTTOPLEVELSTART=toplevel/opttopstart.cmo
@@ -973,6 +975,10 @@ ocamlopt: compilerlibs/ocamlcommon.cma compilerlibs/ocamloptcomp.cma \
           $(OPTSTART)
 	$(CAMLC) $(LINKFLAGS) -o $@ $^
 
+ilambdac: compilerlibs/ocamlcommon.cma compilerlibs/ocamloptcomp.cma \
+          $(ILAMBDASTART)
+	$(CAMLC) $(LINKFLAGS) -o $@ $^
+
 partialclean::
 	rm -f ocamlopt
 
@@ -1060,6 +1066,10 @@ partialclean::
 
 ocamlopt.opt: compilerlibs/ocamlcommon.cmxa compilerlibs/ocamloptcomp.cmxa \
               $(OPTSTART:.cmo=.cmx)
+	$(CAMLOPT_CMD) $(LINKFLAGS) -o $@ $^
+
+ilambdac.opt: compilerlibs/ocamlcommon.cmxa compilerlibs/ocamloptcomp.cmxa \
+              $(ILAMBDASTART:.cmo=.cmx)
 	$(CAMLOPT_CMD) $(LINKFLAGS) -o $@ $^
 
 partialclean::

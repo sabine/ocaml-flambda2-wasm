@@ -183,7 +183,7 @@
 (executable
  (name ilambdac)
  (modes byte)
- (flags (:standard -principal -nostdlib -cclib "-I runtime"))
+ (flags (:standard -principal -nostdlib -cclib "-I runtime" -open Flambda2))
  (libraries ocamloptcommon ocamloptcomp ocamlmiddleend flambda2 ocamlcommon runtime stdlib)
  (modules ilambdac))
 
