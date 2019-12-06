@@ -54,13 +54,18 @@ module R = struct
     init : Cmm.expression;
     current_data : Cmm.data_item list;
     other_data : Cmm.data_item list list;
+    extra_roots : Symbol.Set.t;
   }
 
   let empty = {
     init = C.void;
     current_data = [];
     other_data = [];
+    extra_roots = Symbol.Set.empty;
   }
+
+  let init extra_roots =
+    { empty with extra_roots; }
 
   let add_if_not_empty x l =
     match x with
@@ -74,6 +79,7 @@ module R = struct
       add_if_not_empty r.current_data (
         add_if_not_empty t.current_data (
           (r.other_data @ t.other_data)));
+    extra_roots = Symbol.Set.union r.extra_roots t.extra_roots;
   }
 
   let wrap_init f r =
@@ -101,7 +107,8 @@ module R = struct
     in
     let data_list = add_if_not_empty r.current_data r.other_data in
     let data = List.map C.cdata data_list in
-    data, entry
+    let extra_roots = Symbol.Set.elements r.extra_roots in
+    data, entry, extra_roots
 
 end
 
@@ -1342,15 +1349,20 @@ let static_structure_item env r
           R.update_data data r
       end
 
-let static_structure env s =
-  List.fold_left (static_structure_item env) R.empty s
+let static_structure env has_computation s =
+  let r =
+    if has_computation then
+      R.init (Flambda_static.Program_body.Static_structure.being_defined s)
+    else R.empty
+  in
+  List.fold_left (static_structure_item env) r s
 
 (* Definition *)
 
 let computation_wrapper offsets used_closure_vars c =
   match c with
   | None ->
-      Env.dummy offsets used_closure_vars, (fun x -> x)
+      Env.dummy offsets used_closure_vars, (fun x -> x), false
   | Some (c : Flambda_static.Program_body.Computation.t) ->
       (* The env for the computation is given a dummy continuation,
          since the return continuation will be explictly bound to a
@@ -1383,14 +1395,14 @@ let computation_wrapper offsets used_closure_vars c =
          code to move assignments closer to the variable definitions
          Or better: add traps to the env to insert assignemnts after
          the variable definitions. *)
-      s_env, wrap
+      s_env, wrap, true
 
 let definition offsets ~used_closure_vars
       (d : Flambda_static.Program_body.Definition.t) =
-  let env, wrapper =
+  let env, wrapper, has_computation =
     computation_wrapper offsets used_closure_vars d.computation
   in
-  let r = static_structure env d.static_structure in
+  let r = static_structure env has_computation d.static_structure in
   R.wrap_init wrapper r
 
 
@@ -1493,8 +1505,9 @@ let program (p : Flambda_static.Program.t) =
       in
       let functions = program_functions offsets used_closure_vars p in
       let sym, res = program_body ~used_closure_vars offsets [] p.body in
-      let data, entry = R.to_cmm res in
+      let data, entry, extra_roots = R.to_cmm res in
       let cmm_data = C.flush_cmmgen_state () in
-      (C.gc_root_table [symbol sym]) :: data @ cmm_data @ functions @ [entry]
+      let roots = List.map symbol (sym :: extra_roots) in
+      (C.gc_root_table roots) :: data @ cmm_data @ functions @ [entry]
     )
 
