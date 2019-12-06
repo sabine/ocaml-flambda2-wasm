@@ -80,7 +80,8 @@ module R = struct
   }
 
   let archive_data r =
-    { r with other_data = add_if_not_empty r.current_data r.other_data; }
+    { r with current_data = [];
+             other_data = add_if_not_empty r.current_data r.other_data; }
 
   let wrap_init f r =
     { r with init = f r.init; }
