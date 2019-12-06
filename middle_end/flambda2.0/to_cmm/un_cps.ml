@@ -1353,7 +1353,7 @@ let static_structure_item env r
 
 let static_structure env is_fully_static s =
   (* Gc roots: statically allocated blocks themselves do not need to be scanned,
-     however if statically allocated blocks contain dynamically alocated contents,
+     however if statically allocated blocks contain dynamically allocated contents,
      then that block has to be registered as Gc roots for the Gc to correctly patch
      it if/when it moves some of the dynamically allocated blocks. As a safe
      over-approximation, we thus register as gc_roots all symbols who have an
@@ -1366,7 +1366,7 @@ let static_structure env is_fully_static s =
   let r = R.add_gc_roots roots R.empty in
   List.fold_left (fun acc item ->
       (* Archive_data helps keep definitions of separate symbols in different
-         data_item lists and this increases readibility of the generated cmm. *)
+         data_item lists and this increases readability of the generated cmm. *)
       R.archive_data (static_structure_item env acc item)
     ) r s
 
@@ -1378,7 +1378,7 @@ let computation_wrapper offsets used_closure_vars c =
       Env.dummy offsets used_closure_vars, (fun x -> x), true
   | Some (c : Flambda_static.Program_body.Computation.t) ->
       (* The env for the computation is given a dummy continuation,
-         since the return continuation will be explictly bound to a
+         since the return continuation will be explicitly bound to a
          jump before translating the computation. *)
       let dummy_k = Continuation.create () in
       let k_exn = Exn_continuation.exn_handler c.exn_continuation in
@@ -1495,7 +1495,7 @@ let rec program_body offsets ~used_closure_vars acc body =
   match Flambda_static.Program_body.descr body with
   | Flambda_static.Program_body.Root _sym ->
       (* The root symbol does not really deserve any particular treatment.
-         Concerning gc_roots, it's like anhy other statically allocated symbol:
+         Concerning gc_roots, it's like any other statically allocated symbol:
          if if has an associated computation, then it will already be included
          in the list of gc_roots, else it does not *have*  to be a root. *)
       List.fold_left (fun acc r -> R.combine r acc) R.empty acc
