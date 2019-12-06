@@ -79,7 +79,8 @@ module R = struct
     gc_roots = r.gc_roots @ t.gc_roots;
   }
 
-  let archive_data r = combine r empty
+  let archive_data r =
+    { r with other_data = add_if_not_empty r.current_data r.other_data; }
 
   let wrap_init f r =
     { r with init = f r.init; }
