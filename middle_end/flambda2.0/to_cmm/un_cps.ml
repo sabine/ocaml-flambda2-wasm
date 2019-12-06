@@ -79,6 +79,8 @@ module R = struct
     gc_roots = r.gc_roots @ t.gc_roots;
   }
 
+  let archive_data r = combine r empty
+
   let wrap_init f r =
     { r with init = f r.init; }
 
@@ -1348,15 +1350,23 @@ let static_structure_item env r
           R.update_data data r
       end
 
-let static_structure env has_computation s =
+let static_structure env is_fully_static s =
+  (* Gc roots: statically allocated blocks themselves do not need to be scanned,
+     however if statically allocated blocks contain dynamically alocated contents,
+     then that block has to be registered as Gc roots for the Gc to correctly patch
+     it if/when it moves some of the dynamically allocated blocks. As a safe
+     over-approximation, we thus register as gc_roots all symbols who have an
+     associated computation (and thus are not fully_static). *)
   let roots =
-    if not has_computation then []
+    if is_fully_static then []
     else Symbol.Set.elements
         (Flambda_static.Program_body.Static_structure.being_defined s)
   in
   let r = R.add_gc_roots roots R.empty in
   List.fold_left (fun acc item ->
-      R.combine (static_structure_item env R.empty item) acc
+      (* Archive_data helps keep definitions of separate symbols in different
+         data_item lists and this increases readibility of the generated cmm. *)
+      R.archive_data (static_structure_item env acc item)
     ) r s
 
 (* Definition *)
@@ -1364,7 +1374,7 @@ let static_structure env has_computation s =
 let computation_wrapper offsets used_closure_vars c =
   match c with
   | None ->
-      Env.dummy offsets used_closure_vars, (fun x -> x), false
+      Env.dummy offsets used_closure_vars, (fun x -> x), true
   | Some (c : Flambda_static.Program_body.Computation.t) ->
       (* The env for the computation is given a dummy continuation,
          since the return continuation will be explictly bound to a
@@ -1397,14 +1407,14 @@ let computation_wrapper offsets used_closure_vars c =
          code to move assignments closer to the variable definitions
          Or better: add traps to the env to insert assignemnts after
          the variable definitions. *)
-      s_env, wrap, true
+      s_env, wrap, false
 
 let definition offsets ~used_closure_vars
       (d : Flambda_static.Program_body.Definition.t) =
-  let env, wrapper, has_computation =
+  let env, wrapper, is_fully_static =
     computation_wrapper offsets used_closure_vars d.computation
   in
-  let r = static_structure env has_computation d.static_structure in
+  let r = static_structure env is_fully_static d.static_structure in
   R.wrap_init wrapper r
 
 
@@ -1483,6 +1493,10 @@ let function_decl offsets used_closure_vars fun_name _ d =
 let rec program_body offsets ~used_closure_vars acc body =
   match Flambda_static.Program_body.descr body with
   | Flambda_static.Program_body.Root _sym ->
+      (* The root symbol does not really deserve any particular treatment.
+         Concerning gc_roots, it's like anhy other statically allocated symbol:
+         if if has an associated computation, then it will already be included
+         in the list of gc_roots, else it does not *have*  to be a root. *)
       List.fold_left (fun acc r -> R.combine r acc) R.empty acc
   | Flambda_static.Program_body.Define_symbol (def, rest) ->
       let r = definition offsets ~used_closure_vars def in
