@@ -54,18 +54,15 @@ module R = struct
     init : Cmm.expression;
     current_data : Cmm.data_item list;
     other_data : Cmm.data_item list list;
-    extra_roots : Symbol.Set.t;
+    gc_roots : Symbol.t list;
   }
 
   let empty = {
     init = C.void;
     current_data = [];
     other_data = [];
-    extra_roots = Symbol.Set.empty;
+    gc_roots = [];
   }
-
-  let init extra_roots =
-    { empty with extra_roots; }
 
   let add_if_not_empty x l =
     match x with
@@ -79,7 +76,7 @@ module R = struct
       add_if_not_empty r.current_data (
         add_if_not_empty t.current_data (
           (r.other_data @ t.other_data)));
-    extra_roots = Symbol.Set.union r.extra_roots t.extra_roots;
+    gc_roots = r.gc_roots @ t.gc_roots;
   }
 
   let wrap_init f r =
@@ -90,6 +87,9 @@ module R = struct
 
   let update_data f r =
     { r with current_data = f r.current_data; }
+
+  let add_gc_roots l r =
+    { r with gc_roots = l @ r.gc_roots; }
 
   let to_cmm r =
     let entry =
@@ -107,8 +107,7 @@ module R = struct
     in
     let data_list = add_if_not_empty r.current_data r.other_data in
     let data = List.map C.cdata data_list in
-    let extra_roots = Symbol.Set.elements r.extra_roots in
-    data, entry, extra_roots
+    data, entry, r.gc_roots
 
 end
 
@@ -1350,12 +1349,15 @@ let static_structure_item env r
       end
 
 let static_structure env has_computation s =
-  let r =
-    if has_computation then
-      R.init (Flambda_static.Program_body.Static_structure.being_defined s)
-    else R.empty
+  let roots =
+    if not has_computation then []
+    else Symbol.Set.elements
+        (Flambda_static.Program_body.Static_structure.being_defined s)
   in
-  List.fold_left (static_structure_item env) r s
+  let r = R.add_gc_roots roots R.empty in
+  List.fold_left (fun acc item ->
+      R.combine (static_structure_item env R.empty item) acc
+    ) r s
 
 (* Definition *)
 
@@ -1413,7 +1415,7 @@ let is_var_used v e =
   let occurrence = Name_occurrences.greatest_name_mode_var free_names v in
   match (occurrence : Name_mode.Or_absent.t) with
   | Absent -> false
-  | Present _k -> 
+  | Present _k ->
     (* CR mshinwell: I think this should always be [true].  Even if the
        variable is only used by phantom bindings, it still needs to be
        there.  This may only arise in unusual cases (e.g. [my_closure]
@@ -1480,8 +1482,8 @@ let function_decl offsets used_closure_vars fun_name _ d =
 
 let rec program_body offsets ~used_closure_vars acc body =
   match Flambda_static.Program_body.descr body with
-  | Flambda_static.Program_body.Root sym ->
-      sym, List.fold_left (fun acc r -> R.combine r acc) R.empty acc
+  | Flambda_static.Program_body.Root _sym ->
+      List.fold_left (fun acc r -> R.combine r acc) R.empty acc
   | Flambda_static.Program_body.Define_symbol (def, rest) ->
       let r = definition offsets ~used_closure_vars def in
       program_body offsets ~used_closure_vars (r :: acc) rest
@@ -1504,10 +1506,10 @@ let program (p : Flambda_static.Program.t) =
         Name_occurrences.closure_vars (Flambda_static.Program.free_names p)
       in
       let functions = program_functions offsets used_closure_vars p in
-      let sym, res = program_body ~used_closure_vars offsets [] p.body in
-      let data, entry, extra_roots = R.to_cmm res in
+      let res = program_body ~used_closure_vars offsets [] p.body in
+      let data, entry, gc_roots = R.to_cmm res in
       let cmm_data = C.flush_cmmgen_state () in
-      let roots = List.map symbol (sym :: extra_roots) in
+      let roots = List.map symbol gc_roots in
       (C.gc_root_table roots) :: data @ cmm_data @ functions @ [entry]
     )
 
