@@ -13,7 +13,7 @@
   tests/basic-io-2
   tests/basic-manyargs
 # tests/basic-modules               FAIL (FIXME)  PR#8948 not merged yet in trunk
-# tests/basic-more                  TIMEOUT       'pr1271.ml'
+  tests/basic-more
   tests/basic-multdef
   tests/basic-private
   tests/callback
@@ -26,7 +26,7 @@
   tests/extension-constructor
   tests/flambda
 # tests/float-unboxing              FAIL (FIXME)  'float_subst_boxed_number.ml' see flambdatest/mlexamples/float_unboxing.ml for a simplified error example
-# tests/fma                         TIMEOUT       'fma.ml'
+  tests/fma
   tests/formats-transition
   tests/formatting
 # tests/functors                    -             only runs bytecode tests
@@ -57,7 +57,7 @@
 # tests/lib-dynlink-pr6950          FAIL          dynlink doesn't compile yet
 # tests/lib-dynlink-private         FAIL          dynlink doesn't compile yet
   tests/lib-filename                FAIL          build native Unix with makefiles
-# tests/lib-float                   TIMEOUT       'test.ml'
+  tests/lib-float
   tests/lib-floatarray
   tests/lib-format
   tests/lib-fun
@@ -70,7 +70,7 @@
   tests/lib-obj
   tests/lib-option
   tests/lib-printf
-# tests/lib-queue                   TIMEOUT       'test.ml' (>5 min compilation time)
+  tests/lib-queue
   tests/lib-random
   tests/lib-result
   tests/lib-scanf
