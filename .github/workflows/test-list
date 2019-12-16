@@ -56,7 +56,7 @@
 # tests/lib-dynlink-pr4839          FAIL          dynlink doesn't compile yet
 # tests/lib-dynlink-pr6950          FAIL          dynlink doesn't compile yet
 # tests/lib-dynlink-private         FAIL          dynlink doesn't compile yet
-  tests/lib-filename                FAIL          build native Unix with makefiles
+  tests/lib-filename
   tests/lib-float
   tests/lib-floatarray
   tests/lib-format
