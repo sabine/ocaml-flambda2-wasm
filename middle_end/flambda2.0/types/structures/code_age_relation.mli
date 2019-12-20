@@ -26,11 +26,11 @@ val empty : t
 
 val add : t -> newer:Code_id.t -> older:Code_id.t -> t
 
-(** [meet] calculates which of the given pieces of code is older, or
+(** [meet] calculates which of the given pieces of code is newer, or
     identifies that the pieces of code are unrelated. *)
 val meet : t -> Code_id.t -> Code_id.t -> Code_id.t Or_bottom.t
 
-(** [join] calculates which of the given pieces of code is newer, or
+(** [join] calculates the newest common ancestor of the given pieces of code, or
     identifies that the pieces of code are unrelated. *)
 val join : t -> Code_id.t -> Code_id.t -> Code_id.t Or_unknown.t
 
