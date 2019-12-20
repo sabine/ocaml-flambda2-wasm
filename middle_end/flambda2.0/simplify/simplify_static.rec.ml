@@ -639,6 +639,9 @@ let simplify_return_continuation_handler dacc
       | Ok sorted -> sorted
       | Error _ -> reified_definitions
     in
+    (* XXX If top sort fails, change types of the variables involved to "=v"
+       where each v is another thing like a computed value variable, but will
+       assume the value of the symbol. *)
     let static_structure : Static_structure.t =
       let top_sorted_reified_definitions =
         (* The [List.rev] relies on the following property:
@@ -793,33 +796,55 @@ let simplify_definition dacc (defn : Program_body.Definition.t) =
   in
   definition, dacc
 
-(* CR mshinwell:
-   - Need to delete unused code bindings.
-   - We should only delete code if the corresponding code-age graph is
-     linear.  If it isn't linear then a subsequent join may need code that
-     is currently unused.
-   - We should simplify code on the way up if we don't delete it. *)
+(* CR mshinwell: We should simplify code on the way up if we don't delete it. *)
 
-let define_lifted_constants dacc lifted_constants (body : Program_body.t) =
-  List.fold_left (fun body lifted_constant : Program_body.t ->
+let define_lifted_constants lifted_constants ~current_definition =
+  let defined_symbols_current_definition =
+    Definition.being_defined current_definition
+  in
+  let defined_code_ids_current_definition =
+    Definition.code_being_defined current_definition
+  in
+  List.fold_left
+    (fun (add_to_current_definition, add_around_body) lifted_constant ->
       let definition = Lifted_constant.definition lifted_constant in
-      let static_structure =
-        (* CR mshinwell: We should have deletion of unused symbols
-           automatically -- needs to be done for non-lifted constants too *)
-        Static_structure.delete_bindings definition.static_structure
-          ~free_names_after:(Program_body.free_names body)
-          (TE.code_age_relation (DE.typing_env (DA.denv dacc)))
+      assert (Option.is_none definition.computation);
+      let free_names =
+        Static_structure.free_names definition.static_structure
       in
-      if Static_structure.is_empty static_structure then body
-      else
-        let definition : Program_body.Definition.t =
-          { computation = definition.computation;
-            static_structure;
-          }
+      let free_symbols = Name_occurrences.symbols free_names in
+      let free_code_ids = Name_occurrences.code_ids free_names in
+      let no_overlap_with_current_definition =
+        let no_overlap_with_symbols =
+          Symbol.Set.is_empty
+            (Symbol.Set.inter free_symbols
+              defined_symbols_current_definition)
         in
-        Program_body.define_symbol definition ~body
-          (TE.code_age_relation (DE.typing_env (DA.denv dacc))))
-    body
+        let no_overlap_with_code_ids =
+          Code_id.Set.is_empty
+            (Code_id.Set.inter free_code_ids
+              defined_code_ids_current_definition)
+        in
+        no_overlap_with_symbols && no_overlap_with_code_ids
+      in
+      if no_overlap_with_current_definition then
+        (* XXX This should add things to the current definition if there
+           is recursion
+           - Also for normal reify (not computed values reify), we also need
+           to check if we have symbols currently being defined in the reified
+           type, and if so not lift (except for closures).
+           An alternative: add a computation that reads from the symbol
+           being defined and fills in the fields. *)
+        let add_around_body =
+          definition :: add_around_body
+        in
+        add_to_current_definition, add_around_body
+      else
+        let add_to_current_definition =
+          List.flatten [definition.static_structure; add_to_current_definition]
+        in
+        add_to_current_definition, add_around_body)
+    ([], [])
     lifted_constants
 
 let rec simplify_program_body0 dacc (body : Program_body.t) k =
@@ -829,11 +854,41 @@ let rec simplify_program_body0 dacc (body : Program_body.t) k =
     let defn, dacc = simplify_definition dacc defn in
     let r = DA.r dacc in
     simplify_program_body0 dacc body (fun body dacc ->
+      let add_to_current_definition, add_around_body =
+        define_lifted_constants (R.get_lifted_constants r)
+          ~current_definition:defn
+      in
+      let defn =
+        { defn with
+          static_structure = add_to_current_definition @ defn.static_structure;
+        }
+      in
       let body =
         Program_body.define_symbol defn ~body
           (TE.code_age_relation (DE.typing_env (DA.denv dacc)))
       in
-      let body = define_lifted_constants dacc (R.get_lifted_constants r) body in
+      let body =
+        List.fold_left (fun body (defn : Definition.t) ->
+            let static_structure =
+              (* CR mshinwell: We should have deletion of unused symbols
+                 automatically -- needs to be done for non-lifted constants
+                 too *)
+              Static_structure.delete_bindings defn.static_structure
+                ~free_names_after:(Program_body.free_names body)
+                (TE.code_age_relation (DE.typing_env (DA.denv dacc)))
+            in
+            if Static_structure.is_empty static_structure then body
+            else
+              let defn : Program_body.Definition.t =
+                { computation = None;
+                  static_structure;
+                }
+              in
+              Program_body.define_symbol defn ~body
+                (TE.code_age_relation (DE.typing_env (DA.denv dacc))))
+          body
+          (List.rev add_around_body)
+      in
       k body dacc)
   | Root _ -> k body dacc
 
