@@ -16,127 +16,8 @@
 
 (** Language terms that represent statically-allocated values. *)
 
-module Of_kind_value : sig
-  (** The various possible inhabitants of fields of statically-allocated
-      blocks. *)
-  type t =
-    | Symbol of Symbol.t
-      (** A field containing the address of the given symbol. *)
-    | Tagged_immediate of Immediate.t
-      (** A field containing the given tagged immediate. *)
-    | Dynamically_computed of Variable.t
-      (** A field containing the value of the variable that arose from
-          a previous [computation] (see below). *)
-
-  (** Printing, total ordering, etc. *)
-  include Identifiable.S with type t := t
-end
-
-module Static_part : sig
-  type 'a or_variable =
-    | Const of 'a
-    | Var of Variable.t
-
-  (** The mutability status of a block field. *)
-  type mutable_or_immutable = Mutable | Immutable
-
-  (** A piece of code, comprising of the parameters and body of a function,
-      together with a field indicating whether the piece of code is a newer
-      version of one that existed previously (and may still exist), for
-      example after a round of simplification. *)
-  type code = {
-    params_and_body : Flambda.Function_params_and_body.t or_deleted;
-    newer_version_of : Code_id.t option;
-  }
-  and 'a or_deleted =
-    | Present of 'a
-    | Deleted
-
-  (** The possibly-recursive declaration of pieces of code and any associated
-      set of closures. *)
-  type code_and_set_of_closures = {
-    code : code Code_id.Map.t;
-    (* CR mshinwell: Check the free names of the set of closures *)
-    set_of_closures : Flambda.Set_of_closures.t option;
-  }
-
-  (** The static structure of a symbol, possibly with holes, ready to be
-      filled with values computed at runtime. *)
-  type 'k t =
-    | Block : Tag.Scannable.t * mutable_or_immutable
-        * (Of_kind_value.t list) -> Flambda_kind.value t
-    | Fabricated_block : Variable.t -> Flambda_kind.value t
-    | Code_and_set_of_closures : code_and_set_of_closures
-        -> Flambda_kind.fabricated t
-    | Boxed_float : Numbers.Float_by_bit_pattern.t or_variable
-        -> Flambda_kind.value t
-    | Boxed_int32 : Int32.t or_variable -> Flambda_kind.value t
-    | Boxed_int64 : Int64.t or_variable -> Flambda_kind.value t
-    | Boxed_nativeint : Targetint.t or_variable -> Flambda_kind.value t
-    | Immutable_float_array : Numbers.Float_by_bit_pattern.t or_variable list
-        -> Flambda_kind.value t
-    | Mutable_string : { initial_value : string or_variable; }
-        -> Flambda_kind.value t
-    | Immutable_string : string or_variable -> Flambda_kind.value t
-
-  (** Print a static structure definition to a formatter. *)
-  val print : Format.formatter -> _ t -> unit
-
-  (** All names free in the given static part.  (Note that this will
-      descend into function bodies to find symbols.) *)
-  val free_names : _ t -> Name_occurrences.t
-end
-
-type static_part_iterator = {
-  f : 'k. ('k Static_part.t -> unit);
-}
-
-type static_part_mapper = {
-  f : 'k. ('k Static_part.t -> 'k Static_part.t);
-}
-
 module Program_body : sig
-  module Computation : sig
-    type t = {
-      expr : Flambda.Expr.t;
-      (** The expression that is to be evaluated.  It must have no free
-          variables and call [return_cont] with its results. *)
-      return_continuation : Continuation.t;
-      (** The return continuation of [expr]. *)
-      exn_continuation : Exn_continuation.t;
-      (** The uncaught exception continuation of [expr]. *)
-      computed_values : Kinded_parameter.t list;
-      (** Variables, with their kinds, used to reference results of the
-          computation [expr] inside the [static_structure] (see below).  This
-          list of variables must be in bijection with the parameters of the
-          [return_cont].
-          Since we don't really do any transformations on these structures, the
-          [computed_values] variables are not treated up to alpha conversion. *)
-    }
 
-    val print : Format.formatter -> t -> unit
-
-    val iter_expr : t -> f:(Flambda.Expr.t -> unit) -> unit
-
-    val map_expr : t -> f:(Flambda.Expr.t -> Flambda.Expr.t) -> t
-  end
-
-  module Bound_symbols : sig
-    type 'k t =
-      | Singleton : Symbol.t -> Flambda_kind.value t
-        (** A binding of a single symbol of kind [Value]. *)
-      | Code_and_set_of_closures : {
-          code_ids : Code_id.Set.t;
-          closure_symbols : Symbol.t Closure_id.Map.t;
-        } -> Flambda_kind.fabricated t
-        (** A recursive binding of possibly multiple symbols to the individual
-            closures within a set of closures; and/or bindings of code to
-            code IDs. *)
-
-    val print : Format.formatter -> _ t -> unit
-
-    val being_defined : _ t -> Symbol.Set.t
-  end
 
   module Static_structure : sig
     (** The bindings in a [Static_structure] are ordered: symbols bound later
@@ -177,17 +58,7 @@ module Program_body : sig
   end
 
   module Definition : sig
-    type t = {
-      computation : Computation.t option;
-      (** A computation which provides values to fill in parts of the
-          statically-declared structure of one or more symbols.
-          [computation] may not reference the symbols bound by the same
-          definition's [static_structure]. *)
-      static_structure : Static_structure.t;
-      (** The statically-declared structure of the symbols being declared.
-          Bindings of symbols in each element of a list comprising a
-          [static_structure] are simultaneous, not ordered, or recursive. *)
-    }
+
 
     val print : Format.formatter -> t -> unit
 
@@ -248,7 +119,8 @@ end
 module Program : sig
   type t = {
     imported_symbols : Flambda_kind.t Symbol.Map.t;
-    body : Program_body.t;
+    exn_continuation : Continuation.t;
+    body : Expr.t;
   }
 
   (** Perform well-formedness checks on the program. *)

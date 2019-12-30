@@ -24,9 +24,12 @@ include Expr_std.S with type t := t
 
 type descr = private
   | Let of Let_expr.t
-  (** Bind a variable.  There can be no effect on control flow (save for
+  (** Bind variable(s).  There can be no effect on control flow (save for
       asynchronous operations such as the invocation of finalisers or
       signal handlers as a result of reaching a safe point). *)
+  | Let_symbol of Let_symbol.t
+  (** Bind code and/or data symbol(s).  This form of expression is only
+      allowed in contexts where it is certain to be executed only once. *)
   | Let_cont of Let_cont_expr.t
   (** Define one or more continuations. *)
   | Apply of Apply.t
