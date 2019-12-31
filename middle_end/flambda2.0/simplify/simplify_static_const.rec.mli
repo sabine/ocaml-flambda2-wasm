@@ -27,10 +27,11 @@ val simplify_set_of_closures0
    -> Flambda.Set_of_closures.t
         * Downwards_acc.t
         * Flambda_type.t Symbol.Map.t
-        * Flambda_static.Program_body.Static_structure.t
+        * Flambda.Let_symbol_expr.Bound_symbols.t
+        * Static_const.t
 
 val simplify_static_const
-   : Simplify_env_and_result.Downwards_acc.t
-  -> Let_symbol_expr.Bound_symbols.t
+   : Downwards_acc.t
+  -> Flambda.Let_symbol_expr.Bound_symbols.t
   -> Static_const.t
-  -> Static_const.t * Simplify_env_and_result.Downwards_acc.t
+  -> Static_const.t * Downwards_acc.t

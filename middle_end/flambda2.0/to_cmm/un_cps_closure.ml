@@ -563,13 +563,13 @@ module Greedy = struct
 
 end
 
-let compute_offsets program =
+let compute_offsets unit =
   let state = ref Greedy.empty_state in
   let used_closure_vars = Flambda_unit.used_closure_vars unit in
-  let aux _ s =
+  let aux ~closure_symbols:_ s =
     state := Greedy.create_slots_for_set !state used_closure_vars s
   in
-  Iter_on_sets_of_closures.program aux program;
+  Flambda_unit.iter_sets_of_closures unit ~f:aux;
   Greedy.finalize !state
 
 

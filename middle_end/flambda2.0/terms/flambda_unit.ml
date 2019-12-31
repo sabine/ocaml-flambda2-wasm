@@ -16,6 +16,8 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
+open! Flambda.Import
+
 type t = {
   imported_symbols : Flambda_kind.t Symbol.Map.t;
   root_symbol : Symbol.t;
@@ -62,12 +64,12 @@ let used_closure_vars t =
   Name_occurrences.closure_vars (Flambda.Expr.free_names t.body)
 
 (* Iter on all sets of closures of a given program. *)
-
-module Iter_on_sets_of_closures = struct
-
+(* CR mshinwell: These functions should be pushed directly into [Flambda] *)
+module Iter_sets_of_closures = struct
   let rec expr f e =
     match (Expr.descr e : Expr.descr) with
     | Let e' -> let_expr f e'
+    | Let_symbol e' -> let_symbol f e'
     | Let_cont e' -> let_cont f e'
     | Apply e' -> apply_expr f e'
     | Apply_cont e' -> apply_cont f e'
@@ -86,6 +88,11 @@ module Iter_on_sets_of_closures = struct
         named f e;
         expr f body
       )
+
+  and let_symbol_expr f let_sym =
+    static_const f (Let_symbol.bound_symbols let_sym)
+      (Let_symbol.defining_expr let_sym);
+    expr f (Let_symbol.body)
 
   and let_cont f = function
     | Let_cont.Non_recursive { handler; _ } ->
@@ -134,12 +141,10 @@ module Iter_on_sets_of_closures = struct
         )
 *)
 
-  let computation f c =
-    Flambda_unit_body.Computation.iter_expr c ~f:(expr f)
-
-  let static_structure_aux f
-      ((S (symbs, st)) : Flambda_unit_body.Static_structure.t0) =
-    match symbs, st with
+  and static_const f
+        (bound_symbols : Let_symbol.Bound_symbols.t)
+        (static_const : Static_const.t) =
+    match bound_symbols, st with
     | Code_and_set_of_closures { code_ids = _; closure_symbols; },
       Code_and_set_of_closures { code; set_of_closures = s; } ->
         Option.iter (fun s -> f (Some closure_symbols) s) s;
@@ -152,19 +157,10 @@ module Iter_on_sets_of_closures = struct
                   ~f:(fun ~return_continuation:_ _ _ ~body ~my_closure:_ ->
                       expr f body))
           code
-    | _ -> ()
-
-  let static_structure f s =
-    List.iter (static_structure_aux f) s
-
-  let definition f (d : Flambda_unit_body.Definition.t) =
-    Flambda_unit_body.Definition.iter_computation d ~f:(computation f);
-    static_structure f d.static_structure
-
-  let body f b =
-    Flambda_unit_body.iter_definitions b ~f:(definition f)
-
-  let program f t =
-    Flambda_unit.iter_body t ~f:(body f)
-
+    | _ ->
+      (* CR mshinwell: Make exhaustive and cause errors on wrong cases *)
+      ()
 end
+
+let iter_sets_of_closures t ~f =
+  Iter_sets_of_closures.expr f t.body

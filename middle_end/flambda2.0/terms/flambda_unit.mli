@@ -50,3 +50,10 @@ val imported_symbols : t -> Flambda_kind.t Symbol.Map.t
 val root_symbol : t -> Symbol.t
 
 val body : t -> Flambda.Expr.t
+
+val iter_sets_of_closures
+   : t
+  -> f:(closure_symbols:Symbol.t Closure_id.Map.t option
+     -> Flambda.Set_of_closures.t
+     -> unit)
+  -> unit

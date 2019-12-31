@@ -1189,11 +1189,12 @@ let unit (unit : Flambda_unit.t) =
         ]
       in
       let return_cont, env =
-        Env.add_jump_cont env (List.map snd return_cont_params) k
+        Env.add_jump_cont env (List.map snd return_cont_params)
+          (Flambda_unit.return_continuation unit)
       in
       (* let functions = program_functions offsets used_closure_vars unit in *)
-      let res = program_body env [] unit.body in
-      let res =
+      let body = expr env unit.body in
+      let body =
         let unit_value = C.targetint Targetint.zero in
         C.ccatch
           ~rec_flag:false ~body

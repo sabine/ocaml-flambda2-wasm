@@ -18,13 +18,12 @@
 
 open! Simplify_import
 
-let create_static_part (to_lift : T.to_lift)
-    : K.value Flambda_static.Static_part.t =
+let create_static_const (to_lift : T.to_lift) : Static_const.t =
   match to_lift with
   | Immutable_block (tag, fields) ->
     let of_kind_values =
       List.map (fun (field : T.var_or_symbol_or_tagged_immediate)
-              : Flambda_static.Of_kind_value.t ->
+              : Static_const.Field_of_block.t ->
           match field with
           | Var var -> Dynamically_computed var
           | Symbol sym -> Symbol sym
@@ -37,7 +36,7 @@ let create_static_part (to_lift : T.to_lift)
   | Boxed_int64 i -> Boxed_int64 (Const i)
   | Boxed_nativeint i -> Boxed_nativeint (Const i)
 
-let lift dacc ty ~bound_to static_part =
+let lift dacc ty ~bound_to static_const =
   let symbol =
     Symbol.create (Compilation_unit.get_current_exn ())
       (Linkage_name.create (Variable.unique_name bound_to))
@@ -50,9 +49,9 @@ let lift dacc ty ~bound_to static_part =
   end;
   let dacc =
     DA.map_r dacc ~f:(fun r ->
-      Definition.singleton_symbol symbol static_part
-      |> Lifted_constant.create (DA.denv dacc)
-           ~types_of_symbols:(Symbol.Map.singleton symbol ty)
+      Lifted_constant.create (DA.denv dacc)
+        (Singleton symbol) static_const
+        ~types_of_symbols:(Symbol.Map.singleton symbol ty)
       |> R.new_lifted_constant r)
   in
   let symbol' = Simple.symbol symbol in
@@ -79,8 +78,8 @@ let try_to_reify dacc (term : Reachable.t) ~bound_to =
     match T.reify (DE.typing_env denv) ~min_name_mode:occ_kind ty with
     | Lift to_lift ->
       if Name_mode.is_normal occ_kind then
-        let static_part = create_static_part to_lift in
-        lift dacc ty ~bound_to static_part
+        let static_const = create_static_const to_lift in
+        lift dacc ty ~bound_to static_const
       else
         term, dacc, ty
     | Simple simple ->
