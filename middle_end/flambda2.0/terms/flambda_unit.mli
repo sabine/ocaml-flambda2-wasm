@@ -32,7 +32,7 @@ val create
   -> root_symbol:Symbol.t
   -> return_continuation:Continuation.t
   -> exn_continuation:Continuation.t
-  -> body:Expr.t
+  -> body:Flambda.Expr.t
   -> t
 
 (** All closure variables used in the given unit. *)
@@ -45,4 +45,4 @@ val imported_symbols : t -> Flambda_kind.t Symbol.Map.t
     be eliminated). *)
 val root_symbol : t -> Symbol.t
 
-val body : t -> Expr.t
+val body : t -> Flambda.Expr.t

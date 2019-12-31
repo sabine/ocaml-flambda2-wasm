@@ -23,13 +23,11 @@ module Expr = Flambda.Expr
 module Function_decls = Closure_conversion_aux.Function_decls
 module Function_decl = Function_decls.Function_decl
 module Function_params_and_body = Flambda.Function_params_and_body
-module Let_symbol = Flambda.Let_symbol
+module Let_symbol = Flambda.Let_symbol_expr
 module Named = Flambda.Named
-module Program_body = Flambda_static.Program_body
-module Static_part = Flambda_static.Static_part
+module Static_const = Flambda.Static_const
 
 module K = Flambda_kind
-module KP = Kinded_parameter
 module LC = Lambda_conversions
 module P = Flambda_primitive
 module VB = Var_in_binding_pos
@@ -41,7 +39,7 @@ type t = {
   filename : string;
   mutable imported_symbols : Symbol.Set.t;
   (* All symbols in [imported_symbols] are to be of kind [Value]. *)
-  mutable declared_symbols : (Symbol.t * K.value Static_part.t) list;
+  mutable declared_symbols : (Symbol.t * Static_const.t) list;
   mutable code : (Code_id.t * Function_params_and_body.t) list;
 }
 
@@ -149,7 +147,7 @@ let tupled_function_call_stub
   in
   func_decl, code_id, params_and_body
 
-let register_const0 t (constant : K.value Static_part.t) name =
+let register_const0 t constant name =
   let current_compilation_unit = Compilation_unit.get_current_exn () in
   (* Create a variable to ensure uniqueness of the symbol. *)
   let var = Variable.create ~current_compilation_unit name in
@@ -161,15 +159,15 @@ let register_const0 t (constant : K.value Static_part.t) name =
   t.declared_symbols <- (symbol, constant) :: t.declared_symbols;
   symbol
 
-let register_const t constant name : Flambda_static.Of_kind_value.t * string =
+let register_const t constant name : Static_const.Field_of_block.t * string =
   let symbol = register_const0 t constant name in
   Symbol symbol, name
 
 let register_const_string t str =
-  register_const0 t (Static_part.Immutable_string (Const str)) "string"
+  register_const0 t (Static_const.Immutable_string str) "string"
 
 let rec declare_const t (const : Lambda.structured_constant)
-      : Flambda_static.Of_kind_value.t * string =
+      : Static_const.Field_of_block.t * string =
   match const with
   | Const_base (Const_int c) ->
     Tagged_immediate (Immediate.int (Targetint.OCaml.of_int c)), "int"
@@ -180,9 +178,9 @@ let rec declare_const t (const : Lambda.structured_constant)
   | Const_base (Const_string (s, _)) ->
     let const, name =
       if Config.safe_string then
-        Static_part.Immutable_string (Const s), "immstring"
+        Static_const.Immutable_string s, "immstring"
       else
-        Static_part.Mutable_string { initial_value = Const s; }, "string"
+        Static_const.Mutable_string { initial_value = s; }, "string"
     in
     register_const t const name
   | Const_base (Const_float c) ->
@@ -197,17 +195,17 @@ let rec declare_const t (const : Lambda.structured_constant)
     let c = Targetint.of_int64 (Int64.of_nativeint c) in
     register_const t (Boxed_nativeint (Const c)) "nativeint"
   | Const_immstring c ->
-    register_const t (Immutable_string (Const c)) "immstring"
+    register_const t (Immutable_string c) "immstring"
   | Const_float_array c ->
     (* CR mshinwell: check that Const_float_array is always immutable *)
     register_const t
       (Immutable_float_array
          (List.map (fun s ->
            let f = Numbers.Float_by_bit_pattern.create (float_of_string s) in
-           Static_part.Const f) c))
+           Static_const.Const f) c))
       "float_array"
   | Const_block (tag, consts) ->
-    let const : K.value Static_part.t =
+    let const : Static_const.t  =
       Block
         (Tag.Scannable.create_exn tag, Immutable,
          List.map (fun c -> fst (declare_const t c)) consts)
@@ -860,11 +858,6 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
   let module_block_tag = Tag.Scannable.zero in
   let module_block_var = Variable.create "module_block" in
   let return_cont = Continuation.create ~sort:Toplevel_return () in
-  let field_vars =
-    List.init module_block_size_in_words (fun pos ->
-      let pos_str = string_of_int pos in
-      Variable.create ("cv_field_" ^ pos_str), K.value)
-  in
   let load_fields_body =
     let field_vars =
       List.init module_block_size_in_words (fun pos ->
@@ -874,7 +867,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
     let body =
       let static_const : Static_const.t =
         let field_vars =
-          List.map (fun (var, _) : Static_const.Field_of_block.t ->
+          List.map (fun (_, var) : Static_const.Field_of_block.t ->
               Dynamically_computed var)
             field_vars
         in
@@ -891,7 +884,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
         |> Expr.create_apply_cont
       in
       Let_symbol.create (Singleton module_symbol) static_const return
-      |> Flambda.create_let_symbol
+      |> Flambda.Expr.create_let_symbol
     in
     List.fold_left (fun body (pos, var) ->
         let var = VB.create var Name_mode.normal in
@@ -945,7 +938,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
           }
         in
         let static_const : Static_const.t =
-          let code : Static_part.code =
+          let code : Static_const.code =
             { params_and_body = Present params_and_body;
               newer_version_of = None;
             }
@@ -956,14 +949,14 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
           }
         in
         Let_symbol.create bound_symbols static_const body
-        |> Flambda.create_let_symbol)
+        |> Flambda.Expr.create_let_symbol)
       body
       t.code
   in
   let body =
     List.fold_left (fun body (symbol, static_const) ->
         Let_symbol.create (Singleton symbol) static_const body
-        |> Flambda.create_let_symbol)
+        |> Flambda.Expr.create_let_symbol)
       body
       t.declared_symbols
   in
@@ -979,5 +972,5 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
       Backend.all_predefined_exception_symbols
       imported_symbols
   in
-  Flambda_unit.create ~imported_symbols ~return_continuation:return_cont
-    ~exn_continuation ~body
+  Flambda_unit.create ~imported_symbols ~root_symbol:module_symbol
+    ~return_continuation:return_cont ~exn_continuation ~body

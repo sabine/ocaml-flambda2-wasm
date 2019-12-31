@@ -88,6 +88,8 @@ module rec Expr : sig
       (such as is required to bind a [Set_of_closures]). *)
   val create_pattern_let : Bindable_let_bound.t -> Named.t -> t -> t
 
+  val create_let_symbol : Let_symbol_expr.t -> t
+
   (** Create an application expression. *)
   val create_apply : Apply.t -> t
 

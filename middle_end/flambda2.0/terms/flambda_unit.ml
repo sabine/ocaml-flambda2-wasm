@@ -19,8 +19,9 @@
 type t = {
   imported_symbols : Flambda_kind.t Symbol.Map.t;
   root_symbol : Symbol.t;
+  return_continuation : Continuation.t;
   exn_continuation : Continuation.t;
-  body : Expr.t;
+  body : Flambda.Expr.t;
 }
 
 let create ~imported_symbols ~root_symbol ~return_continuation
@@ -38,11 +39,24 @@ let return_continuation t = t.return_continuation
 let exn_continuation t = t.exn_continuation
 let body t = t.body
 
-let print ppf t =
-  Format.fprintf ppf "@[(@[(imported_symbols %a)@]@ @[<1>(body@ %a)@])@]"
-    (Symbol.Map.print K.print) t.imported_symbols
-    Program_body.print t.body
+let print ppf
+      { imported_symbols; root_symbol; return_continuation; exn_continuation;
+        body;
+      } =
+  Format.fprintf ppf "@[<hov 1>(\
+        @[<hov 1>(imported_symbols@ %a)@]@ \
+        @[<hov 1>(root_symbol@ %a)@]@ \
+        @[<hov 1>(return_continuation@ %a)@]@ \
+        @[<hov 1>(exn_continuation@ %a)@]@ \
+        @[<hov 1>(body@ %a)@]\
+      )@]"
+    (Symbol.Map.print Flambda_kind.print) imported_symbols
+    Symbol.print root_symbol
+    Continuation.print return_continuation
+    Continuation.print exn_continuation
+    Flambda.Expr.print t.body
 
 let invariant _t = ()
 
-let used_closure_vars t = Program_body.used_closure_vars t.body
+let used_closure_vars t =
+  Name_occurrences.closure_vars (Flambda.Expr.free_names t.body)
