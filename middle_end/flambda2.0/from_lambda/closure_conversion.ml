@@ -937,7 +937,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
   end;
   let exn_continuation = ilam.exn_continuation.exn_handler in
   let body =
-    List.fold_left (fun body (code_id, params_and_body) : body.t ->
+    List.fold_left (fun body (code_id, params_and_body) ->
         let bound_symbols : Let_symbol.Bound_symbols.t =
           Code_and_set_of_closures {
             code_ids = Code_id.Set.singleton code_id;
@@ -961,7 +961,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
       t.code
   in
   let body =
-    List.fold_left (fun body (symbol, static_const) : body.t ->
+    List.fold_left (fun body (symbol, static_const) ->
         Let_symbol.create (Singleton symbol) static_const body
         |> Flambda.create_let_symbol)
       body

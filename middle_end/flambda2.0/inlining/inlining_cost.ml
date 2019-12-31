@@ -84,6 +84,8 @@ let smaller' denv expr ~than:threshold =
       named_size denv (Let.defining_expr let_expr);
       Let.pattern_match let_expr
         ~f:(fun ~bound_vars:_ ~body -> expr_size denv body)
+    | Let_symbol let_symbol_expr ->
+      expr_size denv (Let_symbol.body let_symbol_expr)
     | Let_cont (Non_recursive { handler; _ }) ->
       Non_recursive_let_cont_handler.pattern_match handler
         ~f:(fun _cont ~body -> expr_size denv body);

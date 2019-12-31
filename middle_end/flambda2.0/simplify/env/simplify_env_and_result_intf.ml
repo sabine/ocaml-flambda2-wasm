@@ -48,7 +48,7 @@ module type Downwards_env = sig
 
   val at_unit_toplevel : t -> bool
 
-  val set_not_at_unit_toplevel : t -> bool
+  val set_not_at_unit_toplevel : t -> t
 
   val unit_toplevel_exn_continuation : t -> Continuation.t
 
@@ -281,7 +281,8 @@ module type Lifted_constant = sig
   (** [create] takes the types of symbols to avoid re-inferring them. *)
   val create
      : downwards_env
-    -> Flambda_static.Program_body.Definition.t
+    -> Flambda.Let_symbol_expr.Bound_symbols.t
+    -> Flambda.Static_const.t
     -> types_of_symbols:Flambda_type.t Symbol.Map.t
     -> t
 
@@ -299,6 +300,7 @@ module type Lifted_constant = sig
     -> t
 
   val denv_at_definition : t -> downwards_env
-  val definition : t -> Flambda_static.Program_body.Definition.t
+  val bound_symbols : t -> Flambda.Let_symbol_expr.Bound_symbols.t
+  val defining_expr : t -> Flambda.Static_const.t
   val types_of_symbols : t -> Flambda_type.t Symbol.Map.t
 end

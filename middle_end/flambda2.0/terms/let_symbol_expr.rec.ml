@@ -151,3 +151,38 @@ let apply_name_permutation ({ bound_symbols; defining_expr; body; } as t) perm =
       defining_expr;
       body;
     }
+
+(* CR mshinwell: Add a type to just encapsulate bound_symbols and
+   defining_expr. *)
+let pieces_of_code ?newer_versions_of ?set_of_closures code =
+  let newer_versions_of =
+    Option.value newer_versions_of ~default:Code_id.Map.empty
+  in
+  let code =
+    Code_id.Map.mapi (fun id params_and_body : Static_const.code ->
+        let newer_version_of =
+          Code_id.Map.find_opt id newer_versions_of
+        in
+        { params_and_body = Present params_and_body;
+          newer_version_of;
+        })
+      code
+  in
+  let static_part : Static_const.t =
+    let set_of_closures = Option.map snd set_of_closures in
+    Code_and_set_of_closures {
+      code;
+      set_of_closures;
+    }
+  in
+  let bound_symbols : Bound_symbols.t =
+    let closure_symbols =
+      Option.value (Option.map fst set_of_closures)
+        ~default:Closure_id.Map.empty
+    in
+    Code_and_set_of_closures {
+      code_ids = Code_id.Map.keys code;
+      closure_symbols;
+    }
+  in
+  bound_symbols, static_const

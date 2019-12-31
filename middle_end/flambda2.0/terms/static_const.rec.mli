@@ -75,3 +75,7 @@ type t =
 val print : Format.formatter -> t -> unit
 
 include Contains_names.S with type t := t
+
+val get_pieces_of_code
+   : t
+  -> (Flambda.Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t

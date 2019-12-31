@@ -74,8 +74,8 @@ let print_flambda name ppf program =
       Flambda_static.Program.print program
   end
 
-let middle_end0 ppf ~prefixname:_ ~backend ~size ~filename
-      ~module_ident ~module_initializer =
+let middle_end0 ppf ~prefixname:_ ~backend ~filename ~module_ident
+      ~module_block_size_in_words ~module_initializer =
   Misc.Color.setup !Clflags.color;
   Profile.record_call "flambda2.0" (fun () ->
     let prepared_lambda, recursive_static_catches =
@@ -104,7 +104,7 @@ let middle_end0 ppf ~prefixname:_ ~backend ~size ~filename
     let flambda =
       Profile.record_call "closure_conversion" (fun () ->
         Closure_conversion.ilambda_to_flambda ~backend ~module_ident
-          ~size ~filename ilambda)
+          ~module_block_size_in_words ~filename ilambda)
     in
     print_rawflambda ppf flambda;
     check_invariants flambda;
@@ -115,11 +115,11 @@ let middle_end0 ppf ~prefixname:_ ~backend ~size ~filename
     print_flambda "simplify" ppf flambda;
     flambda)
 
-let middle_end ~ppf_dump:ppf ~prefixname ~backend ~size ~filename ~module_ident
-      ~module_initializer =
+let middle_end ~ppf_dump:ppf ~prefixname ~backend ~filename ~module_ident
+      ~module_block_size_in_words ~module_initializer =
   try
-    middle_end0 ppf ~prefixname ~backend ~size ~filename ~module_ident
-      ~module_initializer
+    middle_end0 ppf ~prefixname ~backend ~filename ~module_ident
+      ~module_block_size_in_words ~module_initializer
   with Misc.Fatal_error -> begin
     Format.eprintf "\n%sOriginal backtrace is:%s\n%s\n"
       (Flambda_colours.error ())

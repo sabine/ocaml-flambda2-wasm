@@ -48,7 +48,7 @@ let simplify_field_of_block dacc (of_kind_value : Field_of_block.t) =
         of_kind_value, ty
 
 let simplify_or_variable dacc type_for_const
-      (or_variable : _ static_const.or_variable) =
+      (or_variable : _ Static_const.or_variable) =
   let denv = DA.denv dacc in
   match or_variable with
   | Const const -> or_variable, type_for_const const
@@ -74,19 +74,19 @@ let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
   in
   let static_structure : Program_body.Static_structure.t =
     let code =
-      Code_id.Map.mapi (fun code_id params_and_body : static_const.code ->
+      Code_id.Map.mapi (fun code_id params_and_body : Static_const.code ->
           { params_and_body = Present params_and_body;
             newer_version_of = Code_id.Map.find_opt code_id newer_versions_of;
           })
         code
     in
-    let static_const : K.fabricated static_const.t =
+    let static_const : Static_const.t =
       Code_and_set_of_closures {
         code;
         set_of_closures = Some set_of_closures;
       }
     in
-    let bound_symbols : K.fabricated Program_body.Bound_symbols.t =
+    let bound_symbols : Program_body.Bound_symbols.t =
       Code_and_set_of_closures {
         code_ids = Code_id.Map.keys code;
         closure_symbols;
@@ -177,7 +177,7 @@ let simplify_static_const_of_kind_value dacc
     Immutable_float_array fields, dacc
   | Mutable_string { initial_value; } ->
     let str_ty = T.mutable_string ~size:(String.length initial_value) in
-    let static_const : K.value static_const.t =
+    let static_const : Static_const.t =
       Mutable_string {
         initial_value;
       }
@@ -196,6 +196,7 @@ let simplify_static_const_of_kind_value dacc
 let simplify_static_const_of_kind_fabricated dacc
       (static_const : Static_const.t) ~result_sym
       : Static_const.t * DA.t =
+  match static_const with
   | Code_and_set_of_closures { code; set_of_closures; } ->
     let code_ids' = Code_id.Map.keys code in
     if not (Code_id.Set.equal code_ids code_ids') then begin
@@ -206,7 +207,8 @@ let simplify_static_const_of_kind_fabricated dacc
     end; 
     let dacc =
       Code_id.Map.fold
-        (fun code_id ({ params_and_body; newer_version_of; } : static_const.code)
+        (fun code_id
+             ({ params_and_body; newer_version_of; } : Static_const.code)
              dacc ->
           (* CR mshinwell: Add invariant check to ensure there are no
              unbound names in the code, since we're not simplifying on the

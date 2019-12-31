@@ -143,6 +143,7 @@ let const_int i = Const (Const.const_int i)
 
 let const_true = Const Const.const_true
 let const_false = Const Const.const_false
+let const_unit = Const Const.const_unit
 
 let untagged_const_true = Const Const.untagged_const_true
 let untagged_const_false = Const Const.untagged_const_false

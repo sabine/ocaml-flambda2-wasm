@@ -35,7 +35,8 @@ module Switch = Switch_expr
       application for an inlined body (unlike in ANF form).
 *)
 module rec Expr : sig
-  (** The type of alpha-equivalence classes of expressions. *)
+  (** The type of equivalence classes of expressions up to alpha-renaming of
+      bound [Variable]s and [Continuation]s. *)
   type t
 
   (** Printing, invariant checks, name manipulation, etc. *)
@@ -46,6 +47,10 @@ module rec Expr : sig
     (** Bind a variable.  There can be no effect on control flow (save for
         asynchronous operations such as the invocation of finalisers or
         signal handlers as a result of reaching a safe point). *)
+    | Let_symbol of Let_symbol_expr.t
+    (** Bind code and/or data symbol(s).  This form of expression is only
+        allowed in certain "toplevel" contexts.  The bound symbols are not
+        treated up to alpha conversion. *)
     | Let_cont of Let_cont_expr.t
     (** Define one or more continuations. *)
     | Apply of Apply.t
@@ -200,6 +205,47 @@ end and Let_expr : sig
      : t
     -> f:(bound_vars:Bindable_let_bound.t -> body:Expr.t -> 'a)
     -> 'a
+end and Let_symbol_expr : sig
+  module Bound_symbols : sig
+    type t =
+      | Singleton : Symbol.t -> t
+        (** A binding of a single symbol of kind [Value]. *)
+      | Code_and_set_of_closures of {
+          code_ids : Code_id.Set.t;
+          closure_symbols : Symbol.t Closure_id.Map.t;
+        }
+        (** A recursive binding of possibly multiple symbols to the individual
+            closures within a set of closures; and/or bindings of code to
+            code IDs. *)
+
+    val being_defined : t -> Symbol.Set.t
+
+    val code_being_defined : t -> Code_id.Set.t
+
+    val closure_symbols_being_defined : t -> Symbol.Set.t
+
+    include Expr_std.S with type t := t
+  end
+
+  type t
+
+  val create : Bound_symbols.t -> Static_const.t -> Expr.t -> t
+
+  val bound_symbols : t -> Bound_symbols.t
+
+  val defining_expr : t -> Static_const.t
+
+  val body : t -> Expr.t
+
+  include Expr_std.S with type t := t
+
+  (** If [newer_versions_of] maps [id1] to [id2] then [id1] is a newer
+      version of [id2]. *)
+  val pieces_of_code
+     : ?newer_versions_of:Code_id.t Code_id.Map.t
+    -> ?set_of_closures:(Symbol.t Closure_id.Map.t * Set_of_closures.t)
+    -> Function_params_and_body.t Code_id.Map.t
+    -> Bound_symbols.t * Static_const.t
 end and Let_cont_expr : sig
   (** Values of type [t] represent alpha-equivalence classes of the definitions
       of continuations:
@@ -422,13 +468,79 @@ end and Function_params_and_body : sig
       -> my_closure:Variable.t
       -> 'a)
     -> 'a
+end and Static_const : sig
+  (** Language terms that represent statically-allocated values. *)
+
+  module Field_of_block : sig
+    (** Inhabitants (of kind [Value]) of fields of statically-allocated
+        blocks. *)
+    type t =
+      | Symbol of Symbol.t
+        (** The address of the given symbol. *)
+      | Tagged_immediate of Immediate.t
+        (** The given tagged immediate. *)
+      | Dynamically_computed of Variable.t
+        (** The value of the given variable. *)
+
+    (** Printing, total ordering, etc. *)
+    include Identifiable.S with type t := t
+  end
+
+  type 'a or_variable =
+    | Const of 'a
+    | Var of Variable.t
+
+  (** The mutability status of a block field. *)
+  type mutable_or_immutable = Mutable | Immutable
+
+  (** A piece of code, comprising of the parameters and body of a function,
+      together with a field indicating whether the piece of code is a newer
+      version of one that existed previously (and may still exist), for
+      example after a round of simplification. *)
+  type code = {
+    params_and_body : Function_params_and_body.t or_deleted;
+    newer_version_of : Code_id.t option;
+  }
+  and 'a or_deleted =
+    | Present of 'a
+    | Deleted
+
+  (** The possibly-recursive declaration of pieces of code and any associated
+      set of closures. *)
+  type code_and_set_of_closures = {
+    code : code Code_id.Map.t;
+    (* CR mshinwell: Check the free names of the set of closures *)
+    set_of_closures : Set_of_closures.t option;
+  }
+
+  (** The static structure of a symbol, possibly with holes, ready to be filled
+      with values computed at runtime. *)
+  type t =
+    | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
+    | Fabricated_block of Variable.t
+    | Code_and_set_of_closures of code_and_set_of_closures
+    | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
+    | Boxed_int32 of Int32.t or_variable
+    | Boxed_int64 of Int64.t or_variable
+    | Boxed_nativeint of Targetint.t or_variable
+    | Immutable_float_array of Numbers.Float_by_bit_pattern.t or_variable list
+    | Mutable_string of { initial_value : string; }
+    | Immutable_string of string
+
+  (** Print a static structure definition to a formatter. *)
+  val print : Format.formatter -> t -> unit
+
+  include Contains_names.S with type t := t
+
+  val get_pieces_of_code
+     : t
+    -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 end
 
 module Function_declaration = Function_declaration
 module Function_declarations = Function_declarations
 module Let = Let_expr
 module Let_cont = Let_cont_expr
-module Let_symbol = Let_symbol_expr
 module Set_of_closures = Set_of_closures
 
 (** The idea is that you should typically do "open! Flambda" at the top of
@@ -450,5 +562,6 @@ module Import : sig
   module Non_recursive_let_cont_handler = Non_recursive_let_cont_handler
   module Recursive_let_cont_handlers = Recursive_let_cont_handlers
   module Set_of_closures = Set_of_closures
+  module Static_const = Static_const
   module Switch = Switch
 end

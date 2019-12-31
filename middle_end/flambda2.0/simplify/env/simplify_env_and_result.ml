@@ -37,12 +37,13 @@ end = struct
     float_const_prop : bool;
     code : Function_params_and_body.t Code_id.Map.t;
     at_unit_toplevel : bool;
+    unit_toplevel_exn_continuation : Continuation.t;
   }
 
   let print ppf { backend = _; round; typing_env;
                   inlined_debuginfo; can_inline;
                   inlining_depth_increment; float_const_prop;
-                  code; at_unit_toplevel;
+                  code; at_unit_toplevel; unit_toplevel_exn_continuation;
                 } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(round@ %d)@]@ \
@@ -115,7 +116,8 @@ end = struct
   let enter_closure { backend; round; typing_env;
                       inlined_debuginfo = _; can_inline;
                       inlining_depth_increment = _;
-                      float_const_prop; code; not_at_unit_toplevel = _;
+                      float_const_prop; code; at_unit_toplevel = _;
+                      unit_toplevel_exn_continuation;
                     } =
     { backend;
       round;
@@ -126,6 +128,7 @@ end = struct
       float_const_prop;
       code;
       at_unit_toplevel = false;
+      unit_toplevel_exn_continuation;
     }
 
   let define_variable t var kind =
@@ -337,9 +340,10 @@ end = struct
     List.fold_left (fun denv lifted_constant ->
         let denv_at_definition = LC.denv_at_definition lifted_constant in
         let types_of_symbols = LC.types_of_symbols lifted_constant in
-        let definition = LC.definition lifted_constant in
+        let bound_symbols = LC.bound_symbols lifted_constant in
+        let defining_expr = LC.defining_expr lifted_constant in
         let being_defined =
-          Flambda_static.Program_body.Definition.being_defined definition
+          Let_symbol.Bound_symbols.being_defined bound_symbols
         in
         let already_bound =
           Symbol.Set.filter (fun sym -> mem_symbol denv sym)
@@ -379,8 +383,7 @@ end = struct
           (fun code_id (params_and_body, newer_version_of) denv ->
             if mem_code denv code_id then denv
             else define_code denv ?newer_version_of ~code_id ~params_and_body)
-          (Flambda_static.Program_body.Definition.get_pieces_of_code
-             definition)
+          (Static_const.get_pieces_of_code defining_expr)
           (with_typing_env denv typing_env))
       t
       (List.rev lifted)
@@ -628,37 +631,46 @@ end and Lifted_constant : sig
   include Simplify_env_and_result_intf.Lifted_constant
     with type downwards_env := Downwards_env.t
 end = struct
-  module Definition = Flambda_static.Program_body.Definition
-
   type t = {
     denv : Downwards_env.t;
-    definition : Definition.t;
+    bound_symbols : Let_symbol.Bound_symbols.t;
+    defining_expr : Static_const.t;
     types_of_symbols : Flambda_type.t Symbol.Map.t;
   }
 
-  let print ppf { denv = _ ; definition; types_of_symbols = _; } =
+  let print ppf
+        { denv = _ ; bound_symbols; defining_expr; types_of_symbols = _; } =
     Format.fprintf ppf "@[<hov 1>(\
-        @[<hov 1>(definition@ %a)@]\
+        @[<hov 1>(bound_symbols@ %a)@]\
+        @[<hov 1>(static_const@ %a)@]\
         )@]"
-      Definition.print definition
+      Let_symbol.Bound_symbols.print bound_symbols
+      Static_const.print defining_expr
 
-  let create denv definition ~types_of_symbols =
-    let being_defined = Definition.being_defined definition in
+  let create denv bound_symbols defining_expr ~types_of_symbols =
+    let being_defined = Let_symbol.Bound_symbols.being_defined bound_symbols in
     if not (Symbol.Set.subset (Symbol.Map.keys types_of_symbols) being_defined)
     then begin
       Misc.fatal_errorf "[types_of_symbols]:@ %a@ does not cover all symbols \
-          in the [Definition]:@ %a"
+          in the definition:@ %a"
         (Symbol.Map.print T.print) types_of_symbols
-        Definition.print definition
+        Let_symbol.Bound_symbols.print bound_symbols
     end;
+    (* CR mshinwell: This should check that [defining_expr] matches
+       [bound_symbols] in the code/set-of-closures case *)
     { denv;
-      definition;
+      bound_symbols;
+      defining_expr;
       types_of_symbols;
     }
 
   let create_pieces_of_code denv ?newer_versions_of code =
+    let bound_symbols, defining_expr =
+      Let_symbol.pieces_of_code ?newer_versions_of code
+    in
     { denv;
-      definition = Definition.pieces_of_code ?newer_versions_of code;
+      bound_symbols;
+      defining_expr;
       types_of_symbols = Symbol.Map.empty;
     }
 
@@ -672,6 +684,7 @@ end = struct
       (Code_id.Map.singleton code_id params_and_body)
 
   let denv_at_definition t = t.denv
-  let definition t = t.definition
+  let bound_symbols t = t.bound_symbols
+  let defining_expr t = t.defining_expr
   let types_of_symbols t = t.types_of_symbols
 end

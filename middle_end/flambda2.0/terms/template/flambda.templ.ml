@@ -43,7 +43,6 @@ module Function_declaration = Function_declaration
 module Function_declarations = Function_declarations
 module Let = Let_expr
 module Let_cont = Let_cont_expr
-module Let_symbol = Let_symbol_expr
 module Set_of_closures = Set_of_closures
 
 module Import = struct
@@ -63,5 +62,6 @@ module Import = struct
   module Non_recursive_let_cont_handler = Non_recursive_let_cont_handler
   module Recursive_let_cont_handlers = Recursive_let_cont_handlers
   module Set_of_closures = Set_of_closures
+  module Static_const = Static_const
   module Switch = Switch
 end
