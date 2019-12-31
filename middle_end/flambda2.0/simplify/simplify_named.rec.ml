@@ -267,10 +267,9 @@ type simplify_set_of_closures0_result = {
   newer_versions_of : Code_id.t Code_id.Map.t;
   code : Flambda.Function_params_and_body.t Code_id.Map.t;
   dacc : Downwards_acc.t;
-  result_dacc : Downwards_acc.t;
 }
 
-let simplify_set_of_closures0 dacc ~result_dacc set_of_closures
+let simplify_set_of_closures0 dacc set_of_closures
       ~closure_bound_names ~closure_elements ~closure_element_types =
   let function_decls = Set_of_closures.function_decls set_of_closures in
   let all_function_decls_in_set = Function_declarations.funs function_decls in
@@ -323,8 +322,6 @@ let simplify_set_of_closures0 dacc ~result_dacc set_of_closures
       fun_types
       Name_in_binding_pos.Map.empty
   in
-  (* We have to compute [dacc] and [result_dacc] for the same reasons as
-     described in [Simplify_static.simplify_static_part_of_kind_value]. *)
   (* CR mshinwell: Maybe [my_closure] is missing here... *)
   let existing_typing_env = DE.typing_env (DA.denv dacc) in
   (* CR mshinwell: Try to tidy up (cf. simplify_static_part_of_kind_value). *)
@@ -352,30 +349,6 @@ let simplify_set_of_closures0 dacc ~result_dacc set_of_closures
         closure_types_by_bound_name
         suitable_for_denv)
   in
-  let result_dacc =
-    DA.map_denv (DA.with_r result_dacc r) ~f:(fun denv ->
-      let denv =
-        DE.add_lifted_constants denv ~lifted:(R.get_lifted_constants r)
-      in
-      let suitable_for_denv =
-        Closure_id.Map.fold (fun _closure_id bound_name denv ->
-            DE.define_name denv bound_name K.value)
-          closure_bound_names
-          denv
-      in
-      let suitable_for = DE.typing_env suitable_for_denv in
-      Name_in_binding_pos.Map.fold (fun bound_name closure_type denv ->
-          let env_extension =
-            T.make_suitable_for_environment closure_type
-              existing_typing_env
-              ~suitable_for
-              ~bind_to:(Name_in_binding_pos.to_name bound_name)
-          in
-          DE.with_typing_env denv
-            (TE.add_env_extension suitable_for ~env_extension))
-        closure_types_by_bound_name
-        suitable_for_denv)
-  in
   let set_of_closures =
     Set_of_closures.create
       (Function_declarations.create all_function_decls_in_set)
@@ -387,7 +360,6 @@ let simplify_set_of_closures0 dacc ~result_dacc set_of_closures
     newer_versions_of;
     code;
     dacc;
-    result_dacc;
   }
 
 let simplify_and_lift_set_of_closures dacc ~closure_bound_vars
@@ -404,12 +376,11 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars
         Symbol.create (Compilation_unit.get_current_exn ()) name)
       (Function_declarations.funs function_decls)
   in
-  let _set_of_closures, _dacc, result_dacc, static_structure_types,
+  let _set_of_closures, dacc, static_structure_types,
       static_structure =
-    Simplify_static.simplify_set_of_closures0 dacc ~result_dacc:dacc
+    Simplify_static.simplify_set_of_closures0 dacc
       set_of_closures ~closure_symbols ~closure_elements ~closure_element_types
   in
-  let dacc = result_dacc in
   let r =
     let definition : Definition.t =
       { computation = None;
@@ -452,32 +423,31 @@ let simplify_non_lifted_set_of_closures dacc ~bound_vars ~closure_bound_vars
         closure_types_by_bound_name = _;
         newer_versions_of;
         code;
-        dacc = _;
-        result_dacc;
+        dacc;
       } =
-    simplify_set_of_closures0 dacc ~result_dacc:dacc set_of_closures
-      ~closure_bound_names ~closure_elements ~closure_element_types
+    simplify_set_of_closures0 dacc set_of_closures ~closure_bound_names
+      ~closure_elements ~closure_element_types
   in
   let defining_expr =
     Reachable.reachable (Named.create_set_of_closures set_of_closures)
   in
-  let result_dacc =
-    DA.map_r result_dacc ~f:(fun r ->
+  let dacc =
+    DA.map_r dacc ~f:(fun r ->
       R.new_lifted_constant r
-        (Lifted_constant.create_pieces_of_code (DA.denv result_dacc)
+        (Lifted_constant.create_pieces_of_code (DA.denv dacc)
           code ~newer_versions_of))
   in
-  let result_dacc =
+  let dacc =
     (* CR mshinwell: This seems weird.  Should there ever be lifted constants
        in the [r] component of a [dacc] that are not in the [denv] component
        of a dacc?  If not maybe we could enforce that via a check.
-       (This comment predates the addition of the code to [result_dacc]
+       (This comment predates the addition of the code to [dacc]
        just above.) *)
-    DA.map_denv result_dacc ~f:(fun denv ->
+    DA.map_denv dacc ~f:(fun denv ->
       DE.add_lifted_constants denv
-        ~lifted:(R.get_lifted_constants (DA.r result_dacc)))
+        ~lifted:(R.get_lifted_constants (DA.r dacc)))
   in
-  [bound_vars, defining_expr], result_dacc
+  [bound_vars, defining_expr], dacc
 
 type can_lift =
   | Can_lift

@@ -29,11 +29,13 @@ module type Downwards_env = sig
   (** Print a human-readable version of the given environment. *)
   val print : Format.formatter -> t -> unit
 
-  (** Create a new environment. *)
+  (** Create a new environment, marked as being at the toplevel of a
+      compilation unit. *)
   val create
      : round:int
     -> backend:(module Flambda2_backend_intf.S)
     -> float_const_prop:bool
+    -> unit_toplevel_exn_continuation:Continuation.t
     -> t
 
   (** Obtain the first-class module that gives information about the
@@ -43,6 +45,12 @@ module type Downwards_env = sig
   val resolver : t -> (Export_id.t -> Flambda_type.t option)
 
   val float_const_prop : t -> bool
+
+  val at_unit_toplevel : t -> bool
+
+  val set_not_at_unit_toplevel : t -> bool
+
+  val unit_toplevel_exn_continuation : t -> Continuation.t
 
   val enter_closure : t -> t
 

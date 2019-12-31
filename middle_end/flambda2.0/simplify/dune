@@ -6,11 +6,9 @@
     simplify_expr.rec.ml
     simplify_named.rec.ml
     simplify_static_const.rec.ml
-    simplify_unit.rec.ml
     simplify_expr.rec.mli
     simplify_named.rec.mli
     simplify_static_const.rec.mli
-    simplify_unit.rec.mli
   )
   (action (run ../scripts/assemble_rec_modules.sh
                template/simplify.templ.ml

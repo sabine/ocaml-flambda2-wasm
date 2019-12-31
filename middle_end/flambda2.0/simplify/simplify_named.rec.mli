@@ -37,12 +37,10 @@ type simplify_set_of_closures0_result = private {
   newer_versions_of : Code_id.t Code_id.Map.t;
   code : Flambda.Function_params_and_body.t Code_id.Map.t;
   dacc : Downwards_acc.t;
-  result_dacc : Downwards_acc.t;
 }
 
 val simplify_set_of_closures0
    : Downwards_acc.t
-  -> result_dacc:Downwards_acc.t
   -> Flambda.Set_of_closures.t
   -> closure_bound_names:Name_in_binding_pos.t Closure_id.Map.t
   -> closure_elements:Simple.t Var_within_closure.Map.t

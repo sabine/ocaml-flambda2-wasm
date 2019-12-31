@@ -43,14 +43,36 @@ and simplify_let_symbol
   : 'a. DA.t -> Let_symbol.t -> 'a k -> Expr.t * 'a * UA.t
 = fun dacc let_symbol_expr k ->
   let module LS = Flambda.Let_symbol in
+  if not (DE.at_unit_toplevel (DA.denv dacc)) then begin
+    Misc.fatal_errorf "[Let_symbol] is only allowed at the toplevel of \
+        compilation units (not even at the toplevel of function bodies):@ %a"
+      LS.print let_symbol_expr
+  end;
   let bound_symbols = LS.bound_symbols let_symbol_expr in
+  Symbol.Set.iter (fun sym ->
+      if DE.mem_symbol (DA.denv dacc) sym then begin
+        Misc.fatal_errorf "Symbol %a is already defined:@ %a"
+          Symbol.print sym
+          LS.print let_symbol_expr
+      end)
+    (LS.Bound_symbols.being_defined bound_symbols);
+  Code_id.Set.iter (fun code_id ->
+      if DE.mem_code_id (DA.denv dacc) code_id then begin
+        Misc.fatal_errorf "Code ID %a is already defined:@ %a"
+          Code_id.print sym
+          LS.print let_symbol_expr
+      end)
+    (LS.Bound_symbols.code_being_defined bound_symbols);
   let defining_expr = LS.defining_expr let_symbol_expr in
   let body = LS.body let_symbol_expr in
-  let { Simplify_static_const. bindings_outermost_first = bindings; dacc; } =
-    Simplify_static_const.simplify_static_const dacc ~bound_symbols
-      defining_expr
+  let static_const, dacc =
+    Simplify_static_const.simplify_static_const dacc bound_symbols defining_expr
   in
+  (* XXX Retrieve and add lifted constants here (some of which may need to
+     go in [defining_expr]. *)
   let body, user_data, uacc = simplify_expr dacc body k in
+  (* XXX This should do the deletion of the [Let_symbol], since we need the
+     code age relation to do that. *)
   let expr =
     List.fold_left (fun body (bound_symbols, defining_expr) ->
         Expr.create_let_symbol (LS.create bound_symbols defining_expr body))
@@ -92,20 +114,23 @@ Format.eprintf "About to simplify handler %a, params %a, EPA %a\n%!"
     *)
     let free_names = Expr.free_names handler in
     let used_params =
-      if is_recursive then params else
-      let first = ref true in
-      List.filter (fun param ->
-          (* CR mshinwell: We should have a robust means of propagating which
-             parameter is the exception bucket.  Then this hack can be
-             removed. *)
-          if !first && Continuation.is_exn cont then begin
-            first := false;
-            true
-          end else begin
-            first := false;
-            Name_occurrences.mem_var free_names (KP.var param)
-          end)
-        params
+      (* Removal of unused parameters of recursive continuations is not
+         currently supported. *)
+      if is_recursive then params
+      else
+        let first = ref true in
+        List.filter (fun param ->
+            (* CR mshinwell: We should have a robust means of propagating which
+               parameter is the exception bucket.  Then this hack can be
+               removed. *)
+            if !first && Continuation.is_exn cont then begin
+              first := false;
+              true
+            end else begin
+              first := false;
+              Name_occurrences.mem_var free_names (KP.var param)
+            end)
+          params
     in
     let used_extra_params =
       List.filter (fun extra_param ->
@@ -156,6 +181,25 @@ and simplify_non_recursive_let_cont_handler
   let cont_handler = Non_recursive_let_cont_handler.handler non_rec_handler in
   Non_recursive_let_cont_handler.pattern_match non_rec_handler
     ~f:(fun cont ~body ->
+      let free_names_of_body = Expr.free_names body in
+      let denv = DA.denv dacc in
+      let unit_toplevel_exn_cont = DE.unit_toplevel_exn_continuation denv in
+      let at_unit_toplevel =
+        (* We try to show that [handler] postdominates [body] (which is done by
+           showing that [body] can only return through [cont]) and that if
+           [body] raises any exceptions then it only does so to toplevel.
+           If this can be shown and we are currently at the toplevel of a
+           compilation unit, the handler for the environment can remain marked
+           as toplevel (and suitable for [Let_symbol] bindings); otherwise, it
+           cannot. *)
+        DE.at_unit_toplevel denv
+          && (not (Continuation_handler.is_exn_handler cont_handler))
+          && Variable.Set.is_empty
+               (Name_occurrences.variables free_names_of_body)
+          && Continuation.Set.subset
+               (Name_occurrences.continuations free_names_of_body)
+               (Continuation.Set.of_list [cont; unit_toplevel_exn_cont])
+      in
       let body, handler, user_data, uacc =
         let body, (result, uenv', user_data), uacc =
           let scope = DE.get_continuation_scope_level (DA.denv dacc) in
@@ -212,8 +256,12 @@ and simplify_non_recursive_let_cont_handler
                       handler_typing_env, extra_params_and_args
                   in
                   let dacc =
-                    DA.create (DE.with_typing_env denv typing_env)xi
+                    DA.create (DE.with_typing_env denv typing_env)
                       cont_uses_env r
+                  in
+                  let dacc =
+                    if at_unit_toplevel then dacc
+                    else DA.map_denv dacc ~f:DE.set_not_at_unit_toplevel
                   in
                   try
                     let handler, user_data, uacc =

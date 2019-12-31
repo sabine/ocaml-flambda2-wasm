@@ -85,6 +85,8 @@ val const_zero : t
 
 val const_one : t
 
+val const_unit : t
+
 (** The constant representing the unit value. *)
 val unit : t
 

@@ -23,6 +23,7 @@ module Expr = Flambda.Expr
 module Function_decls = Closure_conversion_aux.Function_decls
 module Function_decl = Function_decls.Function_decl
 module Function_params_and_body = Flambda.Function_params_and_body
+module Let_symbol = Flambda.Let_symbol
 module Named = Flambda.Named
 module Program_body = Flambda_static.Program_body
 module Static_part = Flambda_static.Static_part
@@ -841,8 +842,8 @@ and close_one_function t ~external_env ~by_closure_id decl
     Closure_id.Map.add unboxed_version fun_decl
       (Closure_id.Map.add closure_id generic_function_stub by_closure_id)
 
-let ilambda_to_flambda ~backend ~module_ident ~size ~filename
-      (ilam : Ilambda.program) : Flambda_static.Program.t =
+let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
+      ~filename (ilam : Ilambda.program) =
   let module Backend = (val backend : Flambda2_backend_intf.S) in
   let compilation_unit = Compilation_unit.get_current_exn () in
   let t =
@@ -860,24 +861,37 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
   let module_block_var = Variable.create "module_block" in
   let return_cont = Continuation.create ~sort:Toplevel_return () in
   let field_vars =
-    List.init size (fun pos ->
+    List.init module_block_size_in_words (fun pos ->
       let pos_str = string_of_int pos in
       Variable.create ("cv_field_" ^ pos_str), K.value)
   in
-  (* For review, skip down to "let expr =" below, read the comment then
-     come back here. *)
   let load_fields_body =
     let field_vars =
-      List.init size (fun pos ->
+      List.init module_block_size_in_words (fun pos ->
         let pos_str = string_of_int pos in
         pos, Variable.create ("field_" ^ pos_str))
     in
-    let body : Expr.t =
-      let fields = List.map (fun (_, var) -> Simple.var var) field_vars in
-      let apply_cont =
-        Flambda.Apply_cont.create return_cont ~args:fields ~dbg:Debuginfo.none
+    let body =
+      let static_const : Static_const.t =
+        let field_vars =
+          List.map (fun (var, _) : Static_const.Field_of_block.t ->
+              Dynamically_computed var)
+            field_vars
+        in
+        Block (module_block_tag, Immutable, field_vars)
       in
-      Flambda.Expr.create_apply_cont apply_cont
+      let return =
+        (* Module initialisers return unit, but since that is taken care of
+           during Cmm generation, we can instead "return" [module_symbol]
+           here to ensure that its associated [Let_symbol] doesn't get
+           deleted. *)
+        Flambda.Apply_cont.create return_cont
+          ~args:[Simple.symbol module_symbol]
+          ~dbg:Debuginfo.none
+        |> Expr.create_apply_cont
+      in
+      Let_symbol.create (Singleton module_symbol) static_const return
+      |> Flambda.create_let_symbol
     in
     List.fold_left (fun body (pos, var) ->
         let var = VB.create var Name_mode.normal in
@@ -904,13 +918,12 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
       ~stub:false  (* CR mshinwell: remove "stub" notion *)
       ~is_exn_handler:false
   in
-  let expr =
+  let body =
     (* This binds the return continuation that is free (or, at least, not bound)
        in the incoming Ilambda code. The handler for the continuation receives a
-       tuple with fields indexed from zero to [size]. The handler extracts the
-       fields; the variables bound to such fields are returned as the
-       [computed_values], below. The compilation of the [Define_symbol]
-       constructions below then causes the actual module block to be created. *)
+       tuple with fields indexed from zero to [module_block_size_in_words]. The
+       handler extracts the fields; the variables bound to such fields are then
+       used to define the module block symbol. *)
     let body = close t Env.empty ilam.expr in
     Flambda.Let_cont.create_non_recursive ilam.return_continuation
       load_fields_cont_handler
@@ -922,52 +935,16 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
     Misc.fatal_error "Ilambda toplevel exception continuation cannot have \
       extra arguments"
   end;
-  let exn_continuation =
-    Exn_continuation.create ~exn_handler:ilam.exn_continuation.exn_handler
-      ~extra_args:[]
-  in
-  let computed_values =
-    List.map (fun (var, kind) -> KP.create (Parameter.wrap var) kind)
-      field_vars
-  in
-  let computation : Program_body.Computation.t =
-    { expr;
-      return_continuation = return_cont;
-      exn_continuation;
-      computed_values;
-    }
-  in
-  let static_part : K.value Static_part.t =
-    let field_vars =
-      List.map (fun (var, _) : Flambda_static.Of_kind_value.t ->
-          Dynamically_computed var)
-        field_vars
-    in
-    Block (module_block_tag, Immutable, field_vars)
-  in
-  let program_body : Program_body.t =
-    let bound_symbols : K.value Program_body.Bound_symbols.t =
-      Singleton module_symbol
-    in
-    let definition : Program_body.Definition.t =
-      { computation = Some computation;
-        static_structure = [S (bound_symbols, static_part)];
-      }
-    in
-    Program_body.define_symbol definition
-      ~body:(Program_body.root module_symbol)
-      Code_age_relation.empty
-  in
-  let program_body =
-    List.fold_left
-      (fun program_body (code_id, params_and_body) : Program_body.t ->
-        let bound_symbols : K.fabricated Program_body.Bound_symbols.t =
+  let exn_continuation = ilam.exn_continuation.exn_handler in
+  let body =
+    List.fold_left (fun body (code_id, params_and_body) : body.t ->
+        let bound_symbols : Let_symbol.Bound_symbols.t =
           Code_and_set_of_closures {
             code_ids = Code_id.Set.singleton code_id;
             closure_symbols = Closure_id.Map.empty;
           }
         in
-        let static_part : K.fabricated Static_part.t =
+        let static_const : Static_const.t =
           let code : Static_part.code =
             { params_and_body = Present params_and_body;
               newer_version_of = None;
@@ -978,35 +955,16 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
             set_of_closures = None; 
           }
         in
-        let static_structure : Program_body.Static_structure.t =
-          [S (bound_symbols, static_part)]
-        in
-        let definition : Program_body.Definition.t =
-          { computation = None;
-            static_structure;
-          }
-        in
-        Program_body.define_symbol definition ~body:program_body
-          Code_age_relation.empty)
-      program_body
+        Let_symbol.create bound_symbols static_const body
+        |> Flambda.create_let_symbol)
+      body
       t.code
   in
-  let program_body =
-    (* CR mshinwell: Share with [Simplify_program] *)
-    List.fold_left (fun body (symbol, static_part) : Program_body.t ->
-        let bound_symbols : K.value Program_body.Bound_symbols.t =
-          Singleton symbol
-        in
-        let static_structure : Program_body.Static_structure.t =
-          [S (bound_symbols, static_part)]
-        in
-        let definition : Program_body.Definition.t =
-          { computation = None;
-            static_structure;
-          }
-        in
-        Program_body.define_symbol definition ~body Code_age_relation.empty)
-      program_body
+  let body =
+    List.fold_left (fun body (symbol, static_const) : body.t ->
+        Let_symbol.create (Singleton symbol) static_const body
+        |> Flambda.create_let_symbol)
+      body
       t.declared_symbols
   in
   let imported_symbols =
@@ -1021,6 +979,5 @@ let ilambda_to_flambda ~backend ~module_ident ~size ~filename
       Backend.all_predefined_exception_symbols
       imported_symbols
   in
-  { imported_symbols;
-    body = program_body;
-  }
+  Flambda_unit.create ~imported_symbols ~return_continuation:return_cont
+    ~exn_continuation ~body

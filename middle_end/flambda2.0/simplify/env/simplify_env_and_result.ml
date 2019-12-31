@@ -36,12 +36,13 @@ end = struct
     inlining_depth_increment : int;
     float_const_prop : bool;
     code : Function_params_and_body.t Code_id.Map.t;
+    at_unit_toplevel : bool;
   }
 
   let print ppf { backend = _; round; typing_env;
                   inlined_debuginfo; can_inline;
                   inlining_depth_increment; float_const_prop;
-                  code;
+                  code; at_unit_toplevel;
                 } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(round@ %d)@]@ \
@@ -50,6 +51,8 @@ end = struct
         @[<hov 1>(can_inline@ %b)@]@ \
         @[<hov 1>(inlining_depth_increment@ %d)@]@ \
         @[<hov 1>(float_const_prop@ %b)@] \
+        @[<hov 1>(at_unit_toplevel@ %b)@] \
+        @[<hov 1>(unit_toplevel_exn_continuation@ %a)@] \
         @[<hov 1>(code@ %a)@]\
         )@]"
       round
@@ -58,11 +61,13 @@ end = struct
       can_inline
       inlining_depth_increment
       float_const_prop
+      at_unit_toplevel
+      Continuation.print unit_toplevel_exn_continuation
       (Code_id.Map.print Function_params_and_body.print) code
 
   let invariant _t = ()
 
-  let create ~round ~backend ~float_const_prop =
+  let create ~round ~backend ~float_const_prop ~unit_toplevel_exn_continuation =
     (* CR mshinwell: [resolver] should come from [backend] *)
     let resolver _export_id = None in
     { backend;
@@ -73,6 +78,8 @@ end = struct
       inlining_depth_increment = 0;
       float_const_prop;
       code = Code_id.Map.empty;
+      at_unit_toplevel = true;
+      unit_toplevel_exn_continuation;
     }
 
   let resolver t = TE.resolver t.typing_env
@@ -82,6 +89,14 @@ end = struct
   let get_continuation_scope_level t = TE.current_scope t.typing_env
   let can_inline t = t.can_inline
   let float_const_prop t = t.float_const_prop
+
+  let unit_toplevel_exn_continuation t = t.unit_toplevel_exn_continuation
+
+  let at_unit_toplevel t = t.at_unit_toplevel
+
+  let set_not_at_unit_toplevel t =
+    { t with at_unit_toplevel = false; }
+
   let get_inlining_depth_increment t = t.inlining_depth_increment
 
   let set_inlining_depth_increment t inlining_depth_increment =
@@ -100,7 +115,7 @@ end = struct
   let enter_closure { backend; round; typing_env;
                       inlined_debuginfo = _; can_inline;
                       inlining_depth_increment = _;
-                      float_const_prop; code;
+                      float_const_prop; code; not_at_unit_toplevel = _;
                     } =
     { backend;
       round;
@@ -110,6 +125,7 @@ end = struct
       inlining_depth_increment = 0;
       float_const_prop;
       code;
+      at_unit_toplevel = false;
     }
 
   let define_variable t var kind =
