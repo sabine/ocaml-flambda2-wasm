@@ -35,6 +35,10 @@ val create
   -> body:Flambda.Expr.t
   -> t
 
+val return_continuation : t -> Continuation.t
+
+val exn_continuation : t -> Continuation.t
+
 (** All closure variables used in the given unit. *)
 val used_closure_vars : t -> Var_within_closure.Set.t
 

@@ -54,7 +54,7 @@ let print ppf
     Symbol.print root_symbol
     Continuation.print return_continuation
     Continuation.print exn_continuation
-    Flambda.Expr.print t.body
+    Flambda.Expr.print body
 
 let invariant _t = ()
 

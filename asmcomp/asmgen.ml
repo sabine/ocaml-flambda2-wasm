@@ -203,7 +203,7 @@ let compile_implementation2 ?toplevel ~backend ~filename ~prefixname
         (middle_end : middle_end2) ~backend ~module_block_size_in_words
           ~filename ~prefixname ~ppf_dump ~module_ident ~module_initializer
       in
-      end_gen_implementation ?toplevel ~ppf_dump Un_cps.program
+      end_gen_implementation ?toplevel ~ppf_dump Un_cps.unit
         translated_program)
 
 let compile_implementation_flambda ?toplevel ~prefixname
@@ -217,7 +217,7 @@ let compile_implementation_flambda ?toplevel ~prefixname
     (fun () ->
       Ident.Set.iter Compilenv.require_global required_globals;
       end_gen_implementation ?toplevel ~ppf_dump
-        Un_cps.program program)
+        Un_cps.unit program)
 
 (* Error report *)
 

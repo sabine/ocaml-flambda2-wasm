@@ -50,7 +50,8 @@ module rec Expr : sig
     | Let_symbol of Let_symbol_expr.t
     (** Bind code and/or data symbol(s).  This form of expression is only
         allowed in certain "toplevel" contexts.  The bound symbols are not
-        treated up to alpha conversion. *)
+        treated up to alpha conversion; each such bound symbol must be
+        unique. *)
     | Let_cont of Let_cont_expr.t
     (** Define one or more continuations. *)
     | Apply of Apply.t
@@ -67,6 +68,7 @@ module rec Expr : sig
   (** Extract the description of an expression. *)
   val descr : t -> descr
 
+  (** What happened when a [Let]-expression was created. *)
   type let_creation_result = private
     | Have_deleted of Named.t
     | Nothing_deleted
@@ -88,6 +90,8 @@ module rec Expr : sig
       (such as is required to bind a [Set_of_closures]). *)
   val create_pattern_let : Bindable_let_bound.t -> Named.t -> t -> t
 
+  (** Create a [Let_symbol] expression that binds a statically-allocated
+      value to a symbol. *)
   val create_let_symbol : Let_symbol_expr.t -> t
 
   (** Create an application expression. *)
@@ -96,6 +100,7 @@ module rec Expr : sig
   (** Create a continuation application (in the zero-arity case, "goto"). *)
   val create_apply_cont : Apply_cont.t -> t
 
+  (** What happened when a [Switch]-expression was created. *)
   type switch_creation_result = private
     | Have_deleted_comparison_but_not_branch
     | Have_deleted_comparison_and_branch
@@ -533,10 +538,14 @@ end and Static_const : sig
 
   include Contains_names.S with type t := t
 
+  (** Return all pieces of code defined by the given term. *)
   val get_pieces_of_code
      : t
     -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 
+  (** Returns [true] iff the given term does not contain any variables,
+      which means that the corresponding value can be statically allocated,
+      without any need to patch it afterwards. *)
   val is_fully_static : t -> bool
 end
 

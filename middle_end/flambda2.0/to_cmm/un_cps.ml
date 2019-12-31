@@ -579,6 +579,7 @@ let function_flags () =
 let rec expr env e =
   match (Expr.descr e : Expr.descr) with
   | Let e' -> let_expr env e'
+  | Let_symbol e' -> let_symbol env e'
   | Let_cont e' -> let_cont env e'
   | Apply e' -> apply_expr env e'
   | Apply_cont e' -> apply_cont env e'
@@ -608,6 +609,15 @@ and let_expr env t =
             "Set_of_closures binding a non-Set_of_closures:@ %a"
             Let.print t
     )
+
+and let_symbol env let_sym =
+  let body = Let_symbol.body let_sym in
+  let env, r =
+    Un_cps_static.static_const env ~params_and_body
+      (Let_symbol.bound_symbols let_sym)
+      (Let_symbol.defining_expr let_sym)
+  in
+  expr env body
 
 and let_set_of_closures env body closure_vars soc =
   (* First translate the set of closures, and bind it in the env *)
@@ -1172,15 +1182,17 @@ let unit (unit : Flambda_unit.t) =
           (Flambda_unit.exn_continuation unit)
           used_closure_vars
       in
-      let return_cont, env = Env.add_jump_cont c_env tys k in
-      (* let functions = program_functions offsets used_closure_vars unit in *)
-      let res = program_body env [] unit.body in
-      let return_cont_params =
+      let _env, return_cont_params =
         var_list env [
           Kinded_parameter.create (Parameter.wrap (Variable.create "*ret*"))
             Flambda_kind.value;
         ]
       in
+      let return_cont, env =
+        Env.add_jump_cont env (List.map snd return_cont_params) k
+      in
+      (* let functions = program_functions offsets used_closure_vars unit in *)
+      let res = program_body env [] unit.body in
       let res =
         let unit_value = C.targetint Targetint.zero in
         C.ccatch
