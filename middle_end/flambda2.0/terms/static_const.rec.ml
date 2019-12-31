@@ -112,7 +112,6 @@ type code_and_set_of_closures = {
 
 type t =
   | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
-  | Fabricated_block of Variable.t
   | Code_and_set_of_closures of code_and_set_of_closures
   | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
   | Boxed_int32 of Int32.t or_variable
@@ -131,7 +130,6 @@ let get_pieces_of_code t =
         | Present params_and_body -> Some (params_and_body, newer_version_of)
         | Deleted -> None)
   | Block _
-  | Fabricated_block _
   | Boxed_float _
   | Boxed_int32 _
   | Boxed_int64 _
@@ -147,8 +145,6 @@ let free_names t =
         Name_occurrences.union fvs (Field_of_block.free_names field))
       (Name_occurrences.empty)
       fields
-  | Fabricated_block v ->
-    Name_occurrences.singleton_variable v Name_mode.normal
   | Code_and_set_of_closures { code; set_of_closures; } ->
     let from_set_of_closures =
       match set_of_closures with
@@ -231,11 +227,6 @@ let print_with_cache ~cache ppf t =
       Tag.Scannable.print tag
       (Format.pp_print_list ~pp_sep:Format.pp_print_space
         Field_of_block.print) fields
-  | Fabricated_block field ->
-    fprintf ppf "@[<hov 1>@<0>%sFabricated_block@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print field
   | Code_and_set_of_closures { code; set_of_closures; } ->
     fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
         @[<hov 1>(code@ (%a))@]@ \
@@ -326,8 +317,6 @@ let _invariant env t =
     match t with
     | Block (_tag, _mut, fields) ->
       List.iter (fun field -> Field_of_block.invariant env field) fields
-    | Fabricated_block field ->
-      E.check_variable_is_bound_and_of_kind env field K.fabricated
     | Set_of_closures set ->
       Flambda.Set_of_closures.invariant env set
     | Boxed_float (Var v) ->
@@ -376,7 +365,6 @@ let apply_name_permutation t perm =
       in
       if not !changed then t
       else Block (tag, mut, fields)
-    | Fabricated_block _ -> Misc.fatal_error "To be removed"
     | Code_and_set_of_closures { code; set_of_closures; } ->
       let code' =
         Code_id.Map.map_sharing
@@ -474,7 +462,6 @@ let get_pieces_of_code t =
         | Present params_and_body -> Some (params_and_body, newer_version_of)
         | Deleted -> None)
   | Block _
-  | Fabricated_block _
   | Boxed_float _
   | Boxed_int32 _
   | Boxed_int64 _

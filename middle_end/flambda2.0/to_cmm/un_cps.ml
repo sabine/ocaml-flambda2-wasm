@@ -20,6 +20,7 @@ open! Flambda.Import
 
 module Env = Un_cps_env
 module Ece = Effects_and_coeffects
+module R = Un_cps_result
 
 (* Notes:
    - an int64 on a 32-bit host is represented across two registers,
@@ -47,81 +48,6 @@ let typ_val = Cmm.typ_val
 let typ_float = Cmm.typ_float
 let typ_int64 = C.typ_int64
 
-(* Result for translating a program,
-   named R instead of Result to avoid shadowing *)
-module R = struct
-
-  type t = {
-    init : Cmm.expression;
-    current_data : Cmm.data_item list;
-    other_data : Cmm.data_item list list;
-    gc_roots : Symbol.t list;
-    functions : Cmm.phrase list;
-  }
-
-  let empty = {
-    init = C.void;
-    current_data = [];
-    other_data = [];
-    gc_roots = [];
-    functions = [];
-  }
-
-  let add_if_not_empty x l =
-    match x with
-    | [] -> l
-    | _ :: _ -> x :: l
-
-  let combine r t = {
-    init = C.sequence r.init t.init;
-    current_data = [];
-    other_data =
-      add_if_not_empty r.current_data (
-        add_if_not_empty t.current_data (
-          (r.other_data @ t.other_data)));
-    gc_roots = r.gc_roots @ t.gc_roots;
-    functions = r.functions @ t.functions;
-  }
-
-  let archive_data r =
-    { r with current_data = [];
-             other_data = add_if_not_empty r.current_data r.other_data; }
-
-  let wrap_init f r =
-    { r with init = f r.init; }
-
-  let add_data d r =
-    { r with current_data = d @ r.current_data; }
-
-  let update_data f r =
-    { r with current_data = f r.current_data; }
-
-  let add_gc_roots l r =
-    { r with gc_roots = l @ r.gc_roots; }
-
-  let add_function f r =
-    { r with functions = f :: r.functions; }
-
-  let to_cmm r =
-    let entry =
-      let dbg = Debuginfo.none in
-      let fun_name = Compilenv.make_symbol (Some "entry") in
-      let fun_codegen =
-        if Config.flambda then
-          [ Cmm.Reduce_code_size;
-            Cmm.No_CSE ]
-        else
-          [ Cmm.Reduce_code_size ]
-      in
-      let init = C.sequence r.init (C.unit ~dbg) in
-      C.cfunction (C.fundecl fun_name [] init fun_codegen dbg)
-    in
-    let data_list = add_if_not_empty r.current_data r.other_data in
-    let data = List.map C.cdata data_list in
-    data, entry, r.gc_roots, r.functions
-
-end
-
 (* CR gbury: this conversion is potentially unsafe when cross-compiling
              for a 64-bit machine on a 32-bit host *)
 let nativeint_of_targetint t =
@@ -137,10 +63,6 @@ let symbol s =
 let name env = function
   | Name.Var v -> Env.inline_variable env v
   | Name.Symbol s -> C.symbol (symbol s), env, Ece.pure
-
-let name_static _env = function
-  | Name.Var v -> `Var v
-  | Name.Symbol s -> `Data [C.symbol_address (symbol s)]
 
 (* Constants *)
 
@@ -158,22 +80,6 @@ let const _env c =
   | Naked_int32 i -> C.int32 i
   | Naked_int64 i -> C.int64 i
   | Naked_nativeint t -> C.targetint t
-
-let const_static _env c =
-  match (c : Simple.Const.t) with
-  | Naked_immediate i ->
-      [C.cint (nativeint_of_targetint (targetint_of_imm i))]
-  | Tagged_immediate i ->
-      [C.cint (nativeint_of_targetint (tag_targetint (targetint_of_imm i)))]
-  | Naked_float f ->
-      [C.cfloat (Numbers.Float_by_bit_pattern.to_float f)]
-  | Naked_int32 i ->
-      [C.cint (Nativeint.of_int32 i)]
-  | Naked_int64 i ->
-      if C.arch32 then todo() (* split int64 on 32-bit archs *)
-      else [C.cint (Int64.to_nativeint i)]
-  | Naked_nativeint t ->
-      [C.cint (nativeint_of_targetint t)]
 
 let default_of_kind (k : Flambda_kind.t) =
   match k with
@@ -201,11 +107,6 @@ let simple env s =
   match (Simple.descr s : Simple.descr) with
   | Name n -> name env n
   | Const c -> const env c, env, Ece.pure
-
-let simple_static env s =
-  match (Simple.descr s : Simple.descr) with
-  | Name n -> name_static env n
-  | Const c -> `Data (const_static env c)
 
 (* Arithmetic primitives *)
 
@@ -643,6 +544,35 @@ let decide_inline_let effs v body =
       else Skip
   | One -> Inline
   | More_than_one -> Regular
+
+(* Helpers for translating functions *)
+
+let is_var_used v e =
+  let free_names = Expr.free_names e in
+  let occurrence = Name_occurrences.greatest_name_mode_var free_names v in
+  match (occurrence : Name_mode.Or_absent.t) with
+  | Absent -> false
+  | Present _k ->
+    (* CR mshinwell: I think this should always be [true].  Even if the
+       variable is only used by phantom bindings, it still needs to be
+       there.  This may only arise in unusual cases (e.g. [my_closure]
+       that is used only by phantom bindings). *)
+    true
+    (* Name_mode.is_normal k *)
+
+let function_args vars my_closure body =
+  if is_var_used my_closure body then begin
+    let param = Parameter.wrap my_closure in
+    let last_arg = Kinded_parameter.create param Flambda_kind.value in
+    vars @ [last_arg]
+  end else
+    vars
+
+let function_flags () =
+  if !Clflags.optimize_for_speed then
+    []
+  else
+    [ Cmm.Reduce_code_size ]
 
 (* Expressions *)
 
@@ -1105,6 +1035,7 @@ and switch env s =
          the move from the condition register to a regular register). *)
       wrap (C.ite e ~then_ ~else_)
   | _ ->
+      (* CR mshinwell: Don't use polymorphic comparison! *)
       if Misc.Stdlib.Array.for_alli (=) ints then
         wrap (C.transl_switch_clambda Location.none e ints exprs)
       else begin
@@ -1182,34 +1113,7 @@ and fill_up_to j acc i =
 
 (* Translate a function declaration. *)
 
-let is_var_used v e =
-  let free_names = Expr.free_names e in
-  let occurrence = Name_occurrences.greatest_name_mode_var free_names v in
-  match (occurrence : Name_mode.Or_absent.t) with
-  | Absent -> false
-  | Present _k ->
-    (* CR mshinwell: I think this should always be [true].  Even if the
-       variable is only used by phantom bindings, it still needs to be
-       there.  This may only arise in unusual cases (e.g. [my_closure]
-       that is used only by phantom bindings). *)
-    true
-    (* Name_mode.is_normal k *)
-
-let function_args vars my_closure body =
-  if is_var_used my_closure body then begin
-    let param = Parameter.wrap my_closure in
-    let last_arg = Kinded_parameter.create param Flambda_kind.value in
-    vars @ [last_arg]
-  end else
-    vars
-
-let function_flags () =
-  if !Clflags.optimize_for_speed then
-    []
-  else
-    [ Cmm.Reduce_code_size ]
-
-let params_and_body env fun_name fun_dbg p =
+and params_and_body env fun_name fun_dbg p =
     Function_params_and_body.pattern_match p
       ~f:(fun ~return_continuation:k k_exn vars ~body ~my_closure ->
           try
@@ -1232,68 +1136,17 @@ let params_and_body env fun_name fun_dbg p =
               Expr.print body;
             raise e)
 
-(* Definition *)
-
-let computation_wrapper env c =
-  match c with
-  | None ->
-      env, (fun x -> x), true
-  | Some (c : Flambda_unit_body.Computation.t) ->
-      (* The env for the computation is given a dummy continuation,
-         since the return continuation will be explicitly bound to a
-         jump before translating the computation. *)
-      let dummy_k = Continuation.create () in
-      let k_exn = Exn_continuation.exn_handler c.exn_continuation in
-      let c_env = Env.enter_function_def env dummy_k k_exn in
-      (* The environment for the static structure update must contain the
-         variables produced by the computation. It is given dummy
-         continuations, given that the return continuation will not
-         be used. *)
-      let s_env = Env.enter_function_def env dummy_k dummy_k in
-      let s_env, vars = var_list s_env c.computed_values in
-      (* Wrap the static structure update expression [e] by manually
-         translating the computation return continuation by a jump to
-         [e]. In the case of a single-use continuation, using a jump
-         instead of inlining [e] at the continuation call site does not
-         change much, since - assuming the continuation is called at the
-         end of the body - the jump will be erased in linearize. *)
-      let wrap (e : Cmm.expression) =
-        let k = c.return_continuation in
-        let tys = List.map snd vars in
-        let id, env = Env.add_jump_cont c_env tys k in
-        let body = expr env c.expr in
-        C.ccatch
-          ~rec_flag:false ~body
-          ~handlers:[C.handler id vars e]
-      in
-      s_env, wrap, false
-
 (* CR gbury: for the future, try and rearrange the generated cmm
    code to move assignments closer to the variable definitions
    Or better: add traps to the env to insert assignemnts after
    the variable definitions. *)
 
-let definition env (d : Flambda_unit_body.Definition.t) =
-  let env, wrapper, is_fully_static =
-    computation_wrapper env d.computation
-  in
-  let env, r = static_structure env is_fully_static d.static_structure in
-  env, R.wrap_init wrapper r
+(* Note about the root symbol: it does not need any particular treatment.
+   Concerning gc_roots, it's like any other statically allocated symbol: if it
+   has an associated computation, then it will already be included in the list
+   of gc_roots; otherwise it does not *have* to be a root. *)
 
-
-(* Programs *)
-
-let rec program_body env acc body =
-  match Flambda_unit_body.descr body with
-  | Flambda_unit_body.Root _sym ->
-      (* The root symbol does not really deserve any particular treatment.
-         Concerning gc_roots, it's like any other statically allocated symbol:
-         if if has an associated computation, then it will already be included
-         in the list of gc_roots, else it does not *have*  to be a root. *)
-      List.fold_left (fun acc r -> R.combine r acc) R.empty acc
-  | Flambda_unit_body.Definition (def, rest) ->
-      let env, r = definition env def in
-      program_body env (r :: acc) rest
+(* Compilation units *)
 
 (* let program_functions offsets used_closure_vars p =
  *   let aux = function_decl offsets used_closure_vars in
@@ -1306,19 +1159,36 @@ let rec program_body env acc body =
  *   in
  *   List.map (fun decl -> C.cfunction decl) sorted *)
 
-let program (unit : Flambda_unit.t) =
+let unit (unit : Flambda_unit.t) =
   Profile.record_call "flambda2_to_cmm" (fun () ->
       let offsets = Un_cps_closure.compute_offsets unit in
       let used_closure_vars = Flambda_unit.used_closure_vars unit in
-        Name_occurrences.closure_vars (Flambda_unit.free_names unit)
-      in
       let dummy_k = Continuation.create () in
-      let env = Env.mk offsets dummy_k dummy_k used_closure_vars in
+      (* The dummy continuation is passed here since we're going to manually
+         arrange that the return continuation turns into "return unit".
+         (Module initialisers return the unit value). *)
+      let env =
+        Env.mk offsets dummy_k
+          (Flambda_unit.exn_continuation unit)
+          used_closure_vars
+      in
+      let return_cont, env = Env.add_jump_cont c_env tys k in
       (* let functions = program_functions offsets used_closure_vars unit in *)
       let res = program_body env [] unit.body in
+      let return_cont_params =
+        var_list env [
+          Kinded_parameter.create (Parameter.wrap (Variable.create "*ret*"))
+            Flambda_kind.value;
+        ]
+      in
+      let res =
+        let unit_value = C.targetint Targetint.zero in
+        C.ccatch
+          ~rec_flag:false ~body
+          ~handlers:[C.handler return_cont return_cont_params unit_value]
+      in
       let data, entry, gc_roots, functions = R.to_cmm res in
       let cmm_data = C.flush_cmmgen_state () in
       let roots = List.map symbol gc_roots in
       (C.gc_root_table roots) :: data @ cmm_data @ functions @ [entry]
     )
-

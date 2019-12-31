@@ -16,10 +16,65 @@
 
 open! Flambda.Import
 
+module C = struct
+  include Cmm_helpers
+  include Un_cps_helper
+end
+
 module Bound_symbols = Let_symbol.Bound_symbols
 module Env = Un_cps_env
-module Ece = Effects_and_coeffects
 module SC = Flambda.Static_const
+module R = Un_cps_result
+
+(* CR mshinwell: Share these next functions with Un_cps.  Unfortunately
+   there's a name clash with at least one of them ("symbol") with functions
+   already in Un_cps_helper. *)
+let symbol s =
+  Linkage_name.to_string (Symbol.linkage_name s)
+
+let tag_targetint t = Targetint.(add (shift_left t 1) one)
+
+let targetint_of_imm i = Targetint.OCaml.to_targetint i.Immediate.value
+
+let nativeint_of_targetint t =
+  match Targetint.repr t with
+  | Int32 i -> Nativeint.of_int32 i
+  | Int64 i -> Int64.to_nativeint i
+
+let filter_closure_vars env s =
+  let used_closure_vars = Env.used_closure_vars env in
+  let aux clos_var _bound_to =
+    Var_within_closure.Set.mem clos_var used_closure_vars
+  in
+  Var_within_closure.Map.filter aux s
+
+let todo () = failwith "Not yet implemented"
+(* ----- End of functions to share ----- *)
+
+let name_static _env = function
+  | Name.Var v -> `Var v
+  | Name.Symbol s -> `Data [C.symbol_address (symbol s)]
+
+let const_static _env c =
+  match (c : Simple.Const.t) with
+  | Naked_immediate i ->
+      [C.cint (nativeint_of_targetint (targetint_of_imm i))]
+  | Tagged_immediate i ->
+      [C.cint (nativeint_of_targetint (tag_targetint (targetint_of_imm i)))]
+  | Naked_float f ->
+      [C.cfloat (Numbers.Float_by_bit_pattern.to_float f)]
+  | Naked_int32 i ->
+      [C.cint (Nativeint.of_int32 i)]
+  | Naked_int64 i ->
+      if C.arch32 then todo() (* split int64 on 32-bit archs *)
+      else [C.cint (Int64.to_nativeint i)]
+  | Naked_nativeint t ->
+      [C.cint (nativeint_of_targetint t)]
+
+let simple_static env s =
+  match (Simple.descr s : Simple.descr) with
+  | Name n -> name_static env n
+  | Const c -> `Data (const_static env c)
 
 let static_value _env v =
   match (v : SC.Field_of_block.t) with
@@ -46,7 +101,7 @@ let make_update env kind symb var i =
 let rec static_block_updates symb env acc i = function
   | [] -> List.fold_left C.sequence C.void acc
   | sv :: r ->
-      begin match (sv : Flambda_static.Of_kind_value.t) with
+      begin match (sv : SC.Field_of_block.t) with
       | Symbol _
       | Tagged_immediate _ ->
           static_block_updates symb env acc (i + 1) r
@@ -172,7 +227,7 @@ and fill_static_up_to j acc i =
   if i = j then acc
   else fill_static_up_to j (C.cint 1n :: acc) (i + 1)
 
-let static_const0 env (bound_symbols : Bound_symbols.t)
+let static_const0 env r ~params_and_body (bound_symbols : Bound_symbols.t)
       (static_const : Static_const.t) =
   match bound_symbols, static_const with
   | Singleton s, Block (tag, _mut, fields) ->
@@ -221,7 +276,8 @@ let static_const0 env (bound_symbols : Bound_symbols.t)
               in
               (* CR vlaviron: fix debug info *)
               let fundecl =
-                C.cfunction (params_and_body updated_env fun_name Debuginfo.none p)
+                C.cfunction (params_and_body updated_env fun_name
+                  Debuginfo.none p)
               in
               R.add_function fundecl r)
           code
@@ -277,7 +333,7 @@ let static_const0 env (bound_symbols : Bound_symbols.t)
           [Code_and_set_of_closures] binding:@ %a"
         SC.print static_const
 
-let static_const env (bound_symbols : Bound_symbols.t)
+let static_const env ~params_and_body (bound_symbols : Bound_symbols.t)
       (static_const : Static_const.t) =
   (* Gc roots: statically allocated blocks themselves do not need to be scanned,
      however if statically allocated blocks contain dynamically allocated
@@ -288,10 +344,12 @@ let static_const env (bound_symbols : Bound_symbols.t)
      fully_static). *)
   let roots =
     if Static_const.is_fully_static static_const then []
-    else Symbol.Set.elements (Bound_symbols.being_defined s)
+    else Symbol.Set.elements (Bound_symbols.being_defined bound_symbols)
   in
   let r = R.add_gc_roots roots R.empty in
-  let env, r = static_const0 env bound_symbols static_const in
+  let env, r =
+    static_const0 env r ~params_and_body bound_symbols static_const
+  in
   (* [R.archive_data] helps keep definitions of separate symbols in different
      [data_item] lists and this increases readability of the generated Cmm. *)
   env, R.archive_data r

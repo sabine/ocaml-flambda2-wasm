@@ -12,20 +12,31 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Translation of statically-allocated constants to Cmm. *)
+(** Result accumulator structure used during Flambda to Cmm translation. *)
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-open! Flambda.Import
+type t
 
-val static_const
-   : Un_cps_env.t
-  -> params_and_body:(
-        Un_cps_env.t
-     -> string
-     -> Debuginfo.t
-     -> Flambda.Function_params_and_body.t
-     -> Cmm.fundecl)
-  -> Let_symbol.Bound_symbols.t
-  -> Static_const.t
-  -> Un_cps_env.t * Un_cps_result.t
+(* CR mshinwell: Put [t] arguments first. *)
+
+val empty : t
+
+val combine : t -> t -> t
+
+val archive_data : t -> t
+
+val wrap_init : (Cmm.expression -> Cmm.expression) -> t -> t
+
+val add_data : Cmm.data_item list -> t -> t
+
+val update_data : (Cmm.data_item list -> Cmm.data_item list) -> t -> t
+
+val add_gc_roots : Symbol.t list -> t -> t
+
+val add_function : Cmm.phrase -> t -> t
+
+(* CR mshinwell: Use a "private" record for the return type of this. *)
+val to_cmm
+   : t
+  -> Cmm.phrase list * Cmm.phrase * (Symbol.t list) * (Cmm.phrase list)
