@@ -36,6 +36,7 @@ module Recursive_let_cont_handlers = Flambda.Recursive_let_cont_handlers
 module Set_of_closures = Flambda.Set_of_closures
 module Switch = Flambda.Switch
 
+module CH = Continuation_handler
 module CUE = Continuation_uses_env
 module DA = Downwards_acc
 module DE = Simplify_env_and_result.Downwards_env

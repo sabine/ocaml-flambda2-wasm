@@ -63,10 +63,15 @@ val create_pattern_let0
     whether something got deleted. *)
 val create_let : Var_in_binding_pos.t -> Named.t -> t -> t
 
+(** Bind a symbol to a statically-allocated constant. *)
+val create_let_symbol : Let_symbol_expr.t -> t
+
 (** Create a [Let]-expression that may bind more than a single [Variable]
     (such as is required to bind a [Set_of_closures]). *)
 (* CR mshinwell: Rename [Bindable_let_bound] -> [Let_pattern]? *)
 val create_pattern_let : Bindable_let_bound.t -> Named.t -> t -> t
+
+val create_let_cont : Let_cont_expr.t -> t
 
 (** Create an application expression. *)
 val create_apply : Apply.t -> t
@@ -125,5 +130,3 @@ val bind_parameters_to_simples
   -> target:Simple.t list
   -> t
   -> t
-
-val create_let_cont : Let_cont_expr.t -> t

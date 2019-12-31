@@ -428,6 +428,7 @@ module Function_declaration = Function_declaration
 module Function_declarations = Function_declarations
 module Let = Let_expr
 module Let_cont = Let_cont_expr
+module Let_symbol = Let_symbol_expr
 module Set_of_closures = Set_of_closures
 
 (** The idea is that you should typically do "open! Flambda" at the top of
@@ -442,8 +443,9 @@ module Import : sig
   module Function_declaration = Function_declaration
   module Function_declarations = Function_declarations
   module Function_params_and_body = Function_params_and_body
-  module Let_cont = Let_cont
   module Let = Let
+  module Let_cont = Let_cont
+  module Let_symbol = Let_symbol_expr
   module Named = Named
   module Non_recursive_let_cont_handler = Non_recursive_let_cont_handler
   module Recursive_let_cont_handlers = Recursive_let_cont_handlers

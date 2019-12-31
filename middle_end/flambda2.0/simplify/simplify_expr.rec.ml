@@ -27,29 +27,6 @@ open! Simplify_import
 
 type 'a k = CUE.t -> R.t -> ('a * UA.t)
 
-module Continuation_handler = struct
-  include Continuation_handler
-  let real_handler t = Some t
-
-  module Opened = struct
-    type nonrec t = {
-      params : KP.t list;
-      handler : Expr.t;
-      original : t;
-    }
-
-    let create ~params ~handler original = { params; handler; original; }
-    let params t = t.params
-    let original t = t.original
-  end
-
-  let pattern_match t ~f =
-    Continuation_params_and_handler.pattern_match (params_and_handler t)
-      ~f:(fun params ~handler -> f (Opened.create ~params ~handler t))
-end
-
-module Simplify_let_cont = Generic_simplify_let_cont.Make (Continuation_handler)
-
 let rec simplify_let
   : 'a. DA.t -> Let.t -> 'a k -> Expr.t * 'a * UA.t
 = fun dacc let_expr k ->
@@ -61,6 +38,26 @@ let rec simplify_let
     in
     let body, user_data, uacc = simplify_expr dacc body k in
     Simplify_common.bind_let_bound ~bindings ~body, user_data, uacc)
+
+and simplify_let_symbol
+  : 'a. DA.t -> Let_symbol.t -> 'a k -> Expr.t * 'a * UA.t
+= fun dacc let_symbol_expr k ->
+  let module LS = Flambda.Let_symbol in
+  let bound_symbols = LS.bound_symbols let_symbol_expr in
+  let defining_expr = LS.defining_expr let_symbol_expr in
+  let body = LS.body let_symbol_expr in
+  let { Simplify_static_const. bindings_outermost_first = bindings; dacc; } =
+    Simplify_static_const.simplify_static_const dacc ~bound_symbols
+      defining_expr
+  in
+  let body, user_data, uacc = simplify_expr dacc body k in
+  let expr =
+    List.fold_left (fun body (bound_symbols, defining_expr) ->
+        Expr.create_let_symbol (LS.create bound_symbols defining_expr body))
+      body
+      (List.rev bindings_outermost_first)
+  in
+  expr, user_data, uacc
 
 and simplify_one_continuation_handler
   : 'a. bool -> DA.t
@@ -159,16 +156,124 @@ and simplify_non_recursive_let_cont_handler
   let cont_handler = Non_recursive_let_cont_handler.handler non_rec_handler in
   Non_recursive_let_cont_handler.pattern_match non_rec_handler
     ~f:(fun cont ~body ->
-      let simplify_body : _ Simplify_let_cont.simplify_body =
-        { simplify_body = simplify_expr; }
-      in
       let body, handler, user_data, uacc =
-        Simplify_let_cont.simplify_body_of_non_recursive_let_cont dacc
-          cont cont_handler ~simplify_body ~body
-          ~simplify_continuation_handler_like:
-            (simplify_one_continuation_handler false)
-          ~user_data:()
-          k
+        let body, (result, uenv', user_data), uacc =
+          let scope = DE.get_continuation_scope_level (DA.denv dacc) in
+          let is_exn_handler = CH.is_exn_handler cont_handler in
+          CH.pattern_match cont_handler ~f:(fun handler ->
+            let params = CH.Opened.params handler in
+            let denv = DE.define_parameters (DA.denv dacc) ~params in
+            let dacc =
+              DA.with_denv dacc (DE.increment_continuation_scope_level denv)
+            in
+            simplify_expr dacc body (fun cont_uses_env r ->
+      (*
+              Format.eprintf "Parameters for %a: %a\n%!"
+                Continuation.print cont
+                KP.List.print params;
+      *)
+              let denv =
+                DE.add_lifted_constants denv ~lifted:(R.get_lifted_constants r)
+              in
+              let uses =
+                CUE.compute_handler_env cont_uses_env cont ~params
+                  ~definition_typing_env_with_params_defined:
+                    (DE.typing_env denv)
+              in
+              let handler, user_data, uacc, is_single_inlinable_use =
+                match uses with
+                | No_uses ->
+                  (* Don't simplify the handler if there aren't any uses:
+                     otherwise, its code will be deleted but any continuation
+                     usage information collected during its simplification will
+                     remain. *)
+                  let user_data, uacc = k cont_uses_env r in
+                  cont_handler, user_data, uacc, false
+                | Uses { handler_typing_env; arg_types_by_use_id;
+                         extra_params_and_args; is_single_inlinable_use; } ->
+                  let typing_env, extra_params_and_args =
+                    match Continuation.sort cont with
+                    | Normal when is_single_inlinable_use ->
+                      assert (not is_exn_handler);
+                      handler_typing_env, extra_params_and_args
+                    | Normal | Toplevel_return ->
+                      assert (not is_exn_handler);
+                      let param_types =
+                        TE.find_params handler_typing_env params
+                      in
+                      Unbox_continuation_params.make_unboxing_decisions
+                        handler_typing_env ~arg_types_by_use_id ~params
+                        ~param_types extra_params_and_args
+                    | Return ->
+                      assert (not is_exn_handler);
+                      handler_typing_env, extra_params_and_args
+                    | Exn ->
+                      assert is_exn_handler;
+                      handler_typing_env, extra_params_and_args
+                  in
+                  let dacc =
+                    DA.create (DE.with_typing_env denv typing_env)xi
+                      cont_uses_env r
+                  in
+                  try
+                    let handler, user_data, uacc =
+                      simplify_one_continuation_handler dacc
+                        ~extra_params_and_args cont handler ~user_data k
+                    in
+                    handler, user_data, uacc, is_single_inlinable_use
+                  with Misc.Fatal_error -> begin
+                    if !Clflags.flambda2_context_on_error then begin
+                      Format.eprintf "\n%sContext is:%s simplifying
+                          continuation \ handler (inlinable? %b)@ %a@ with \
+                          [extra_params_and_args]@ %a@ \
+                          with downwards accumulator:@ %a\n"
+                        (Flambda_colours.error ())
+                        (Flambda_colours.normal ())
+                        is_single_inlinable_use
+                        CH.print cont_handler
+                        Continuation_extra_params_and_args.print
+                        extra_params_and_args
+                        DA.print dacc
+                    end;
+                    raise Misc.Fatal_error
+                  end
+              in
+              let uenv = UA.uenv uacc in
+              let uenv_to_return = uenv in
+              let uenv =
+                match uses with
+                | No_uses -> uenv
+                | Uses _ ->
+                  match CH.behaviour handler with
+                  | Unreachable { arity; } ->
+                    UE.add_unreachable_continuation uenv cont scope arity
+                  | Alias_for { arity; alias_for; } ->
+                    UE.add_continuation_alias uenv cont arity ~alias_for
+                  | Apply_cont_with_constant_arg
+                      { cont = destination_cont; arg = destination_arg;
+                        arity; } ->
+                    UE.add_continuation_apply_cont_with_constant_arg uenv cont
+                      scope arity ~destination_cont ~destination_arg
+                  | Unknown { arity; } ->
+                    let can_inline =
+                      if is_single_inlinable_use && (not is_exn_handler) then
+                        CH.real_handler handler
+                      else
+                        None
+                    in
+                    match can_inline with
+                    | None -> UE.add_continuation uenv cont scope arity
+                    | Some handler ->
+                      UE.add_continuation_to_inline uenv cont scope arity
+                        handler
+              in
+              let uacc = UA.with_uenv uacc uenv in
+              (handler, uenv_to_return, user_data), uacc))
+        in
+        (* The upwards environment of [uacc] is replaced so that out-of-scope
+           continuation bindings do not end up in the accumulator. *)
+        let uacc = UA.with_uenv uacc uenv' in
+        body, result, user_data, uacc
       in
       Let_cont.create_non_recursive cont handler ~body, user_data, uacc)
 

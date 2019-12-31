@@ -31,11 +31,9 @@ module Bound_symbols = struct
   let print ppf t =
     match t with
     | Singleton sym ->
-      Format.fprintf ppf "@[%a@ \u{2237}@ %a@ @<0>%s=@<0>%s@ @]"
+      Format.fprintf ppf "@[%a@ \u{2237}@ %a@]"
         Symbol.print sym
         K.print K.value
-        (Flambda_colours.elide ())
-        (Flambda_colours.normal ())
     | Code_and_set_of_closures { code_ids; closure_symbols; } ->
       Format.fprintf ppf "@[<hov 1>\
           @[<hov 1>(code_ids@ %a)@]@ \
@@ -133,16 +131,16 @@ let invariant env { bound_symbols = _; defining_expr; body; } =
   Expr.invariant env body
 
 let free_names { bound_symbols; defining_expr; body; } =
-  match defining_expr with
-  | Singleton sym ->
-  | Code_and_set_of_closures _ ->
-    let from_bound_symbols = Bound_symbols.free_names bound_symbols in
-    let from_defining_expr =
+  let from_bound_symbols = Bound_symbols.free_names bound_symbols in
+  let from_defining_expr =
+    match defining_expr with
+    | Singleton sym -> Name_occurrences.singleton_symbol sym
+    | Code_and_set_of_closures _ ->
       Name_occurrences.diff (Static_const.free_names defining_expr)
         from_bound_symbols
-    in
-    Name_occurrences.union from_defining_expr
-      (Name_occurrences.diff (Expr.free_names body) from_bound_symbols
+  in
+  Name_occurrences.union from_defining_expr
+    (Name_occurrences.diff (Expr.free_names body) from_bound_symbols
 
 let apply_name_permutation ({ bound_symbols; defining_expr; body; } as t) perm =
   let defining_expr' = Static_const.apply_name_permutation defining_expr perm in
