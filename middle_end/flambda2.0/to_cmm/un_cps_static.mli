@@ -12,8 +12,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(* Translate Flambda compilation units into Cmm *)
+(** Translation of statically-allocated constants to Cmm. *)
 
-val program : Flambda_unit.t -> Cmm.phrase list
-(** Translate a compilation unit. *)
+[@@@ocaml.warning "+a-4-30-40-41-42"]
 
+open! Flambda.Import

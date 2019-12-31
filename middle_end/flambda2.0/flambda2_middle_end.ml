@@ -16,11 +16,11 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-let check_invariants program =
-  try Flambda_static.Program.invariant program
+let check_invariants unit =
+  try Flambda_unit.invariant unit
   with exn -> begin
-    Format.eprintf "Program which failed invariant check:@ %a\n%!"
-      Flambda_static.Program.print program;
+    Format.eprintf "Unit which failed invariant check:@ %a\n%!"
+      Flambda_unit.print unit;
     raise exn
   end
 
@@ -57,21 +57,21 @@ let print_ilambda_after_mutable_variable_elimination ppf
       Ilambda.print ilam.expr
   end
 
-let print_rawflambda ppf program =
+let print_rawflambda ppf unit =
   if !Clflags.dump_rawflambda2 then begin
     Format.fprintf ppf "\n%sAfter closure conversion:%s@ %a@."
       (Flambda_colours.each_file ())
       (Flambda_colours.normal ())
-      Flambda_static.Program.print program
+      Flambda_unit.print unit
   end
 
-let print_flambda name ppf program =
+let print_flambda name ppf unit =
   if !Clflags.dump_flambda then begin
     Format.fprintf ppf "\n%sAfter %s:%s@ %a@."
       (Flambda_colours.each_file ())
       name
       (Flambda_colours.normal ())
-      Flambda_static.Program.print program
+      Flambda_unit.print unit
   end
 
 let middle_end0 ppf ~prefixname:_ ~backend ~filename ~module_ident

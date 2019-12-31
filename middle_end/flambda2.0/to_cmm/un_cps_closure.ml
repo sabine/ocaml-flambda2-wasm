@@ -637,10 +637,10 @@ module Iter_on_sets_of_closures = struct
 *)
 
   let computation f c =
-    Flambda_static.Program_body.Computation.iter_expr c ~f:(expr f)
+    Flambda_unit_body.Computation.iter_expr c ~f:(expr f)
 
   let static_structure_aux f
-      ((S (symbs, st)) : Flambda_static.Program_body.Static_structure.t0) =
+      ((S (symbs, st)) : Flambda_unit_body.Static_structure.t0) =
     match symbs, st with
     | Code_and_set_of_closures { code_ids = _; closure_symbols; },
       Code_and_set_of_closures { code; set_of_closures = s; } ->
@@ -659,23 +659,21 @@ module Iter_on_sets_of_closures = struct
   let static_structure f s =
     List.iter (static_structure_aux f) s
 
-  let definition f (d : Flambda_static.Program_body.Definition.t) =
-    Flambda_static.Program_body.Definition.iter_computation d ~f:(computation f);
+  let definition f (d : Flambda_unit_body.Definition.t) =
+    Flambda_unit_body.Definition.iter_computation d ~f:(computation f);
     static_structure f d.static_structure
 
   let body f b =
-    Flambda_static.Program_body.iter_definitions b ~f:(definition f)
+    Flambda_unit_body.iter_definitions b ~f:(definition f)
 
   let program f t =
-    Flambda_static.Program.iter_body t ~f:(body f)
+    Flambda_unit.iter_body t ~f:(body f)
 
 end
 
 let compute_offsets program =
   let state = ref Greedy.empty_state in
-  let used_closure_vars =
-    Name_occurrences.closure_vars (Flambda_static.Program.free_names program)
-  in
+  let used_closure_vars = Flambda_unit.used_closure_vars unit in
   let aux _ s =
     state := Greedy.create_slots_for_set !state used_closure_vars s
   in

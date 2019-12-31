@@ -24,8 +24,8 @@ val print_env : Format.formatter -> env -> unit
 val empty_env : env
 (** Empty environment. *)
 
-val compute_offsets : Flambda_static.Program.t -> env
-(** Compute offsets for a whole program. *)
+val compute_offsets : Flambda_unit.t -> env
+(** Compute offsets for a whole compilation unit. *)
 
 val env_var_offset : env -> Var_within_closure.t -> int
 (** Returns the offset computed for an environment variable, in
@@ -47,7 +47,7 @@ val closure_code : string -> string
 
 (* val map_on_function_decl :
  *   (string -> Closure_id.t -> Flambda.Function_declaration.t -> 'a) ->
- *   Flambda_static.Program.t -> 'a Closure_id.Map.t
+ *   Flambda_unit.t -> 'a Closure_id.Map.t
  * (\** Map a function on each function body exactly once, and return the
  *     resulting mapping. *\) *)
 

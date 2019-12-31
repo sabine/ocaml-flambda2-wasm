@@ -482,3 +482,8 @@ let get_pieces_of_code t =
   | Immutable_float_array _
   | Mutable_string _
   | Immutable_string _ -> Code_id.Map.empty
+
+let is_fully_static t =
+  free_names t
+  |> Name_occurrences.variables
+  |> Variable.Set.is_empty

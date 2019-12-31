@@ -537,6 +537,8 @@ end and Static_const : sig
   val get_pieces_of_code
      : t
     -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
+
+  val is_fully_static : t -> bool
 end
 
 module Function_declaration = Function_declaration
