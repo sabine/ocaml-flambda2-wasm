@@ -14,41 +14,38 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** The Flambda representation of a single compilation unit's code. *)
+(** The form of expression that binds symbols to statically-allocated
+    constants. *)
 
-[@@@ocaml.warning "+a-30-40-41-42"]
+module Bound_symbols : sig
+  type t =
+    | Singleton : Symbol.t -> t
+      (** A binding of a single symbol of kind [Value]. *)
+    | Code_and_set_of_closures of {
+        code_ids : Code_id.Set.t;
+        closure_symbols : Symbol.t Closure_id.Map.t;
+      }
+      (** A recursive binding of possibly multiple symbols to the individual
+          closures within a set of closures; and/or bindings of code to
+          code IDs. *)
 
-type t = {
-  imported_symbols : Flambda_kind.t Symbol.Map.t;
-  root_symbol : Symbol.t;
-  exn_continuation : Continuation.t;
-  body : Expr.t;
-}
+  val being_defined : t -> Symbol.Set.t
 
-(** Perform well-formedness checks on the program. *)
-val invariant : t -> unit
+  val code_being_defined : t -> Code_id.Set.t
 
-(** Print a program to a formatter. *)
-val print : Format.formatter -> t -> unit
+  val closure_symbols_being_defined : t -> Symbol.Set.t
 
-val create
-   : imported_symbols:Flambda_kind.t Symbol.Map.t
-  -> root_symbol:Symbol.t
-  -> exn_continuation:Continuation.t
-  -> body:Expr.t
-  -> t
+  include Expr_std.S with type t := t
+end
 
-(** All free names in the given program.  Imported symbols are not treated
-    as free. *)
-val free_names : t -> Name_occurrences.t
+type t
 
-val used_closure_vars : t -> Var_within_closure.Set.t
+val create : Bound_symbols.t -> Static_const.t -> Expr.t -> t
 
-(** All symbols imported from other compilation units by the given program. *)
-val imported_symbols : t -> Flambda_kind.t Symbol.Map.t
+val bound_symbols : t -> Bound_symbols.t
 
-(** The module block symbol for the given program (the only symbol that
-    can never be eliminated). *)
-val root_symbol : t -> Symbol.t
+val defining_expr : t -> Static_const.t
 
 val body : t -> Expr.t
+
+include Expr_std.S with type t := t

@@ -29,7 +29,7 @@ type descr = private
       signal handlers as a result of reaching a safe point). *)
   | Let_symbol of Let_symbol.t
   (** Bind code and/or data symbol(s).  This form of expression is only
-      allowed in contexts where it is certain to be executed only once. *)
+      allowed in certain "toplevel" contexts. *)
   | Let_cont of Let_cont_expr.t
   (** Define one or more continuations. *)
   | Apply of Apply.t

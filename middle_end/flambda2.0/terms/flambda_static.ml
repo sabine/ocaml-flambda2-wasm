@@ -14,7 +14,21 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+[@@@ocaml.warning "+a-30-40-41-42"]
+
+type t = {
+  imported_symbols : Flambda_kind.t Symbol.Map.t;
+  root_symbol : Symbol.t;
+  exn_continuation : Continuation.t;
+  body : Expr.t;
+}
+
+let create ~imported_symbols ~root_symbol ~exn_continuation ~body =
+  { imported_symbols;
+    root_symbol;
+    exn_continuation;
+    body;
+  }
 
 let fprintf = Format.fprintf
 

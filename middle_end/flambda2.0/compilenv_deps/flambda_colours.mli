@@ -38,6 +38,7 @@ val variable : unit -> string
 val closure_element : unit -> string
 
 val let_bound_var : unit -> string
+val let_bound_symbol : unit -> string
 
 val expr_keyword : unit -> string
 val static_keyword : unit -> string
