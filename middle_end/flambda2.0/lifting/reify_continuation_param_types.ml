@@ -49,7 +49,7 @@ let lift_set_of_closures_discovered_via_reified_continuation_param_types dacc
   let module I = T.Function_declaration_type.Inlinable in
   let set_of_closures =
     let function_decls =
-      Closure_id.Map.mapi (fun closure_id inlinable ->
+      Closure_id.Map.map (fun inlinable ->
         Function_declaration.create ~code_id:(I.code_id inlinable)
           ~params_arity:(I.param_arity inlinable)
           ~result_arity:(I.result_arity inlinable)
@@ -181,7 +181,7 @@ module Bindings_top_sort =
       let (>>=) t f = f t
     end)
 
-let lift_via_reification_of_continuation_param_types dacc cont ~params
+let lift_via_reification_of_continuation_param_types dacc ~params
       ~(extra_params_and_args : Continuation_extra_params_and_args.t)
       ~(handler : Expr.t) =
   let allowed_free_vars =
@@ -189,7 +189,7 @@ let lift_via_reification_of_continuation_param_types dacc cont ~params
       (KP.List.var_set extra_params_and_args.extra_params)
   in
   let dacc, reified_continuation_params_to_symbols, reified_definitions,
-      closure_symbols_by_set =
+      _closure_symbols_by_set =
     reify_types_of_continuation_param_types dacc allowed_free_vars
   in
   (* CR mshinwell: If recursion extends beyond that which can be handled
@@ -204,7 +204,7 @@ let lift_via_reification_of_continuation_param_types dacc cont ~params
     let sorted =
       Bindings_top_sort.top_closure reified_definitions
         ~key:(fun (bound_syms, _static_const) ->
-          Bound_symbols.being_defined bound_syms)
+          Let_symbol.Bound_symbols.being_defined bound_syms)
         ~deps:(fun (bound_syms, static_const) ->
           let var_deps =
             static_const
@@ -234,17 +234,16 @@ let lift_via_reification_of_continuation_param_types dacc cont ~params
                  illegal recursion has been constructed, it could cause the
                  topological sort to succeed and the fatal error below to be
                  concealed. *)
-              Bound_symbols.closure_symbols_being_defined bound_syms
+              Let_symbol.Bound_symbols.closure_symbols_being_defined bound_syms
             in
             Symbol.Set.diff sym_deps closure_symbols_being_defined
           in
           Symbol.Set.fold (fun sym deps ->
               let dep =
-                List.find_opt (fun (Static_structure.S (syms, static_const)) ->
+                List.find_opt (fun (bound_symbols, _static_const) ->
                     Symbol.Set.mem sym
-                      (Bound_symbols.being_defined bound_syms))
+                      (Let_symbol.Bound_symbols.being_defined bound_symbols))
                   reified_definitions
-                  sym
               in
               match dep with
               | Some dep -> dep :: deps
@@ -255,26 +254,28 @@ let lift_via_reification_of_continuation_param_types dacc cont ~params
             [])
     in
     match sorted with
-    | Ok sorted ->
-      List.rev sorted
+    | Ok sorted -> sorted
     | Error _ ->
       Misc.fatal_errorf "Potential [Let_symbol] bindings arising from reified \
           types of continuation parameters contain recursion that cannot be \
           compiled:@ %a"
-        Format.pp_print_list ~pp_sep:Format.pp_print_space
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space
           (fun ppf (bound_symbols, defining_expr) ->
             Format.fprintf ppf "@[<hov 1>%a@ %a@]"
-              Bound_symbols.print bound_symbols
-              Static_const.print defining_expr)
-        sorted
+              Let_symbol.Bound_symbols.print bound_symbols
+              Static_const.print defining_expr))
+        reified_definitions
   in
   (* By effectively reversing the list during the fold, we rely on the
      following property:
        Let the list L be a topological sort of a directed graph G.
        Then the reverse of L is a topological sort of the transpose of G.
   *)
-  List.fold_left (fun handler (bound_symbols, defining_expr) ->
-      Let_symbol.create bound_symbols defining_expr handler
-      |> Expr.create_let_symbol)
-    handler
-    reified_definitions
+  let handler =
+    List.fold_left (fun handler (bound_symbols, defining_expr) ->
+        Let_symbol.create bound_symbols defining_expr handler
+        |> Expr.create_let_symbol)
+      handler
+      reified_definitions
+  in
+  dacc, handler

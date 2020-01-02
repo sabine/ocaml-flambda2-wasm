@@ -22,8 +22,7 @@
 
 val lift_via_reification_of_continuation_param_types
    : Downwards_acc.t
-  -> Continuation.t
   -> params:Kinded_parameter.List.t
   -> extra_params_and_args:Continuation_extra_params_and_args.t
   -> handler:Flambda.Expr.t
-  -> Flambda.Expr.t
+  -> Downwards_acc.t * Flambda.Expr.t

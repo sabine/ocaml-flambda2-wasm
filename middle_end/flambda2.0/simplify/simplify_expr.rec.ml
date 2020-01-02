@@ -331,17 +331,17 @@ and simplify_non_recursive_let_cont_handler
                     DA.create (DE.with_typing_env denv typing_env)
                       cont_uses_env r
                   in
-                  let handler =
+                  let dacc, handler =
                     match Continuation.sort cont with
                     | Normal
                        when is_single_inlinable_use
-                         || not at_unit_toplevel -> handler
-                    | Return | Toplevel_return | Exn -> handler
+                         || not at_unit_toplevel -> dacc, handler
+                    | Return | Toplevel_return | Exn -> dacc, handler
                     | Normal ->
                       assert at_unit_toplevel;
                       Reify_continuation_param_types.
                         lift_via_reification_of_continuation_param_types dacc
-                          cont ~params ~extra_params_and_args ~handler
+                          ~params ~extra_params_and_args ~handler
                   in
                   let dacc =
                     if at_unit_toplevel then dacc
