@@ -38,7 +38,7 @@ let parameter () = C.fg_256 198
 let symbol () = C.fg_256 98
 let variable () = C.fg_256 111
 let closure_element () = C.fg_256 31
-let code_id () = C.fg_256 202
+let code_id () = C.fg_256 172
 
 let expr_keyword () = C.fg_256 51
 let static_keyword () = (C.fg_256 255) ^ (C.bg_256 240)

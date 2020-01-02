@@ -41,10 +41,7 @@ module Bound_symbols = struct
         Code_id.Set.elements code_ids, Closure_id.Map.bindings closure_symbols
       with
       | [code_id], [] ->
-        Format.fprintf ppf "@<0>%s%a@<0>%s"
-          (Flambda_colours.code_id ())
-          Code_id.print code_id
-          (Flambda_colours.normal ())
+        Format.fprintf ppf "%a" Code_id.print code_id
       | [], [closure_binding] ->
         Format.fprintf ppf "@<0>%s%a@<0>%s"
           (Flambda_colours.symbol ())
@@ -52,14 +49,10 @@ module Bound_symbols = struct
           (Flambda_colours.normal ())
       | _, _ ->
         Format.fprintf ppf "@[<hov 1>\
-            @[<hov 1>(code_ids@ (@<0>%s%a@<0>%s))@]@ \
+            @[<hov 1>(code_ids@ (%a))@]@ \
             @[<hov 1>(closure_symbols@ {%a})@]\
             @]"
-          (Flambda_colours.code_id ())
-          (Format.pp_print_list ~pp_sep:Format.pp_print_space
-            Code_id.print)
-          (Code_id.Set.elements code_ids)
-          (Flambda_colours.normal ())
+          Code_id.Set.print code_ids
           (Format.pp_print_list ~pp_sep:Format.pp_print_space
             print_closure_binding)
           (Closure_id.Map.bindings closure_symbols)

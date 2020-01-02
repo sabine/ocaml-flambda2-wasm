@@ -202,12 +202,14 @@ let print_params_and_body_with_cache ~cache ppf params_and_body =
       params_and_body
 
 let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
-  (* CR mshinwell: elide "newer_version_of" when None *)
   Format.fprintf ppf "@[<hov 1>(\
-      @[<hov 1>(newer_version_of@ %a)@]@ \
+      @[<hov 1>@<0>%s(newer_version_of@ %a)@<0>%s@]@ \
       %a\
       )@]"
+    (if Option.is_none newer_version_of then Flambda_colours.elide ()
+     else Flambda_colours.normal ())
     (Misc.Stdlib.Option.print Code_id.print) newer_version_of
+    (Flambda_colours.normal ())
     (print_params_and_body_with_cache ~cache) params_and_body
 
 let print_with_cache ~cache ppf t =
@@ -226,12 +228,21 @@ let print_with_cache ~cache ppf t =
         Field_of_block.print) fields
   | Code_and_set_of_closures { code; set_of_closures; } ->
     if Option.is_none set_of_closures then
-      fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
-          @[<hov 1>%a@]\
-          ))@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        (Code_id.Map.print (print_code_with_cache ~cache)) code
+      match Code_id.Map.get_singleton code with
+      | None ->
+        fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+            @[<hov 1>%a@]\
+            ))@]"
+          (Flambda_colours.static_part ())
+          (Flambda_colours.normal ())
+          (Code_id.Map.print (print_code_with_cache ~cache)) code
+      | Some (_code_id, code) ->
+        fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+            @[<hov 1>%a@]\
+            ))@]"
+          (Flambda_colours.static_part ())
+          (Flambda_colours.normal ())
+          (print_code_with_cache ~cache) code
     else
       fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
           @[<hov 1>(code@ (%a))@]@ \

@@ -21,7 +21,15 @@ module Unit_id = Id_types.UnitId (Id) (Compilation_unit)
 
 type t = Unit_id.t
 
-include Identifiable.Make (Unit_id)
+include Identifiable.Make (struct
+  include Unit_id
+
+  let print ppf t =
+    Format.fprintf ppf "@<0>%s%a@<0>%s"
+      (Flambda_colours.code_id ())
+      print t
+      (Flambda_colours.normal ())
+end)
 
 let create ~name comp_unit = Unit_id.create ~name comp_unit
 let get_compilation_unit = Unit_id.unit
