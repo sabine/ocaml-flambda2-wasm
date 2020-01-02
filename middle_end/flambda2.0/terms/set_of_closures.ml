@@ -87,3 +87,15 @@ let apply_name_permutation
     { function_decls = function_decls';
       closure_elements = closure_elements';
     }
+
+let disjoint_union t1 t2 =
+  let function_decls =
+    Function_declarations.disjoint_union t1.function_decls t2.function_decls
+  in
+  let closure_elements =
+    Var_within_closure.Map.disjoint_union t1.closure_elements
+      t2.closure_elements
+  in
+  { function_decls;
+    closure_elements;
+  }

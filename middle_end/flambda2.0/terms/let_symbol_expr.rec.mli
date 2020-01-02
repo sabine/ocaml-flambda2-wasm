@@ -37,6 +37,8 @@ module Bound_symbols : sig
 
   val closure_symbols_being_defined : t -> Symbol.Set.t
 
+  val disjoint_union : t -> t -> t
+
   include Expr_std.S with type t := t
 end
 

@@ -82,3 +82,5 @@ val get_pieces_of_code
   -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 
 val is_fully_static : t -> bool
+
+val disjoint_union : t -> t -> t

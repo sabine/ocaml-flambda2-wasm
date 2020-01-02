@@ -42,8 +42,6 @@ let lift dacc ty ~bound_to static_const =
       (Linkage_name.create (Variable.unique_name bound_to))
   in
   if not (K.equal (T.kind ty) K.value) then begin
-    (* Sets of closures may be lifted and are not of kind [Value], but they
-       are dealt with directly in [Simplify_named]. *)
     Misc.fatal_errorf "Cannot lift non-[Value] variable: %a"
       Variable.print bound_to
   end;
@@ -79,7 +77,19 @@ let try_to_reify dacc (term : Reachable.t) ~bound_to =
     | Lift to_lift ->
       if Name_mode.is_normal occ_kind then
         let static_const = create_static_const to_lift in
-        lift dacc ty ~bound_to static_const
+        (* We cannot currently handle the lifting of constants that are
+           recursive with a symbol currently being defined, unless the
+           constant is a closure, which it never is in this case.
+           (An example of such a constant would be a pair, created in a
+           recursive function [f] that has no free variables, containing
+           the closure [f].) *)
+        let overlap_with_current_definitions =
+          Symbol.Set.exists (fun sym ->
+              DE.symbol_is_currently_being_defined denv sym)
+            (Name_occurrences.symbols (Static_const.free_names static_const))
+        in
+        if overlap_with_current_definitions then term, dacc, ty
+        else lift dacc ty ~bound_to static_const
       else
         term, dacc, ty
     | Simple simple ->

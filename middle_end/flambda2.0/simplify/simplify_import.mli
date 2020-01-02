@@ -47,6 +47,7 @@ module FD = Function_declaration
 module FU = Flambda_unit
 module K = Flambda_kind
 module KP = Kinded_parameter
+module LC = Simplify_env_and_result.Lifted_constant
 module NM = Name_mode
 module P = Flambda_primitive
 module R = Simplify_env_and_result.Result

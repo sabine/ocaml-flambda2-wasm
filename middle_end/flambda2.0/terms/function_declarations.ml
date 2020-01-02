@@ -52,3 +52,7 @@ let apply_name_permutation ({ funs; } as t) perm =
   in
   if funs == funs' then t
   else { funs = funs'; }
+
+let disjoint_union t1 t2 =
+  let funs = Closure_id.Map.disjoint_union t1.funs t2.funs in
+  { funs; }

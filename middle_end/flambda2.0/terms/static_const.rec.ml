@@ -472,3 +472,33 @@ let is_fully_static t =
   free_names t
   |> Name_occurrences.variables
   |> Variable.Set.is_empty
+
+let disjoint_union t1 t2 =
+  match t1, t2 with
+  | Code_and_set_of_closures { code = code1; set_of_closures = set1; },
+    Code_and_set_of_closures { code = code2; set_of_closures = set2; } ->
+    let code = Code_id.Map.disjoint_union code1 code2 in
+    let set_of_closures =
+      match set1, set2 with
+      | None, None -> None
+      | Some set, None | None, Some set -> Some set
+      | Some set1, Some set2 ->
+        Some (Set_of_closures.disjoint_union set1 set2)
+    in
+    Code_and_set_of_closures {
+      code;
+      set_of_closures;
+    }
+  | Code_and_set_of_closures _,
+    (Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
+    | Immutable_float_array _ | Mutable_string _ | Immutable_string _)
+  | (Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
+    | Immutable_float_array _ | Mutable_string _ | Immutable_string _),
+    Code_and_set_of_closures _
+  | (Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
+    | Immutable_float_array _ | Mutable_string _ | Immutable_string _),
+    (Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
+    | Immutable_float_array _ | Mutable_string _ | Immutable_string _) ->
+    Misc.fatal_errorf "Cannot [disjoint_union] the following:@ %a@ and@ %a"
+      print t1
+      print t2

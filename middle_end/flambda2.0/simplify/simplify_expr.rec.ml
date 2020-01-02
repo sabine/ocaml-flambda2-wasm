@@ -48,6 +48,7 @@ and simplify_let_symbol
         compilation units (not even at the toplevel of function bodies):@ %a"
       LS.print let_symbol_expr
   end;
+  let module Bound_symbols = LS.Bound_symbols in
   let bound_symbols = LS.bound_symbols let_symbol_expr in
   Symbol.Set.iter (fun sym ->
       if DE.mem_symbol (DA.denv dacc) sym then begin
@@ -62,17 +63,82 @@ and simplify_let_symbol
           Code_id.print code_id
           LS.print let_symbol_expr
       end)
-    (LS.Bound_symbols.code_being_defined bound_symbols);
+    (Bound_symbols.code_being_defined bound_symbols);
   let defining_expr = LS.defining_expr let_symbol_expr in
   let body = LS.body let_symbol_expr in
+  let prior_lifted_constants = R.get_lifted_constants (DA.r dacc) in
+  let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
   let bound_symbols, defining_expr, dacc =
+    let dacc =
+      DA.map_denv dacc ~f:(fun denv ->
+        Symbol.Set.fold (fun symbol denv ->
+            DE.now_defining_symbol denv symbol)
+          (Name_occurrences.symbols (Bound_symbols.free_names bound_symbols))
+          denv)
+    in
     Simplify_static_const.simplify_static_const dacc bound_symbols defining_expr
   in
-  (* XXX Retrieve and add lifted constants here (some of which may need to
-     go in [defining_expr]. *)
-  let bindings_outermost_first = [bound_symbols, defining_expr] in
+  let defining_expr_lifted_constants = R.get_lifted_constants (DA.r dacc) in
+  let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
   let body, user_data, uacc = simplify_expr dacc body k in
-  (* XXX This should do the deletion of the [Let_symbol], since we need the
+  let subsequent_lifted_constants = R.get_lifted_constants (UA.r uacc) in
+  let uacc =
+    UA.map_r uacc ~f:(fun r -> R.set_lifted_constants r prior_lifted_constants)
+  in
+  let defining_expr_lifted_constants_not_in_same_set,
+      bound_symbols, defining_expr =
+    let bound_names = Bound_symbols.free_names bound_symbols in
+    List.fold_left
+      (fun (defining_expr_lifted_constants_not_in_same_set,
+            bound_symbols, defining_expr) lifted_constant ->
+        let bound_symbols_lifted_constant = LC.bound_symbols lifted_constant in
+        let defining_expr_lifted_constant = LC.defining_expr lifted_constant in
+        let overlap =
+          Name_occurrences.overlap bound_names
+            (Static_const.free_names defining_expr)
+        in
+        match bound_symbols_lifted_constant with
+        | Singleton _ ->
+          let defining_expr_lifted_constants_not_in_same_set =
+            (bound_symbols, defining_expr_lifted_constant)
+              :: defining_expr_lifted_constants_not_in_same_set
+          in
+          if overlap then begin
+            Misc.fatal_errorf "Lifted constant that is not allowed to be \
+                involved in a recursive binding uses name(s) from the \
+                current [Let_symbol] recursively:@ %a@ Current [Let_symbol] \
+                binds:@ %a"
+              LC.print lifted_constant
+              Bound_symbols.print bound_symbols
+          end;
+          defining_expr_lifted_constants_not_in_same_set,
+            bound_symbols, defining_expr
+        | Code_and_set_of_closures _ ->
+          if overlap then
+            let bound_symbols =
+              Bound_symbols.disjoint_union bound_symbols
+                bound_symbols_lifted_constant
+            in
+            let defining_expr =
+              Static_const.disjoint_union defining_expr
+                defining_expr_lifted_constant
+            in
+            defining_expr_lifted_constants_not_in_same_set,
+              bound_symbols, defining_expr
+          else
+            defining_expr_lifted_constants_not_in_same_set,
+              bound_symbols, defining_expr)
+      ([], bound_symbols, defining_expr)
+      defining_expr_lifted_constants
+  in
+  let bindings_outermost_first =
+    defining_expr_lifted_constants_not_in_same_set
+      @ (bound_symbols, defining_expr)
+      :: List.map (fun lifted_constant ->
+          LC.bound_symbols lifted_constant, LC.defining_expr lifted_constant)
+        subsequent_lifted_constants
+  in
+  (* XXX This should do the deletion of the [Let_symbol]s, since we need the
      code age relation to do that. *)
   let expr =
     List.fold_left (fun body (bound_symbols, defining_expr) ->

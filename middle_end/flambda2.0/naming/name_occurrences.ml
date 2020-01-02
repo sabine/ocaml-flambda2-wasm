@@ -68,6 +68,8 @@ end) : sig
 
   val subset_domain : t -> t -> bool
 
+  val overlap : t -> t -> bool
+
   val mem : t -> N.t -> bool
 
   val remove : t -> N.t -> t
@@ -231,6 +233,9 @@ end = struct
   let keys t = N.Map.keys t
 
   let subset_domain t1 t2 = N.Set.subset (N.Map.keys t1) (N.Map.keys t2)
+
+  let overlap t1 t2 =
+    not (N.Set.is_empty (N.Set.inter (N.Map.keys t1) (N.Map.keys t2)))
 
   let mem t name = N.Map.mem name t
 
@@ -531,6 +536,14 @@ let subset_domain t1 t2 =
     ~for_symbols:For_symbols.subset_domain
     ~for_closure_vars:For_closure_vars.subset_domain
     ~for_code_ids:For_code_ids.subset_domain
+    t1 t2
+
+let overlap t1 t2 =
+  binary_predicate ~for_variables:For_variables.overlap
+    ~for_continuations:For_continuations.overlap
+    ~for_symbols:For_symbols.overlap
+    ~for_closure_vars:For_closure_vars.overlap
+    ~for_code_ids:For_code_ids.overlap
     t1 t2
 
 let rec union_list ts =

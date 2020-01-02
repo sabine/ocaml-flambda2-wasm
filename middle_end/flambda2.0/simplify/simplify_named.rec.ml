@@ -376,6 +376,13 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars
         Symbol.create (Compilation_unit.get_current_exn ()) name)
       (Function_declarations.funs function_decls)
   in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Closure_id.Map.fold (fun _closure_id closure_symbol denv ->
+          DE.now_defining_symbol denv closure_symbol)
+        closure_symbols
+        denv)
+  in
   let _set_of_closures, dacc, types_of_symbols, bound_symbols, static_const =
     Simplify_static_const.simplify_set_of_closures0 dacc
       set_of_closures ~closure_symbols ~closure_elements ~closure_element_types

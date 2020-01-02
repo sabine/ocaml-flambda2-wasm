@@ -97,6 +97,34 @@ module Bound_symbols = struct
           Name_occurrences.add_symbol bound_names closure_sym Name_mode.normal)
         closure_symbols
         from_code_ids
+
+  let disjoint_union t1 t2 =
+    match t1, t2 with
+    | Code_and_set_of_closures {
+        code_ids = code_ids1;
+        closure_symbols = closure_symbols1;
+      },
+      Code_and_set_of_closures {
+        code_ids = code_ids2;
+        closure_symbols = closure_symbols2;
+      } ->
+      let code_ids = Code_id.Set.inter code_ids1 code_ids2 in
+      if not (Code_id.Set.is_empty code_ids) then begin
+        Misc.fatal_errorf "Code IDs not disjoint in@ %a@ and@ %a"
+          print t1
+          print t2
+      end;
+      Code_and_set_of_closures {
+        code_ids = Code_id.Set.union code_ids1 code_ids2;
+        closure_symbols =
+          Closure_id.Map.disjoint_union closure_symbols1 closure_symbols2;
+      }
+    | Code_and_set_of_closures _, Singleton _
+    | Singleton _, Code_and_set_of_closures _
+    | Singleton _, Singleton _ ->
+      Misc.fatal_errorf "Cannot [disjoint_union] the following:@ %a@ and@ %a"
+        print t1
+        print t2
 end
 
 type t = {

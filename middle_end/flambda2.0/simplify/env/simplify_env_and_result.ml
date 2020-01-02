@@ -38,12 +38,14 @@ end = struct
     code : Function_params_and_body.t Code_id.Map.t;
     at_unit_toplevel : bool;
     unit_toplevel_exn_continuation : Continuation.t;
+    symbols_currently_being_defined : Symbol.Set.t;
   }
 
   let print ppf { backend = _; round; typing_env;
                   inlined_debuginfo; can_inline;
                   inlining_depth_increment; float_const_prop;
                   code; at_unit_toplevel; unit_toplevel_exn_continuation;
+                  symbols_currently_being_defined;
                 } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(round@ %d)@]@ \
@@ -54,6 +56,7 @@ end = struct
         @[<hov 1>(float_const_prop@ %b)@] \
         @[<hov 1>(at_unit_toplevel@ %b)@] \
         @[<hov 1>(unit_toplevel_exn_continuation@ %a)@] \
+        @[<hov 1>(symbols_currently_being_defined@ %a)@] \
         @[<hov 1>(code@ %a)@]\
         )@]"
       round
@@ -64,6 +67,7 @@ end = struct
       float_const_prop
       at_unit_toplevel
       Continuation.print unit_toplevel_exn_continuation
+      Symbol.Set.print symbols_currently_being_defined
       (Code_id.Map.print Function_params_and_body.print) code
 
   let invariant _t = ()
@@ -81,6 +85,7 @@ end = struct
       code = Code_id.Map.empty;
       at_unit_toplevel = true;
       unit_toplevel_exn_continuation;
+      symbols_currently_being_defined = Symbol.Set.empty;
     }
 
   let resolver t = TE.resolver t.typing_env
@@ -113,11 +118,28 @@ end = struct
     increment_continuation_scope_level
       (increment_continuation_scope_level t)
 
+  let now_defining_symbol t symbol =
+    if Symbol.Set.mem symbol t.symbols_currently_being_defined then begin
+      Misc.fatal_errorf "Already defining symbol %a:@ %a"
+        Symbol.print symbol
+        print t
+    end;
+    let symbols_currently_being_defined =
+      Symbol.Set.add symbol t.symbols_currently_being_defined
+    in
+    { t with
+      symbols_currently_being_defined;
+    }
+
+  let symbol_is_currently_being_defined t symbol =
+    Symbol.Set.mem symbol t.symbols_currently_being_defined
+
   let enter_closure { backend; round; typing_env;
                       inlined_debuginfo = _; can_inline;
                       inlining_depth_increment = _;
                       float_const_prop; code; at_unit_toplevel = _;
                       unit_toplevel_exn_continuation;
+                      symbols_currently_being_defined;
                     } =
     { backend;
       round;
@@ -129,6 +151,7 @@ end = struct
       code;
       at_unit_toplevel = false;
       unit_toplevel_exn_continuation;
+      symbols_currently_being_defined;
     }
 
   let define_variable t var kind =
@@ -623,6 +646,9 @@ end = struct
 
   let get_lifted_constants t = t.lifted_constants_innermost_last
 
+  let set_lifted_constants t consts =
+    { t with lifted_constants_innermost_last = consts; }
+
   let clear_lifted_constants t =
     { t with
       lifted_constants_innermost_last = [];
@@ -641,7 +667,7 @@ end = struct
   let print ppf
         { denv = _ ; bound_symbols; defining_expr; types_of_symbols = _; } =
     Format.fprintf ppf "@[<hov 1>(\
-        @[<hov 1>(bound_symbols@ %a)@]\
+        @[<hov 1>(bound_symbols@ %a)@]@ \
         @[<hov 1>(static_const@ %a)@]\
         )@]"
       Let_symbol.Bound_symbols.print bound_symbols

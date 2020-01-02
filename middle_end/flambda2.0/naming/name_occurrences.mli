@@ -96,6 +96,8 @@ val union_list : t list -> t
     those occurrences are ignored. *)
 val subset_domain : t -> t -> bool
 
+val overlap : t -> t -> bool
+
 val variables : t -> Variable.Set.t
 
 val symbols : t -> Symbol.Set.t

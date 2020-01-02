@@ -60,6 +60,10 @@ module type Downwards_env = sig
 
   val get_continuation_scope_level : t -> Scope.t
 
+  val now_defining_symbol : t -> Symbol.t -> t
+
+  val symbol_is_currently_being_defined : t -> Symbol.t -> bool
+
   val typing_env : t -> Flambda_type.Typing_env.t
 
   val define_variable : t -> Var_in_binding_pos.t -> Flambda_kind.t -> t
@@ -264,6 +268,8 @@ module type Result = sig
       in the order returned (first element of the list defined first). *)
   (* CR mshinwell: Update name to reflect this *)
   val get_lifted_constants : t -> lifted_constant list
+
+  val set_lifted_constants : t -> lifted_constant list -> t
 
   val imported_symbols : t -> Flambda_kind.t Symbol.Map.t
 

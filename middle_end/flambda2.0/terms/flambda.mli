@@ -231,6 +231,8 @@ end and Let_symbol_expr : sig
 
     val closure_symbols_being_defined : t -> Symbol.Set.t
 
+    val disjoint_union : t -> t -> t
+
     include Expr_std.S with type t := t
   end
 
@@ -547,6 +549,8 @@ end and Static_const : sig
       which means that the corresponding value can be statically allocated,
       without any need to patch it afterwards. *)
   val is_fully_static : t -> bool
+
+  val disjoint_union : t -> t -> t
 end
 
 module Function_declaration = Function_declaration
