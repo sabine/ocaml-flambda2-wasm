@@ -137,6 +137,8 @@ module Typing_env : sig
 
   val code_age_relation : t -> Code_age_relation.t
 
+  val with_code_age_relation : t -> Code_age_relation.t -> t
+
   val cut_and_n_way_join
      : t
     -> (t * Apply_cont_rewrite_id.t * Continuation_use_kind.t

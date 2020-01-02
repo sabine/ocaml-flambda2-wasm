@@ -564,6 +564,7 @@ let names t =
 
 let mem_var t var = For_variables.mem t.variables var
 let mem_symbol t symbol = For_symbols.mem t.symbols symbol
+let mem_code_id t code_id = For_code_ids.mem t.code_ids code_id
 
 let mem_name t (name : Name.t) =
   match name with

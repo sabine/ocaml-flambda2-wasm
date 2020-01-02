@@ -122,6 +122,8 @@ val add_to_code_age_relation : t -> newer:Code_id.t -> older:Code_id.t -> t
 
 val code_age_relation : t -> Code_age_relation.t
 
+val with_code_age_relation : t -> Code_age_relation.t -> t
+
 (* CR mshinwell: Consider labelling arguments e.g. [definition_typing_env] *)
 val cut_and_n_way_join
    : t

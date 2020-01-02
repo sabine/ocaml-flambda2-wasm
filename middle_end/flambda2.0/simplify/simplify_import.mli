@@ -18,6 +18,7 @@
 
 module Apply = Flambda.Apply
 module Apply_cont = Flambda.Apply_cont
+module Bound_symbols = Flambda.Let_symbol_expr.Bound_symbols
 module Continuation_handler = Flambda.Continuation_handler
 module Continuation_handlers = Flambda.Continuation_handlers
 module Continuation_params_and_handler = Flambda.Continuation_params_and_handler

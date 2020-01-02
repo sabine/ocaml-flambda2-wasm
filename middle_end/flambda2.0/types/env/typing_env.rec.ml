@@ -751,6 +751,9 @@ let add_to_code_age_relation t ~newer ~older =
 
 let code_age_relation t = t.code_age_relation
 
+let with_code_age_relation t code_age_relation =
+  { t with code_age_relation; }
+
 let cut t ~unknown_if_defined_at_or_later_than:min_scope =
   let current_scope = current_scope t in
   let original_t = t in

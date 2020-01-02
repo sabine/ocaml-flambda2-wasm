@@ -19,6 +19,7 @@
 module CUE = Continuation_uses_env
 module DE = Simplify_env_and_result.Downwards_env
 module R = Simplify_env_and_result.Result
+module TE = Flambda_type.Typing_env
 
 type t = {
   denv : DE.t;
@@ -96,3 +97,12 @@ let num_continuation_uses t cont =
   CUE.num_continuation_uses t.continuation_uses_env cont
 
 let continuation_uses_env t = t.continuation_uses_env
+
+let code_age_relation t =
+  TE.code_age_relation (DE.typing_env (denv t))
+
+let with_code_age_relation t code_age_relation =
+  let typing_env =
+    TE.with_code_age_relation (DE.typing_env (denv t)) code_age_relation
+  in
+  with_denv t (DE.with_typing_env (denv t) typing_env)

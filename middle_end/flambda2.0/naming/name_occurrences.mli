@@ -114,7 +114,11 @@ val newer_version_of_code_ids : t -> Code_id.Set.t
 
 val mem_var : t -> Variable.t -> bool
 
+val mem_symbol : t -> Symbol.t -> bool
+
 val mem_name : t -> Name.t -> bool
+
+val mem_code_id : t -> Code_id.t -> bool
 
 val remove_var : t -> Variable.t -> t
 

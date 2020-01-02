@@ -65,3 +65,7 @@ val with_r : t -> Simplify_env_and_result.Result.t -> t
 include Continuation_uses_env_intf.S with type t := t
 
 val continuation_uses_env : t -> Continuation_uses_env.t
+
+val code_age_relation : t -> Code_age_relation.t
+
+val with_code_age_relation : t -> Code_age_relation.t -> t
