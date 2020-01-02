@@ -148,8 +148,7 @@ let print_with_cache ~cache ppf { bound_symbols; defining_expr; body; } =
     match Expr.descr expr with
     | Let_symbol { bound_symbols; defining_expr; body; } ->
       fprintf ppf
-        "@ @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
-        (Flambda_colours.symbol ())
+        "@ @[<hov 1>%a@<0>%s =@<0>%s@ %a@]"
         Bound_symbols.print bound_symbols
         (Flambda_colours.elide ())
         (Flambda_colours.normal ())
@@ -158,10 +157,9 @@ let print_with_cache ~cache ppf { bound_symbols; defining_expr; body; } =
     | _ -> expr
   in
   fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ (@[<v 0>\
-      @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
+      @[<hov 1>%a@<0>%s =@<0>%s@ %a@]"
     (Flambda_colours.expr_keyword ())
     (Flambda_colours.normal ())
-    (Flambda_colours.symbol ())
     Bound_symbols.print bound_symbols
     (Flambda_colours.elide ())
     (Flambda_colours.normal ())
