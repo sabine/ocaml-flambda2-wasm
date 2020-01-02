@@ -27,7 +27,7 @@ type descr = private
   (** Bind variable(s).  There can be no effect on control flow (save for
       asynchronous operations such as the invocation of finalisers or
       signal handlers as a result of reaching a safe point). *)
-  | Let_symbol of Let_symbol.t
+  | Let_symbol of Let_symbol_expr.t
   (** Bind code and/or data symbol(s).  This form of expression is only
       allowed in certain "toplevel" contexts.  The bound symbols are not
       treated up to alpha conversion. *)

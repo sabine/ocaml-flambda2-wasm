@@ -18,7 +18,7 @@
 
 type descr =
   | Let of Let_expr.t
-  | Let_symbol of Let_symbol.t
+  | Let_symbol of Let_symbol_expr.t
   | Let_cont of Let_cont_expr.t
   | Apply of Apply.t
   | Apply_cont of Apply_cont.t
@@ -96,7 +96,7 @@ let invariant env t =
 let print_with_cache ~cache ppf (t : t) =
   match descr t with
   | Let let_expr -> Let_expr.print_with_cache ~cache ppf let_expr
-  | Let let_symbol_expr ->
+  | Let_symbol let_symbol_expr ->
     Let_symbol_expr.print_with_cache ~cache ppf let_symbol_expr
   | Let_cont let_cont -> Let_cont_expr.print_with_cache ~cache ppf let_cont
   | Apply apply ->
@@ -122,7 +122,7 @@ let free_names t =
   | Not_computed ->
     match descr t with
     | Let let_expr -> Let_expr.free_names let_expr
-    | Let let_symbol_expr -> Let_symbol_expr.free_names let_symbol_expr
+    | Let_symbol let_symbol_expr -> Let_symbol_expr.free_names let_symbol_expr
     | Let_cont let_cont -> Let_cont_expr.free_names let_cont
     | Apply apply -> Apply.free_names apply
     | Apply_cont apply_cont -> Apply_cont.free_names apply_cont

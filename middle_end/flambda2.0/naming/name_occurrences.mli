@@ -58,6 +58,8 @@ val singleton_variable : Variable.t -> Name_mode.t -> t
 
 val add_variable : t -> Variable.t -> Name_mode.t -> t
 
+val add_symbol : t -> Symbol.t -> Name_mode.t -> t
+
 val add_name : t -> Name.t -> Name_mode.t -> t
 
 val add_closure_var : t -> Var_within_closure.t -> Name_mode.t -> t

@@ -14,6 +14,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+[@@@ocaml.warning "+a-4-30-40-41-42"]
+
 (** The form of expression that binds symbols to statically-allocated
     constants. *)
 

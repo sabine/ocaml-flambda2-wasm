@@ -90,7 +90,6 @@ module Field_of_block = struct
 *)
 end
 
-module Static_part = struct
 type 'a or_variable =
   | Const of 'a
   | Var of Variable.t
@@ -98,7 +97,7 @@ type 'a or_variable =
 type mutable_or_immutable = Mutable | Immutable
 
 type code = {
-  params_and_body : Flambda.Function_params_and_body.t or_deleted;
+  params_and_body : Function_params_and_body.t or_deleted;
   newer_version_of : Code_id.t option;
 }
 and 'a or_deleted =
@@ -107,7 +106,7 @@ and 'a or_deleted =
 
 type code_and_set_of_closures = {
   code : code Code_id.Map.t;
-  set_of_closures : Flambda.Set_of_closures.t option;
+  set_of_closures : Set_of_closures.t option;
 }
 
 type t =
@@ -149,7 +148,7 @@ let free_names t =
     let from_set_of_closures =
       match set_of_closures with
       | None -> Name_occurrences.empty
-      | Some set -> Flambda.Set_of_closures.free_names set
+      | Some set -> Set_of_closures.free_names set
     in
     Code_id.Map.fold
       (fun code_id { params_and_body; newer_version_of; } free_names ->
@@ -164,7 +163,7 @@ let free_names t =
           match params_and_body with
           | Deleted -> Name_occurrences.empty
           | Present params_and_body ->
-            Flambda.Function_params_and_body.free_names params_and_body
+            Function_params_and_body.free_names params_and_body
         in
         Name_occurrences.union_list [
           (Name_occurrences.add_code_id Name_occurrences.empty
@@ -178,16 +177,14 @@ let free_names t =
   | Boxed_float (Var v)
   | Boxed_int32 (Var v)
   | Boxed_int64 (Var v)
-  | Boxed_nativeint (Var v)
-  | Mutable_string { initial_value = Var v; }
-  | Immutable_string (Var v) ->
+  | Boxed_nativeint (Var v) ->
     Name_occurrences.singleton_variable v Name_mode.normal
   | Boxed_float (Const _)
   | Boxed_int32 (Const _)
   | Boxed_int64 (Const _)
   | Boxed_nativeint (Const _)
-  | Mutable_string { initial_value = Const _; }
-  | Immutable_string (Const _) -> Name_occurrences.empty
+  | Mutable_string { initial_value = _; }
+  | Immutable_string _ -> Name_occurrences.empty
   | Immutable_float_array fields ->
     List.fold_left (fun fns (field : _ or_variable) ->
         match field with
@@ -201,7 +198,7 @@ let print_params_and_body_with_cache ~cache ppf params_and_body =
   match params_and_body with
   | Deleted -> Format.fprintf ppf "@[<hov 1>(params_and_body@ Deleted)@]"
   | Present params_and_body ->
-    Flambda.Function_params_and_body.print_with_cache ~cache ppf
+    Function_params_and_body.print_with_cache ~cache ppf
       params_and_body
 
 let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
@@ -236,7 +233,7 @@ let print_with_cache ~cache ppf t =
       (Flambda_colours.normal ())
       (Code_id.Map.print (print_code_with_cache ~cache)) code
       (Misc.Stdlib.Option.print
-        (Flambda.Set_of_closures.print_with_cache ~cache))
+        (Set_of_closures.print_with_cache ~cache))
         set_of_closures
   | Boxed_float (Const f) ->
     fprintf ppf "@[@<0>%sBoxed_float@<0>%s %a)@]"
@@ -286,26 +283,16 @@ let print_with_cache ~cache ppf t =
          ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
          print_float_array_field)
       fields
-  | Mutable_string { initial_value = Const s; } ->
+  | Mutable_string { initial_value = s; } ->
     fprintf ppf "@[@<0>%sMutable_string@<0>%s@ \"%s\")@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       s
-  | Mutable_string { initial_value = Var v; } ->
-    fprintf ppf "@[@<0>%sMutable_string@<0>%s@ %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print v
-  | Immutable_string (Const s) ->
+  | Immutable_string s ->
     fprintf ppf "@[@<0>%sImmutable_string@<0>%s@ \"%s\")@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       s
-  | Immutable_string (Var v) ->
-    fprintf ppf "@[@<0>%sImmutable_string@<0>%s@ %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print v
 
 let print ppf t =
   print_with_cache ~cache:(Printing_cache.create ()) ppf t
@@ -318,7 +305,7 @@ let _invariant env t =
     | Block (_tag, _mut, fields) ->
       List.iter (fun field -> Field_of_block.invariant env field) fields
     | Set_of_closures set ->
-      Flambda.Set_of_closures.invariant env set
+      Set_of_closures.invariant env set
     | Boxed_float (Var v) ->
       E.check_variable_is_bound_and_of_kind env v K.naked_float
     | Boxed_int32 (Var v) ->
@@ -374,7 +361,7 @@ let apply_name_permutation t perm =
               | Deleted -> Deleted
               | Present params_and_body_inner ->
                 let params_and_body_inner' =
-                  Flambda.Function_params_and_body.apply_name_permutation
+                  Function_params_and_body.apply_name_permutation
                     params_and_body_inner perm
                 in
                 if params_and_body_inner == params_and_body_inner' then 
@@ -394,7 +381,7 @@ let apply_name_permutation t perm =
         | None -> None
         | Some set ->
           let set' =
-            Flambda.Set_of_closures.apply_name_permutation set perm
+            Set_of_closures.apply_name_permutation set perm
           in
           if set == set' then set_of_closures
           else Some set'
@@ -421,20 +408,12 @@ let apply_name_permutation t perm =
       let v' = Name_permutation.apply_variable perm v in
       if v == v' then t
       else Boxed_nativeint (Var v')
-    | Mutable_string { initial_value = Var v; } ->
-      let v' = Name_permutation.apply_variable perm v in
-      if v == v' then t
-      else Mutable_string { initial_value = Var v'; }
-    | Immutable_string (Var v) ->
-      let v' = Name_permutation.apply_variable perm v in
-      if v == v' then t
-      else Immutable_string (Var v')
     | Boxed_float (Const _)
     | Boxed_int32 (Const _)
     | Boxed_int64 (Const _)
     | Boxed_nativeint (Const _)
-    | Mutable_string { initial_value = Const _; }
-    | Immutable_string (Const _) -> t
+    | Mutable_string { initial_value = _; }
+    | Immutable_string _ -> t
     | Immutable_float_array fields ->
       let changed = ref false in
       let fields =

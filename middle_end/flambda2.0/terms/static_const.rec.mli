@@ -14,6 +14,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+[@@@ocaml.warning "+a-30-40-41-42"]
+
 (** Language terms that represent statically-allocated values. *)
 
 module Field_of_block : sig
@@ -42,7 +44,7 @@ type mutable_or_immutable = Mutable | Immutable
     version of one that existed previously (and may still exist), for
     example after a round of simplification. *)
 type code = {
-  params_and_body : Flambda.Function_params_and_body.t or_deleted;
+  params_and_body : Function_params_and_body.t or_deleted;
   newer_version_of : Code_id.t option;
 }
 and 'a or_deleted =
@@ -54,7 +56,7 @@ and 'a or_deleted =
 type code_and_set_of_closures = {
   code : code Code_id.Map.t;
   (* CR mshinwell: Check the free names of the set of closures *)
-  set_of_closures : Flambda.Set_of_closures.t option;
+  set_of_closures : Set_of_closures.t option;
 }
 
 (** The static structure of a symbol, possibly with holes, ready to be filled
@@ -77,6 +79,6 @@ include Contains_names.S with type t := t
 
 val get_pieces_of_code
    : t
-  -> (Flambda.Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
+  -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 
 val is_fully_static : t -> bool

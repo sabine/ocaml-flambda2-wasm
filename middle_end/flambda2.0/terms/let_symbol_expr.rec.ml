@@ -14,6 +14,8 @@
 (*                                                                        *)
 (**************************************************************************)
 
+[@@@ocaml.warning "+a-4-30-40-41-42"]
+
 module Bound_symbols = struct
   type t =
     | Singleton : Symbol.t -> t
@@ -44,8 +46,12 @@ module Bound_symbols = struct
           print_closure_binding)
         (Closure_id.Map.bindings closure_symbols)
 
+  let print_with_cache ~cache:_ ppf t = print ppf t
+
   (* CR mshinwell: This should have an [invariant] function.  One thing to
      check is that the [closure_symbols] are all distinct. *)
+
+  let invariant _ _ = ()
 
   let being_defined t =
     match t with
@@ -68,7 +74,7 @@ module Bound_symbols = struct
 
   let free_names t =
     match t with
-    | Singleton sym -> Name_occurrences.singleton_symbol sym
+    | Singleton sym -> Name_occurrences.singleton_symbol sym Name_mode.normal
     | Code_and_set_of_closures { code_ids; closure_symbols; } ->
       let from_code_ids =
         Code_id.Set.fold (fun code_id from_code_ids ->
@@ -98,18 +104,18 @@ let bound_symbols t = t.bound_symbols
 let defining_expr t = t.defining_expr
 let body t = t.body
 
-let print_with_cache ~cache ppf ({ bound_symbols; defining_expr; body; } as t) =
-  let rec let_body (expr : Expr.t) =
+let print_with_cache ~cache ppf { bound_symbols; defining_expr; body; } =
+  let rec let_symbol_body (expr : Expr.t) =
     match Expr.descr expr with
-    | Let ({ bound_symbols; defining_expr; body; } as t) ->
+    | Let_symbol { bound_symbols; defining_expr; body; } ->
       fprintf ppf
         "@ @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
         (Flambda_colours.let_bound_symbol ())
         Bound_symbols.print bound_symbols
         (Flambda_colours.elide ())
         (Flambda_colours.normal ())
-        (Named.print_with_cache ~cache) defining_expr;
-      let_body body
+        Static_const.print defining_expr; (* CR mshinwell: print_with_cache? *)
+      let_symbol_body body
     | _ -> expr
   in
   fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ (@[<v 0>\
@@ -120,27 +126,27 @@ let print_with_cache ~cache ppf ({ bound_symbols; defining_expr; body; } as t) =
     Bound_symbols.print bound_symbols
     (Flambda_colours.elide ())
     (Flambda_colours.normal ())
-    (Static_const.print_with_cache ~cache) defining_expr;
-  let expr = let_body body in
+    Static_const.print defining_expr;
+  let body = let_symbol_body body in
   fprintf ppf "@])@ %a)@]" (Expr.print_with_cache ~cache) body
 
 let print ppf t = print_with_cache ~cache:(Printing_cache.create ()) ppf t
 
-let invariant env { bound_symbols = _; defining_expr; body; } =
-  Named.invariant env defining_expr;
+let invariant env { bound_symbols = _; defining_expr = _; body; } =
+  (* Static_const.invariant env defining_expr; *) (* CR mshinwell: FIXME *)
   Expr.invariant env body
 
 let free_names { bound_symbols; defining_expr; body; } =
   let from_bound_symbols = Bound_symbols.free_names bound_symbols in
   let from_defining_expr =
-    match defining_expr with
-    | Singleton sym -> Name_occurrences.singleton_symbol sym
+    match bound_symbols with
+    | Singleton _ -> Static_const.free_names defining_expr
     | Code_and_set_of_closures _ ->
       Name_occurrences.diff (Static_const.free_names defining_expr)
         from_bound_symbols
   in
   Name_occurrences.union from_defining_expr
-    (Name_occurrences.diff (Expr.free_names body) from_bound_symbols
+    (Name_occurrences.diff (Expr.free_names body) from_bound_symbols)
 
 let apply_name_permutation ({ bound_symbols; defining_expr; body; } as t) perm =
   let defining_expr' = Static_const.apply_name_permutation defining_expr perm in
@@ -168,7 +174,7 @@ let pieces_of_code ?newer_versions_of ?set_of_closures code =
         })
       code
   in
-  let static_part : Static_const.t =
+  let static_const : Static_const.t =
     let set_of_closures = Option.map snd set_of_closures in
     Code_and_set_of_closures {
       code;
