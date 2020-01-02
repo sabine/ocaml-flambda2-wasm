@@ -43,3 +43,5 @@ val has_empty_environment : t -> bool
 val environment_doesn't_mention_variables : t -> bool
 
 val disjoint_union : t -> t -> t
+
+include Identifiable.S with type t := t

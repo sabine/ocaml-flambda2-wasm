@@ -50,3 +50,5 @@ val funs : t -> Function_declaration.t Closure_id.Map.t
 val find : t -> Closure_id.t -> Function_declaration.t
 
 val disjoint_union : t -> t -> t
+
+val compare : t -> t -> int

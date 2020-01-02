@@ -103,7 +103,7 @@ let lift_set_of_closures_discovered_via_reified_continuation_param_types dacc
          assigned. (That is also the point at which references to the closures
          being lifted, via the continuation's parameters, will be changed to go
          via symbols.) *)
-      Let_symbol_expr.pieces_of_code
+      Let_symbol.pieces_of_code
         ~newer_versions_of:Code_id.Map.empty
         ~set_of_closures:(closure_symbols, set_of_closures)
         Code_id.Map.empty
@@ -139,7 +139,8 @@ let reify_types_of_continuation_param_types dacc
            continuation's parameters. *)
         TE.get_canonical_simple (DE.typing_env (DA.denv dacc))
           ~min_name_mode:NM.normal (Simple.var var)
-        |> Or_bottom.value_map ~bottom:None ~f:Simple.must_be_symbol
+        |> Or_bottom.value_map ~bottom:None
+             ~f:(Option.map Simple.must_be_symbol)
       in
       match existing_symbol with
       | Some _ ->
@@ -147,8 +148,8 @@ let reify_types_of_continuation_param_types dacc
           closure_symbols_by_set
       | None ->
         match
-          T.reify ~allowed_free_vars:reified_continuation_param_types typing_env
-            ~min_name_mode:NM.normal ty
+          T.reify ~allowed_free_vars:reified_continuation_param_types
+            (DE.typing_env (DA.denv dacc)) ~min_name_mode:NM.normal ty
         with
         | Lift to_lift ->
           lift_non_closure_discovered_via_reified_continuation_param_types
