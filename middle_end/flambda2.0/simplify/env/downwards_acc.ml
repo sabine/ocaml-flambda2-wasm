@@ -49,6 +49,15 @@ let map_denv t ~f =
     denv = f t.denv;
   }
 
+let map_denv2 t ~f =
+  let denv, user_data = f t.denv in
+  let t =
+    { t with
+      denv;
+    }
+  in
+  t, user_data
+
 let with_denv t denv =
   { t with
     denv;
