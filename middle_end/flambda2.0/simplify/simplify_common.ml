@@ -161,6 +161,8 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
       (static_const : Static_const.t) body =
   let free_names_after = Expr.free_names body in
   let symbols_after = Name_occurrences.symbols free_names_after in
+Format.eprintf "Creating let_symbol for %a, code age relation:@ %a\n%!"
+  Bound_symbols.print bound_symbols Code_age_relation.print code_age_relation;
   match bound_symbols with
   | Singleton sym ->
     if Symbol.Set.mem sym symbols_after then
@@ -194,16 +196,9 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
                  than going to, or staying as, [Deleted]) if no subsequent
                  [newer_version_of] references it. *)
               (* CR mshinwell: The "free_names_in_others" stuff is
-                 inefficient. *)
+                 inefficient and hacky. *)
               let free_names_in_others =
-                let code =
-                  Code_id.Map.add code_id
-                    (Static_const. {
-                      params_and_body = Deleted;
-                      newer_version_of = None;
-                    })
-                    code
-                in
+                let code = Code_id.Map.remove code_id code in
                 let static_const : Static_const.t =
                   Code_and_set_of_closures { code; set_of_closures; }
                 in
