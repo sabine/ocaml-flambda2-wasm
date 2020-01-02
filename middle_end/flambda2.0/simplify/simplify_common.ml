@@ -181,7 +181,6 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
           Bound_symbols.print bound_symbols
           Static_const.print static_const
     in
-    let free_names_in_const = Static_const.free_names static_const in
     let code =
       Code_id.Map.mapi
         (fun code_id
@@ -191,9 +190,28 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
             match params_and_body with
             | Deleted -> Deleted
             | Present _ ->
+              (* CR mshinwell: The binding can be completely removed (rather
+                 than going to, or staying as, [Deleted]) if no subsequent
+                 [newer_version_of] references it. *)
+              (* CR mshinwell: The "free_names_in_others" stuff is
+                 inefficient. *)
+              let free_names_in_others =
+                let code =
+                  Code_id.Map.add code_id
+                    (Static_const. {
+                      params_and_body = Deleted;
+                      newer_version_of = None;
+                    })
+                    code
+                in
+                let static_const : Static_const.t =
+                  Code_and_set_of_closures { code; set_of_closures; }
+                in
+                Static_const.free_names static_const
+              in
               let code_unused =
                 (not (Name_occurrences.mem_code_id free_names_after code_id))
-                  && (not (Name_occurrences.mem_code_id free_names_in_const
+                  && (not (Name_occurrences.mem_code_id free_names_in_others
                     code_id))
               in
               let can_delete_code =
@@ -215,10 +233,21 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
        [Select_closure] expressions to symbols (which should happen, but even
        still). *)
     let all_closure_symbols_unused =
-      Symbol.Set.for_all (fun symbol ->
+      Closure_id.Map.for_all (fun closure_id symbol ->
+          let free_names_in_others =
+            match set_of_closures with
+            | Some set ->
+              let set =
+                Set_of_closures.filter_function_declarations set
+                  ~f:(fun closure_id' _ ->
+                    not (Closure_id.equal closure_id closure_id'))
+              in
+              Set_of_closures.free_names set
+            | None -> assert false
+          in
           (not (Name_occurrences.mem_symbol free_names_after symbol))
-            && (not (Name_occurrences.mem_symbol free_names_in_const symbol)))
-        (Bound_symbols.closure_symbols_being_defined bound_symbols)
+            && (not (Name_occurrences.mem_symbol free_names_in_others symbol)))
+        closure_symbols
     in
     let set_of_closures =
       if all_closure_symbols_unused then None

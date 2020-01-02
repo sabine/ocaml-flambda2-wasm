@@ -59,3 +59,7 @@ let disjoint_union t1 t2 =
 
 let compare { funs = funs1; } { funs = funs2; } =
   Closure_id.Map.compare Function_declaration.compare funs1 funs2
+
+let filter t ~f =
+  let funs = Closure_id.Map.filter f t.funs in
+  { funs; }

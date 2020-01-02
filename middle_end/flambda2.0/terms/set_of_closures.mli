@@ -44,4 +44,9 @@ val environment_doesn't_mention_variables : t -> bool
 
 val disjoint_union : t -> t -> t
 
+val filter_function_declarations
+   : t
+  -> f:(Closure_id.t -> Function_declaration.t -> bool)
+  -> t
+
 include Identifiable.S with type t := t

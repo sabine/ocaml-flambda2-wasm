@@ -52,3 +52,5 @@ val find : t -> Closure_id.t -> Function_declaration.t
 val disjoint_union : t -> t -> t
 
 val compare : t -> t -> int
+
+val filter : t -> f:(Closure_id.t -> Function_declaration.t -> bool) -> t

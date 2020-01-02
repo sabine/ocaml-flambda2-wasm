@@ -137,3 +137,11 @@ let disjoint_union t1 t2 =
   { function_decls;
     closure_elements;
   }
+
+let filter_function_declarations t ~f =
+  let function_decls =
+    Function_declarations.filter t.function_decls ~f
+  in
+  { t with
+    function_decls;
+  }
