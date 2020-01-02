@@ -195,7 +195,6 @@ let lift_via_reification_of_continuation_param_types dacc ~params
     Variable.Set.union (KP.List.var_set params)
       (KP.List.var_set extra_params_and_args.extra_params)
   in
-Format.eprintf "allowed free vars %a\n%!" Variable.Set.print allowed_free_vars;
   let dacc, reified_continuation_params_to_symbols, reified_definitions,
       _closure_symbols_by_set =
     reify_types_of_continuation_param_types dacc allowed_free_vars
