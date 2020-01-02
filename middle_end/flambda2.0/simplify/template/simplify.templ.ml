@@ -35,7 +35,6 @@ let check_imported_symbols_don't_overlap_predef_exns
   end
 
 let run ~backend ~round unit =
-  let backend = DE.backend denv in
   let module Backend = (val backend : Flambda2_backend_intf.S) in
   let predef_exn_symbols =
     Symbol.Set.fold (fun symbol predef_exn_symbols ->
@@ -61,9 +60,9 @@ let run ~backend ~round unit =
       (Symbol.Map.disjoint_union imported_symbols predef_exn_symbols)
       denv
   in
-  let return_cont_scope = DE.continuation_scope_level denv in
+  let return_cont_scope = DE.get_continuation_scope_level denv in
   let denv = DE.increment_continuation_scope_level denv in
-  let exn_cont_scope = DE.continuation_scope_level denv in
+  let exn_cont_scope = DE.get_continuation_scope_level denv in
   let denv = DE.increment_continuation_scope_level denv in
   let r = R.create ~resolver:(DE.resolver denv) in
   let dacc = DA.create denv Continuation_uses_env.empty r in
@@ -71,7 +70,7 @@ let run ~backend ~round unit =
     let exn_continuation =
       Exn_continuation.create ~exn_handler:exn_continuation ~extra_args:[]
     in
-    Simplify_toplevel.simplify_toplevel dacc body ~return_continuation
+    Simplify_toplevel.simplify_toplevel dacc (FU.body unit) ~return_continuation
       ~return_arity:[K.value] exn_continuation ~return_cont_scope
       ~exn_cont_scope
   in
@@ -83,4 +82,4 @@ let run ~backend ~round unit =
     ~root_symbol:(FU.root_symbol unit)
     ~return_continuation
     ~exn_continuation
-    body
+    ~body

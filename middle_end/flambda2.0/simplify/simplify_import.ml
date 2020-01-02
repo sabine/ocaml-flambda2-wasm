@@ -27,6 +27,7 @@ module Function_declarations = Flambda.Function_declarations
 module Function_params_and_body = Flambda.Function_params_and_body
 module Let_cont = Flambda.Let_cont
 module Let = Flambda.Let
+module Let_symbol = Flambda.Let_symbol_expr
 module Lifted_constant = Simplify_env_and_result.Lifted_constant
 module Named = Flambda.Named
 module Non_recursive_let_cont_handler = Flambda.Non_recursive_let_cont_handler
@@ -36,6 +37,7 @@ module Static_const = Flambda.Static_const
 module Switch = Flambda.Switch
 
 module CH = Continuation_handler
+module CPH = Continuation_params_and_handler
 module CUE = Continuation_uses_env
 module DA = Downwards_acc
 module DE = Simplify_env_and_result.Downwards_env

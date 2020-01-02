@@ -138,6 +138,8 @@ module type Downwards_env = sig
     -> params_and_body:Function_params_and_body.t
     -> t
 
+  val mem_code : t -> Code_id.t -> bool
+
   val find_code : t -> Code_id.t -> Function_params_and_body.t
 
   (** Appends the locations of inlined call-sites to the given debuginfo

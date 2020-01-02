@@ -376,20 +376,14 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars
         Symbol.create (Compilation_unit.get_current_exn ()) name)
       (Function_declarations.funs function_decls)
   in
-  let _set_of_closures, dacc, static_structure_types,
-      static_structure =
-    Simplify_static.simplify_set_of_closures0 dacc
+  let _set_of_closures, dacc, types_of_symbols, bound_symbols, static_const =
+    Simplify_static_const.simplify_set_of_closures0 dacc
       set_of_closures ~closure_symbols ~closure_elements ~closure_element_types
   in
   let r =
-    let definition : Definition.t =
-      { computation = None;
-        static_structure;
-      }
-    in
     let lifted_constant =
-      Lifted_constant.create (DA.denv dacc) definition
-        ~types_of_symbols:static_structure_types
+      Lifted_constant.create (DA.denv dacc) bound_symbols static_const
+        ~types_of_symbols
     in
     R.new_lifted_constant (DA.r dacc) lifted_constant
   in

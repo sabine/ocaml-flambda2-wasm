@@ -40,6 +40,7 @@ let add_if_not_empty x l =
   | [] -> l
   | _ :: _ -> x :: l
 
+(* CR mshinwell: Label the arguments so the evaluation order is clear *)
 let combine r t = {
   init = C.sequence r.init t.init;
   current_data = [];

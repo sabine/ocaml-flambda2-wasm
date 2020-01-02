@@ -42,7 +42,7 @@ let rec simplify_let
 and simplify_let_symbol
   : 'a. DA.t -> Let_symbol.t -> 'a k -> Expr.t * 'a * UA.t
 = fun dacc let_symbol_expr k ->
-  let module LS = Flambda.Let_symbol in
+  let module LS = Let_symbol in
   if not (DE.at_unit_toplevel (DA.denv dacc)) then begin
     Misc.fatal_errorf "[Let_symbol] is only allowed at the toplevel of \
         compilation units (not even at the toplevel of function bodies):@ %a"
@@ -57,19 +57,20 @@ and simplify_let_symbol
       end)
     (LS.Bound_symbols.being_defined bound_symbols);
   Code_id.Set.iter (fun code_id ->
-      if DE.mem_code_id (DA.denv dacc) code_id then begin
+      if DE.mem_code (DA.denv dacc) code_id then begin
         Misc.fatal_errorf "Code ID %a is already defined:@ %a"
-          Code_id.print sym
+          Code_id.print code_id
           LS.print let_symbol_expr
       end)
     (LS.Bound_symbols.code_being_defined bound_symbols);
   let defining_expr = LS.defining_expr let_symbol_expr in
   let body = LS.body let_symbol_expr in
-  let static_const, dacc =
+  let bound_symbols, defining_expr, dacc =
     Simplify_static_const.simplify_static_const dacc bound_symbols defining_expr
   in
   (* XXX Retrieve and add lifted constants here (some of which may need to
      go in [defining_expr]. *)
+  let bindings_outermost_first = [bound_symbols, defining_expr] in
   let body, user_data, uacc = simplify_expr dacc body k in
   (* XXX This should do the deletion of the [Let_symbol], since we need the
      code age relation to do that. *)
@@ -81,30 +82,29 @@ and simplify_let_symbol
   in
   expr, user_data, uacc
 
-and simplify_one_continuation_handler
-  : 'a. bool -> DA.t
-    -> extra_params_and_args:Continuation_extra_params_and_args.t
-    -> Continuation.t
-    -> Continuation_handler.Opened.t
-    -> user_data:unit
-    -> 'a k 
-    -> Continuation_handler.t * 'a * UA.t
-= fun is_recursive dacc ~(extra_params_and_args : EPA.t)
-      cont (cont_handler : Continuation_handler.Opened.t) ~user_data:() k ->
-  let module CH = Continuation_handler in
-  let module CPH = Continuation_params_and_handler in
+and simplify_one_continuation_handler :
+ 'a. DA.t
+  -> Continuation.t
+  -> Recursive.t
+  -> CH.t
+  -> params:KP.t list
+  -> handler:Expr.t
+  -> extra_params_and_args:Continuation_extra_params_and_args.t
+  -> 'a k 
+  -> Continuation_handler.t * 'a * UA.t
+= fun dacc cont (recursive : Recursive.t) (cont_handler : CH.t) ~params
+      ~(handler : Expr.t) ~(extra_params_and_args : EPA.t) k ->
   (* 
 Format.eprintf "handler:@.%a@."
   Expr.print cont_handler.handler;
   *)
-  let params = cont_handler.params in
   (*
 Format.eprintf "About to simplify handler %a, params %a, EPA %a\n%!"
   Continuation.print cont
   KP.List.print params
   EPA.print extra_params_and_args;
   *)
-  let handler, user_data, uacc = simplify_expr dacc cont_handler.handler k in
+  let handler, user_data, uacc = simplify_expr dacc handler k in
   let handler, uacc =
   (*
     let () =
@@ -116,8 +116,9 @@ Format.eprintf "About to simplify handler %a, params %a, EPA %a\n%!"
     let used_params =
       (* Removal of unused parameters of recursive continuations is not
          currently supported. *)
-      if is_recursive then params
-      else
+      match recursive with
+      | Recursive -> params
+      | Non_recursive ->
         let first = ref true in
         List.filter (fun param ->
             (* CR mshinwell: We should have a robust means of propagating which
@@ -150,8 +151,7 @@ Format.eprintf "About to simplify handler %a, params %a, EPA %a\n%!"
     *)
     let handler =
       let params = used_params @ used_extra_params in
-      CH.with_params_and_handler (CH.Opened.original cont_handler)
-        (CPH.create params ~handler)
+      CH.with_params_and_handler cont_handler (CPH.create params ~handler)
     in
     let rewrite =
       Apply_cont_rewrite.create ~original_params:params
@@ -203,9 +203,9 @@ and simplify_non_recursive_let_cont_handler
       let body, handler, user_data, uacc =
         let body, (result, uenv', user_data), uacc =
           let scope = DE.get_continuation_scope_level (DA.denv dacc) in
+          let params_and_handler = CH.params_and_handler cont_handler in
           let is_exn_handler = CH.is_exn_handler cont_handler in
-          CH.pattern_match cont_handler ~f:(fun handler ->
-            let params = CH.Opened.params handler in
+          CPH.pattern_match params_and_handler ~f:(fun params ~handler ->
             let denv = DE.define_parameters (DA.denv dacc) ~params in
             let dacc =
               DA.with_denv dacc (DE.increment_continuation_scope_level denv)
@@ -265,8 +265,8 @@ and simplify_non_recursive_let_cont_handler
                   in
                   try
                     let handler, user_data, uacc =
-                      simplify_one_continuation_handler dacc
-                        ~extra_params_and_args cont handler ~user_data k
+                      simplify_one_continuation_handler dacc cont Non_recursive
+                        cont_handler ~params ~handler ~extra_params_and_args k
                     in
                     handler, user_data, uacc, is_single_inlinable_use
                   with Misc.Fatal_error -> begin
@@ -305,7 +305,7 @@ and simplify_non_recursive_let_cont_handler
                   | Unknown { arity; } ->
                     let can_inline =
                       if is_single_inlinable_use && (not is_exn_handler) then
-                        CH.real_handler handler
+                        Some handler
                       else
                         None
                     in
@@ -342,12 +342,13 @@ and simplify_recursive_let_cont_handlers
       let handlers = Continuation_handlers.to_map rec_handlers in
       let cont, cont_handler =
         match Continuation.Map.bindings handlers with
-        | [] | _ :: _ :: _ -> failwith "TODO" (* CR mshinwell: fix this *)
+        | [] | _ :: _ :: _ ->
+          Misc.fatal_errorf "Support for simplification of multiply-recursive \
+              continuations is not yet implemented"
         | [c] -> c
-        (* Only single continuation handler is supported right now *)
       in
-      CH.pattern_match cont_handler ~f:(fun cont_handler ->
-          let params = CH.Opened.params cont_handler in
+      let params_and_handler = CH.params_and_handler cont_handler in
+      CPH.pattern_match params_and_handler ~f:(fun params ~handler ->
           let arity = KP.List.arity params in
           let dacc =
             DA.map_denv dacc ~f:DE.increment_continuation_scope_level
@@ -379,12 +380,10 @@ and simplify_recursive_let_cont_handlers
               in
               let dacc = DA.create denv cont_uses_env r in
               let handler, user_data, uacc =
-                simplify_one_continuation_handler true dacc
+                simplify_one_continuation_handler dacc cont Recursive
+                  cont_handler ~params ~handler
                   ~extra_params_and_args:
                     Continuation_extra_params_and_args.empty
-                  cont
-                  cont_handler
-                  ~user_data:()
                   (fun cont_uses_env r ->
                     let user_data, uacc = k cont_uses_env r in
                     let uacc =
@@ -1408,6 +1407,7 @@ and simplify_expr
 = fun dacc expr k ->
   match Expr.descr expr with
   | Let let_expr -> simplify_let dacc let_expr k
+  | Let_symbol let_symbol -> simplify_let_symbol dacc let_symbol k
   | Let_cont let_cont -> simplify_let_cont dacc let_cont k
   | Apply apply -> simplify_apply dacc apply k
   | Apply_cont apply_cont -> simplify_apply_cont dacc apply_cont k

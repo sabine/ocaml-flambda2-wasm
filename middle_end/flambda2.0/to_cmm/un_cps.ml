@@ -36,6 +36,9 @@ module R = Un_cps_result
 (* TODO: remove all uses of this, ^^ *)
 let todo () = failwith "Not yet implemented"
 
+(* CR mshinwell: Remove global ref and thread [r] through *)
+let result = ref R.empty
+
 (* Cmm helpers *)
 module C = struct
   include Cmm_helpers
@@ -617,6 +620,7 @@ and let_symbol env let_sym =
       (Let_symbol.bound_symbols let_sym)
       (Let_symbol.defining_expr let_sym)
   in
+  result := R.combine !result r;
   expr env body
 
 and let_set_of_closures env body closure_vars soc =
@@ -1170,6 +1174,7 @@ and params_and_body env fun_name fun_dbg p =
  *   List.map (fun decl -> C.cfunction decl) sorted *)
 
 let unit (unit : Flambda_unit.t) =
+  result := R.empty;
   Profile.record_call "flambda2_to_cmm" (fun () ->
       let offsets = Un_cps_closure.compute_offsets unit in
       let used_closure_vars = Flambda_unit.used_closure_vars unit in
@@ -1188,20 +1193,23 @@ let unit (unit : Flambda_unit.t) =
             Flambda_kind.value;
         ]
       in
-      let return_cont, env =
+      let _return_cont, env =
         Env.add_jump_cont env (List.map snd return_cont_params)
           (Flambda_unit.return_continuation unit)
       in
       (* let functions = program_functions offsets used_closure_vars unit in *)
-      let body = expr env unit.body in
+      let _body = expr env (Flambda_unit.body unit) in
+      Misc.fatal_error "To be continued"
+(*
       let body =
         let unit_value = C.targetint Targetint.zero in
         C.ccatch
           ~rec_flag:false ~body
           ~handlers:[C.handler return_cont return_cont_params unit_value]
       in
-      let data, entry, gc_roots, functions = R.to_cmm res in
+      let data, entry, gc_roots, functions = R.to_cmm !result in
       let cmm_data = C.flush_cmmgen_state () in
       let roots = List.map symbol gc_roots in
       (C.gc_root_table roots) :: data @ cmm_data @ functions @ [entry]
+*)
     )

@@ -14,7 +14,7 @@
 (*                                                                        *)
 (**************************************************************************)
 
-[@@@ocaml.warning "+a-30-40-41-42"]
+[@@@ocaml.warning "+a-4-30-40-41-42"]
 
 open! Flambda.Import
 
@@ -80,7 +80,7 @@ module Iter_sets_of_closures = struct
     match (n : Named.t) with
     | Simple _ | Prim _ -> ()
     | Set_of_closures s ->
-        f None s
+        f ~closure_symbols:None s
 
   and let_expr f t =
     Let.pattern_match t ~f:(fun ~bound_vars:_ ~body ->
@@ -89,10 +89,10 @@ module Iter_sets_of_closures = struct
         expr f body
       )
 
-  and let_symbol_expr f let_sym =
+  and let_symbol f let_sym =
     static_const f (Let_symbol.bound_symbols let_sym)
       (Let_symbol.defining_expr let_sym);
-    expr f (Let_symbol.body)
+    expr f (Let_symbol.body let_sym)
 
   and let_cont f = function
     | Let_cont.Non_recursive { handler; _ } ->
@@ -144,11 +144,11 @@ module Iter_sets_of_closures = struct
   and static_const f
         (bound_symbols : Let_symbol.Bound_symbols.t)
         (static_const : Static_const.t) =
-    match bound_symbols, st with
+    match bound_symbols, static_const with
     | Code_and_set_of_closures { code_ids = _; closure_symbols; },
       Code_and_set_of_closures { code; set_of_closures = s; } ->
-        Option.iter (fun s -> f (Some closure_symbols) s) s;
-        Code_id.Map.iter (fun _ { Flambda_static.Static_part.params_and_body;
+        Option.iter (fun s -> f ~closure_symbols:(Some closure_symbols) s) s;
+        Code_id.Map.iter (fun _ { Static_const.params_and_body;
                                   newer_version_of = _; } ->
             match params_and_body with
             | Deleted -> ()
@@ -158,7 +158,8 @@ module Iter_sets_of_closures = struct
                       expr f body))
           code
     | _ ->
-      (* CR mshinwell: Make exhaustive and cause errors on wrong cases *)
+      (* CR mshinwell: Make exhaustive and cause errors on wrong cases.
+         Then enable warning 4 *)
       ()
 end
 
