@@ -204,7 +204,7 @@ let print_params_and_body_with_cache ~cache ppf params_and_body =
 let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
   (* CR mshinwell: elide "newer_version_of" when None *)
   Format.fprintf ppf "@[<hov 1>(\
-      @[(newer_version_of@ %a)@]@ \
+      @[<hov 1>(newer_version_of@ %a)@]@ \
       %a\
       )@]"
     (Misc.Stdlib.Option.print Code_id.print) newer_version_of
@@ -225,58 +225,66 @@ let print_with_cache ~cache ppf t =
       (Format.pp_print_list ~pp_sep:Format.pp_print_space
         Field_of_block.print) fields
   | Code_and_set_of_closures { code; set_of_closures; } ->
-    fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
-        @[<hov 1>(code@ (%a))@]@ \
-        @[<hov 1>(set_of_closures@ (%a))@]\
-        ))@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      (Code_id.Map.print (print_code_with_cache ~cache)) code
-      (Misc.Stdlib.Option.print
-        (Set_of_closures.print_with_cache ~cache))
-        set_of_closures
+    if Option.is_none set_of_closures then
+      fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+          @[<hov 1>%a@]\
+          ))@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        (Code_id.Map.print (print_code_with_cache ~cache)) code
+    else
+      fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
+          @[<hov 1>(code@ (%a))@]@ \
+          @[<hov 1>(set_of_closures@ (%a))@]\
+          ))@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        (Code_id.Map.print (print_code_with_cache ~cache)) code
+        (Misc.Stdlib.Option.print
+          (Set_of_closures.print_with_cache ~cache))
+          set_of_closures
   | Boxed_float (Const f) ->
-    fprintf ppf "@[@<0>%sBoxed_float@<0>%s %a)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       Numbers.Float_by_bit_pattern.print f
   | Boxed_float (Var v) ->
-    fprintf ppf "@[@<0>%sBoxed_float@<0>%s %a)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       Variable.print v
   | Boxed_int32 (Const n) ->
-    fprintf ppf "@[@<0>%sBoxed_int32@<0>%s %ld)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %ld)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       n
   | Boxed_int32 (Var v) ->
-    fprintf ppf "@[@<0>%sBoxed_int32@<0>%s %a)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %a)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       Variable.print v
   | Boxed_int64 (Const n) ->
-    fprintf ppf "@[@<0>%sBoxed_int64@<0>%s %Ld)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %Ld)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       n
   | Boxed_int64 (Var v) ->
-    fprintf ppf "@[@<0>%sBoxed_int64@<0>%s %a)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %a)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       Variable.print v
   | Boxed_nativeint (Const n) ->
-    fprintf ppf "@[@<0>%sBoxed_nativeint@<0>%s %a)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       Targetint.print n
   | Boxed_nativeint (Var v) ->
-    fprintf ppf "@[@<0>%sBoxed_nativeint@<0>%s %a)@]"
+    fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       Variable.print v
   | Immutable_float_array fields ->
-    fprintf ppf "@[@<0>%sImmutable_float_array@<0>%s@ @[[| %a |]@])@]"
+    fprintf ppf "@[<hov 1>(@<0>%sImmutable_float_array@<0>%s@ @[[| %a |]@])@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       (Format.pp_print_list
@@ -284,12 +292,12 @@ let print_with_cache ~cache ppf t =
          print_float_array_field)
       fields
   | Mutable_string { initial_value = s; } ->
-    fprintf ppf "@[@<0>%sMutable_string@<0>%s@ \"%s\")@]"
+    fprintf ppf "@[<hov 1>(@<0>%sMutable_string@<0>%s@ \"%s\")@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       s
   | Immutable_string s ->
-    fprintf ppf "@[@<0>%sImmutable_string@<0>%s@ \"%s\")@]"
+    fprintf ppf "@[<hov 1>(@<0>%sImmutable_string@<0>%s@ \"%s\")@]"
       (Flambda_colours.static_part ())
       (Flambda_colours.normal ())
       s

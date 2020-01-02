@@ -37,14 +37,32 @@ module Bound_symbols = struct
         Symbol.print sym
         K.print K.value
     | Code_and_set_of_closures { code_ids; closure_symbols; } ->
-      Format.fprintf ppf "@[<hov 1>\
-          @[<hov 1>(code_ids@ %a)@]@ \
-          @[<hov 1>(closure_symbols@ {%a})@]\
-          @]"
-        Code_id.Set.print code_ids
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space
-          print_closure_binding)
-        (Closure_id.Map.bindings closure_symbols)
+      match
+        Code_id.Set.elements code_ids, Closure_id.Map.bindings closure_symbols
+      with
+      | [code_id], [] ->
+        Format.fprintf ppf "@<0>%s%a@<0>%s"
+          (Flambda_colours.code_id ())
+          Code_id.print code_id
+          (Flambda_colours.normal ())
+      | [], [closure_binding] ->
+        Format.fprintf ppf "@<0>%s%a@<0>%s"
+          (Flambda_colours.symbol ())
+          print_closure_binding closure_binding
+          (Flambda_colours.normal ())
+      | _, _ ->
+        Format.fprintf ppf "@[<hov 1>\
+            @[<hov 1>(code_ids@ (@<0>%s%a@<0>%s))@]@ \
+            @[<hov 1>(closure_symbols@ {%a})@]\
+            @]"
+          (Flambda_colours.code_id ())
+          (Format.pp_print_list ~pp_sep:Format.pp_print_space
+            Code_id.print)
+          (Code_id.Set.elements code_ids)
+          (Flambda_colours.normal ())
+          (Format.pp_print_list ~pp_sep:Format.pp_print_space
+            print_closure_binding)
+          (Closure_id.Map.bindings closure_symbols)
 
   let print_with_cache ~cache:_ ppf t = print ppf t
 
@@ -110,7 +128,7 @@ let print_with_cache ~cache ppf { bound_symbols; defining_expr; body; } =
     | Let_symbol { bound_symbols; defining_expr; body; } ->
       fprintf ppf
         "@ @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
-        (Flambda_colours.let_bound_symbol ())
+        (Flambda_colours.symbol ())
         Bound_symbols.print bound_symbols
         (Flambda_colours.elide ())
         (Flambda_colours.normal ())
@@ -122,7 +140,7 @@ let print_with_cache ~cache ppf { bound_symbols; defining_expr; body; } =
       @[<hov 1>@<0>%s%a@<0>%s =@<0>%s@ %a@]"
     (Flambda_colours.expr_keyword ())
     (Flambda_colours.normal ())
-    (Flambda_colours.let_bound_symbol ())
+    (Flambda_colours.symbol ())
     Bound_symbols.print bound_symbols
     (Flambda_colours.elide ())
     (Flambda_colours.normal ())
@@ -154,8 +172,8 @@ let apply_name_permutation ({ bound_symbols; defining_expr; body; } as t) perm =
   if defining_expr == defining_expr' && body == body' then t
   else
     { bound_symbols;
-      defining_expr;
-      body;
+      defining_expr = defining_expr';
+      body = body';
     }
 
 (* CR mshinwell: Add a type to just encapsulate bound_symbols and

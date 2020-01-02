@@ -35,12 +35,10 @@ let debuginfo () = C.fg_256 243
 let discriminant () = C.fg_256 111
 let name () = C.fg_256 111
 let parameter () = C.fg_256 198
-let symbol () = C.fg_256 97
+let symbol () = C.fg_256 98
 let variable () = C.fg_256 111
 let closure_element () = C.fg_256 31
-
-let let_bound_var () = C.fg_256 37
-let let_bound_symbol () = (C.fg_256 37) ^ (C.bg_256 240)
+let code_id () = C.fg_256 202
 
 let expr_keyword () = C.fg_256 51
 let static_keyword () = (C.fg_256 255) ^ (C.bg_256 240)
