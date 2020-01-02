@@ -96,6 +96,13 @@ let lift_set_of_closures_discovered_via_reified_continuation_param_types dacc
           Symbol.create (Compilation_unit.get_current_exn ()) name)
         function_decls
     in
+    let dacc =
+      DA.map_denv dacc ~f:(fun denv ->
+        Closure_id.Map.fold (fun _closure_id closure_symbol denv ->
+            DE.define_symbol denv closure_symbol K.value)
+          closure_symbols
+          denv)
+    in
     let definition =
       (* We don't need to assign new code IDs, since we're not changing the
          code. The code will actually be re-simplified (when we reach the new
@@ -143,10 +150,10 @@ let reify_types_of_continuation_param_types dacc
              ~f:(Option.map Simple.must_be_symbol)
       in
       match existing_symbol with
-      | Some _ ->
+      | Some (Some _) ->
         dacc, reified_continuation_params_to_symbols, reified_definitions,
           closure_symbols_by_set
-      | None ->
+      | None | Some None ->
         match
           T.reify ~allowed_free_vars:reified_continuation_param_types
             (DE.typing_env (DA.denv dacc)) ~min_name_mode:NM.normal ty
@@ -188,6 +195,7 @@ let lift_via_reification_of_continuation_param_types dacc ~params
     Variable.Set.union (KP.List.var_set params)
       (KP.List.var_set extra_params_and_args.extra_params)
   in
+Format.eprintf "allowed free vars %a\n%!" Variable.Set.print allowed_free_vars;
   let dacc, reified_continuation_params_to_symbols, reified_definitions,
       _closure_symbols_by_set =
     reify_types_of_continuation_param_types dacc allowed_free_vars
@@ -218,8 +226,8 @@ let lift_via_reification_of_continuation_param_types dacc ~params
                   Variable.Map.find var reified_continuation_params_to_symbols
                 with
                 | exception Not_found ->
-                  Misc.fatal_errorf "No symbol for continuation parameter %a"
-                    Variable.print var
+                  (* The variable's type couldn't be reified. *)
+                  sym_deps
                 | symbol -> Symbol.Set.add symbol sym_deps)
               Symbol.Set.empty
               var_deps

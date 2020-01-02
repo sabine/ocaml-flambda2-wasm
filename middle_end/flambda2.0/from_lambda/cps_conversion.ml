@@ -709,8 +709,8 @@ let lambda_to_ilambda lam ~recursive_static_catches:recursive_static_catches'
   recursive_static_catches := recursive_static_catches';
   seen_let_mutable := false;
   (* [the_end] is not a [Toplevel_return] continuation---the toplevel return
-     continuation is introduced by [Closure_conversion]. *)
-  let the_end = Continuation.create () in
+     continuation is introduced by [Closure_conversion]. *) (* XXX *)
+  let the_end = Continuation.create ~sort:Toplevel_return () in
   let the_end_exn = Continuation.create ~sort:Exn () in
   let ilam = cps_tail lam the_end the_end_exn in
   let exn_continuation : I.exn_continuation =

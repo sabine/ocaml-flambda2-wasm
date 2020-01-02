@@ -50,6 +50,9 @@ and simplify_let_symbol
   end;
   let module Bound_symbols = LS.Bound_symbols in
   let bound_symbols = LS.bound_symbols let_symbol_expr in
+  (* CR mshinwell: We can't do this in conjunction with the current
+     reification scheme for continuation parameters; that has to put the
+     symbols in the environment.
   Symbol.Set.iter (fun sym ->
       if DE.mem_symbol (DA.denv dacc) sym then begin
         Misc.fatal_errorf "Symbol %a is already defined:@ %a"
@@ -63,7 +66,7 @@ and simplify_let_symbol
           Code_id.print code_id
           LS.print let_symbol_expr
       end)
-    (Bound_symbols.code_being_defined bound_symbols);
+    (Bound_symbols.code_being_defined bound_symbols); *)
   let defining_expr = LS.defining_expr let_symbol_expr in
   let body = LS.body let_symbol_expr in
   let prior_lifted_constants = R.get_lifted_constants (DA.r dacc) in
@@ -266,8 +269,6 @@ and simplify_non_recursive_let_cont_handler
            cannot. *)
         DE.at_unit_toplevel denv
           && (not (Continuation_handler.is_exn_handler cont_handler))
-          && Variable.Set.is_empty
-               (Name_occurrences.variables free_names_of_body)
           && Continuation.Set.subset
                (Name_occurrences.continuations free_names_of_body)
                (Continuation.Set.of_list [cont; unit_toplevel_exn_cont])
@@ -312,7 +313,7 @@ and simplify_non_recursive_let_cont_handler
                     | Normal when is_single_inlinable_use ->
                       assert (not is_exn_handler);
                       handler_typing_env, extra_params_and_args
-                    | Normal ->
+                    | Normal | Toplevel_return ->
                       assert (not is_exn_handler);
                       let param_types =
                         TE.find_params handler_typing_env params
@@ -320,7 +321,7 @@ and simplify_non_recursive_let_cont_handler
                       Unbox_continuation_params.make_unboxing_decisions
                         handler_typing_env ~arg_types_by_use_id ~params
                         ~param_types extra_params_and_args
-                    | Return | Toplevel_return ->
+                    | Return ->
                       assert (not is_exn_handler);
                       handler_typing_env, extra_params_and_args
                     | Exn ->
@@ -336,8 +337,8 @@ and simplify_non_recursive_let_cont_handler
                     | Normal
                        when is_single_inlinable_use
                          || not at_unit_toplevel -> dacc, handler
-                    | Return | Toplevel_return | Exn -> dacc, handler
-                    | Normal ->
+                    | Return | Exn -> dacc, handler
+                    | Normal | Toplevel_return ->
                       assert at_unit_toplevel;
                       Reify_continuation_param_types.
                         lift_via_reification_of_continuation_param_types dacc

@@ -121,7 +121,9 @@ let simplify_static_const_of_kind_value dacc
     DA.map_denv dacc ~f:(fun denv ->
       let denv =
         (* [result_sym] will already be defined when we are lifting
-           reified computed values (see below). *)
+           reified continuation parameters. *)
+        (* CR mshinwell: This is kind of nasty---try to rearrange things
+           so this doesn't happen. *)
         DE.define_symbol_if_undefined denv result_sym K.value
       in
       DE.add_equation_on_symbol denv result_sym typ)
