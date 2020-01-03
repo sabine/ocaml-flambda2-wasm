@@ -86,14 +86,22 @@ let print_with_cache ~cache ppf
       { function_decls; 
         closure_elements;
       } =
-  Format.fprintf ppf "@[<hov 1>(%sset_of_closures%s@ \
-      @[<hov 1>(function_decls@ %a)@]@ \
-      @[<hov 1>(closure_elements@ %a)@]\
-      )@]"
-    (Flambda_colours.prim_constructive ())
-    (Flambda_colours.normal ())
-    (Function_declarations.print_with_cache ~cache) function_decls
-    (Var_within_closure.Map.print Simple.print) closure_elements
+  if Var_within_closure.Map.is_empty closure_elements then
+    Format.fprintf ppf "@[<hov 1>(%sset_of_closures%s@ \
+        @[<hov 1>%a@]\
+        )@]"
+      (Flambda_colours.prim_constructive ())
+      (Flambda_colours.normal ())
+      (Function_declarations.print_with_cache ~cache) function_decls
+  else
+    Format.fprintf ppf "@[<hov 1>(%sset_of_closures%s@ \
+        @[<hov 1>%a@]@ \
+        @[<hov 1>(env@ %a)@]\
+        )@]"
+      (Flambda_colours.prim_constructive ())
+      (Flambda_colours.normal ())
+      (Function_declarations.print_with_cache ~cache) function_decls
+      (Var_within_closure.Map.print Simple.print) closure_elements
 
 let print ppf t = print_with_cache ~cache:(Printing_cache.create ()) ppf t
 

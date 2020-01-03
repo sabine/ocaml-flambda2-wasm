@@ -67,7 +67,7 @@ let print_with_cache ~cache:_ ppf
       @[<hov 1>@<0>%s(is_a_functor@ %b)@<0>%s@]@ \
       @[<hov 1>@<0>%s(params_arity@ @<0>%s%a@<0>%s)@<0>%s@]@ \
       @[<hov 1>@<0>%s(result_arity@ @<0>%s%a@<0>%s)@<0>%s@]@ \
-      @[<hov 1>@<0>%s(recursive@ %a)@<0>%s@]"
+      @[<hov 1>@<0>%s(recursive@ %a)@<0>%s@])@]"
     Code_id.print code_id
     (if not stub then Flambda_colours.elide () else C.normal ())
     stub

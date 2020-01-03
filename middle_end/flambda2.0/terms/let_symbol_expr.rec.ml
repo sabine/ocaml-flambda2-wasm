@@ -145,7 +145,7 @@ let body t = t.body
 
 type flattened_for_printing_descr =
   | Code of Code_id.t * Static_const.code
-  | Closure of Symbol.t * Function_declaration.t
+  | Set_of_closures of Symbol.t Closure_id.Map.t * Set_of_closures.t
   | Other of Symbol.t * Static_const.t
 
 type flattened_for_printing = {
@@ -179,10 +179,14 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
         code
         ([], true)
     in
-    let flattened', _ =
+    let flattened' =
       match set_of_closures with
-      | None -> [], false
+      | None -> []
       | Some set_of_closures ->
+        [{ second_or_more_binding_within_rec = not (Code_id.Map.is_empty code);
+           descr = Set_of_closures (closure_symbols, set_of_closures);
+        }]
+(*
         Closure_id.Map.fold
           (fun closure_id closure_symbol (flattened', first) ->
             let function_decl =
@@ -198,26 +202,32 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
             flattened :: flattened', false)
           closure_symbols
           ([], Code_id.Map.is_empty code)
+*)
     in
     (List.rev flattened) @ (List.rev flattened')
 
 let print_flattened_descr_lhs ppf descr =
   match descr with
   | Code (code_id, _) -> Code_id.print ppf code_id
-  | Closure (symbol, _) | Other (symbol, _) -> Symbol.print ppf symbol
+  | Set_of_closures (closure_symbols, _) ->
+    Format.fprintf ppf "%a"
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space
+        Bound_symbols.print_closure_binding)
+      (Closure_id.Map.bindings closure_symbols)
+  | Other (symbol, _) -> Symbol.print ppf symbol
 
 (* CR mshinwell: Use [print_with_cache]? *)
 let print_flattened_descr_rhs ppf descr =
   match descr with
   | Code (_, code) -> Static_const.print_code ppf code
-  | Closure (_, function_decl) -> Function_declaration.print ppf function_decl
+  | Set_of_closures (_, set) -> Set_of_closures.print ppf set
   | Other (_, static_const) -> Static_const.print ppf static_const
 
 let print_flattened ppf { second_or_more_binding_within_rec; descr; } =
-  fprintf ppf "@[<hov 0>";
+  fprintf ppf "@[<hov 1>";
   if second_or_more_binding_within_rec then begin
     fprintf ppf "@<0>%sand @<0>%s"
-      (Flambda_colours.expr_keyword ())
+      (Flambda_colours.elide ())
       (Flambda_colours.normal ())
   end;
   fprintf ppf
