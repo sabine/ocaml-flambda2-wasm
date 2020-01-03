@@ -62,6 +62,8 @@ module type Downwards_env = sig
 
   val now_defining_symbol : t -> Symbol.t -> t
 
+  val no_longer_defining_symbol : t -> Symbol.t -> t
+
   val symbol_is_currently_being_defined : t -> Symbol.t -> bool
 
   val typing_env : t -> Flambda_type.Typing_env.t

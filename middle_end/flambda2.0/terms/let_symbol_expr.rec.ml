@@ -24,11 +24,13 @@ module Bound_symbols = struct
         closure_symbols : Symbol.t Closure_id.Map.t;
       }
 
-  (* CR mshinwell: Share with [Bindable_let_bound] *)
+  (* CR mshinwell: Share with [Bindable_let_bound] and below *)
   let print_closure_binding ppf (closure_id, sym) =
-    Format.fprintf ppf "@[(%a \u{21a6} %a)@]"
-      Closure_id.print closure_id
+    Format.fprintf ppf "@[%a @<0>%s\u{21a6}@<0>%s %a@]"
       Symbol.print sym
+      (Flambda_colours.elide ())
+      (Flambda_colours.elide ())
+      Closure_id.print closure_id
 
   let print ppf t =
     match t with
@@ -206,13 +208,20 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
     in
     (List.rev flattened) @ (List.rev flattened')
 
+let print_closure_binding ppf (closure_id, sym) =
+  Format.fprintf ppf "@[%a @<0>%s\u{21a6}@<0>%s %a@]"
+    Symbol.print sym
+    (Flambda_colours.elide ())
+    (Flambda_colours.elide ())
+    Closure_id.print closure_id
+
 let print_flattened_descr_lhs ppf descr =
   match descr with
   | Code (code_id, _) -> Code_id.print ppf code_id
   | Set_of_closures (closure_symbols, _) ->
     Format.fprintf ppf "%a"
       (Format.pp_print_list ~pp_sep:Format.pp_print_space
-        Bound_symbols.print_closure_binding)
+        print_closure_binding)
       (Closure_id.Map.bindings closure_symbols)
   | Other (symbol, _) -> Symbol.print ppf symbol
 

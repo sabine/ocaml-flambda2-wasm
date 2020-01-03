@@ -131,6 +131,19 @@ end = struct
       symbols_currently_being_defined;
     }
 
+  let no_longer_defining_symbol t symbol =
+    if not (Symbol.Set.mem symbol t.symbols_currently_being_defined) then begin
+      Misc.fatal_errorf "Not currently defining symbol %a:@ %a"
+        Symbol.print symbol
+        print t
+    end;
+    let symbols_currently_being_defined =
+      Symbol.Set.remove symbol t.symbols_currently_being_defined
+    in
+    { t with
+      symbols_currently_being_defined;
+    }
+
   let symbol_is_currently_being_defined t symbol =
     Symbol.Set.mem symbol t.symbols_currently_being_defined
 

@@ -71,16 +71,30 @@ and simplify_let_symbol
   let body = LS.body let_symbol_expr in
   let prior_lifted_constants = R.get_lifted_constants (DA.r dacc) in
   let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
+  let defining =
+    Name_occurrences.symbols (Bound_symbols.free_names bound_symbols)
+  in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Symbol.Set.fold (fun symbol denv ->
+          DE.now_defining_symbol denv symbol)
+        defining
+        denv)
+  in
   let bound_symbols, defining_expr, dacc =
-    let dacc =
-      DA.map_denv dacc ~f:(fun denv ->
-        Symbol.Set.fold (fun symbol denv ->
-            DE.now_defining_symbol denv symbol)
-          (Name_occurrences.symbols (Bound_symbols.free_names bound_symbols))
-          denv)
-    in
     Simplify_static_const.simplify_static_const dacc bound_symbols defining_expr
   in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Symbol.Set.fold (fun symbol denv ->
+          DE.no_longer_defining_symbol denv symbol)
+        defining
+        denv)
+  in
+Format.eprintf "dacc after %a = static const@ %a@ is:@ %a\n%!"
+  Bound_symbols.print bound_symbols
+  Static_const.print defining_expr
+  DA.print dacc;
   let defining_expr_lifted_constants = R.get_lifted_constants (DA.r dacc) in
   let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
   let body, user_data, uacc = simplify_expr dacc body k in
@@ -383,9 +397,9 @@ and simplify_non_recursive_let_cont_handler
                 | No_uses -> uenv
                 | Uses _ ->
                   let can_inline =
-                    if is_single_inlinable_use && (not is_exn_handler) then begin
+                    if is_single_inlinable_use && (not is_exn_handler) then
                       Some handler
-                    end else
+                    else
                       None
                   in
                   match can_inline with

@@ -23,29 +23,26 @@ module Field_of_block = Static_const.Field_of_block
 
 (* CR-someday mshinwell: Finish improved simplification using types *)
 
-let simplify_field_of_block dacc (of_kind_value : Field_of_block.t) =
-  let denv = DA.denv dacc in
-  match of_kind_value with
-  | Symbol sym ->
-    let ty = DE.find_symbol denv sym in
-    of_kind_value, ty
-  | Tagged_immediate i -> of_kind_value, T.this_tagged_immediate i
+let simplify_field_of_block dacc (field : Field_of_block.t) =
+  match field with
+  | Symbol sym -> field, T.alias_type_of K.value (Simple.symbol sym)
+  | Tagged_immediate i -> field, T.this_tagged_immediate i
   | Dynamically_computed var ->
     let min_name_mode = Name_mode.normal in
     match S.simplify_simple dacc (Simple.var var) ~min_name_mode with
     | Bottom, ty ->
       assert (K.equal (T.kind ty) K.value);
       (* CR mshinwell: This should be "invalid" and propagate up *)
-      of_kind_value, T.bottom K.value
+      field, T.bottom K.value
     | Ok simple, ty ->
       match Simple.descr simple with
       | Name (Symbol sym) -> Field_of_block.Symbol sym, ty
-      | Name (Var _) -> of_kind_value, ty
+      | Name (Var _) -> field, ty
       | Const (Tagged_immediate imm) -> Field_of_block.Tagged_immediate imm, ty
       | Const (Naked_immediate _ | Naked_float _ | Naked_int32 _
           | Naked_int64 _ | Naked_nativeint _) ->
         (* CR mshinwell: This should be "invalid" and propagate up *)
-        of_kind_value, ty
+        field, ty
 
 let simplify_or_variable dacc type_for_const
       (or_variable : _ Static_const.or_variable) =
