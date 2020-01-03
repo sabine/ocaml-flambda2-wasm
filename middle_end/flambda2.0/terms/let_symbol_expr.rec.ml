@@ -234,7 +234,7 @@ let print_flattened_descr_lhs ppf descr =
   match descr with
   | Code (code_id, _) -> Code_id.print ppf code_id
   | Set_of_closures (closure_symbols, _) ->
-    Format.fprintf ppf "%a"
+    Format.fprintf ppf "@[<hov 0>%a@]"
       (Format.pp_print_list ~pp_sep:Format.pp_print_space
         print_closure_binding)
       (Closure_id.Map.bindings closure_symbols)

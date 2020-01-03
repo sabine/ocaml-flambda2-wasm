@@ -209,6 +209,11 @@ and simplify_let_symbol
       Code_id_or_symbol.Map.empty
       all_lifted_constants
   in
+(*
+  Format.eprintf "SCC graph is:@ %a\n%!"
+    (Code_id_or_symbol.Map.print Code_id_or_symbol.Set.print)
+    lifted_constants_dep_graph;
+*)
   let connected_components =
     SCC_lifted_constants.connected_components_sorted_from_roots_to_leaf
       lifted_constants_dep_graph
@@ -252,12 +257,15 @@ and simplify_let_symbol
             | exception Not_found -> None
             | closure_id ->
               (* CR mshinwell: duplicated from above *)
-              match (defining_expr : Static_const.t) with
+              match (static_const : Static_const.t) with
               | Code_and_set_of_closures { code = _; set_of_closures; } ->
                 begin match set_of_closures with
                 | None ->
-                  Misc.fatal_errorf "No set of closures given for@ %a"
+                  Misc.fatal_errorf "No set of closures given for@ %a@ in \
+                      binding of:@ %a@ to:@ %a"
                     Symbol.print sym
+                    Bound_symbols.print bound_symbols
+                    Static_const.print static_const
                 | Some set_of_closures ->
                   (* CR mshinwell: Make sure the closure ID exists in the
                      set of closures *)
@@ -343,14 +351,10 @@ and simplify_let_symbol
                         match set_of_closures with
                         | None -> Some set
                         | Some set' ->
-                          if not (Set_of_closures.equal set set') then begin
-                            Misc.fatal_errorf "Sets of closures differ for %a: \
-                                %a@ versus@ %a"
-                              Symbol.print symbol
-                              Set_of_closures.print set
-                              Set_of_closures.print set'
-                          end;
-                          set_of_closures
+                          if not (Set_of_closures.equal set set') then
+                            Some (Set_of_closures.disjoint_union set set')
+                          else
+                            set_of_closures
                       in
                       code_ids, closure_symbols, code, set_of_closures
                     | Non_closure_symbol _ ->
