@@ -381,7 +381,7 @@ and simplify_let_symbol
         in
         binding :: bindings)
       []
-      connected_components
+      (Array.of_list (List.rev (Array.to_list connected_components)))
   in
   let expr =
     List.fold_left (fun body (bound_symbols, defining_expr) ->

@@ -4,6 +4,11 @@ type +'a node =
 
 and 'a t = unit -> 'a node
 
+(*
+external rand : unit -> int = "rand"
+let r = rand ()
+*)
+
 let rec map_foo f seq () = match seq() with
   | Nil -> Nil
   | Cons (x, next) ->
