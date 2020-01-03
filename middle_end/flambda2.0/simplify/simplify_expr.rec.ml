@@ -107,6 +107,8 @@ and simplify_let_symbol
        need to ensure that the lifted constants end up in the current
        definition, rather than just above it. *)
     let bound_names = Bound_symbols.free_names bound_symbols in
+Format.eprintf "bound_names of current defn:@ %a\n%!"
+  Name_occurrences.print bound_names;
     List.fold_left
       (fun (defining_expr_lifted_constants_not_in_same_set,
             bound_symbols, defining_expr) lifted_constant ->
@@ -116,6 +118,8 @@ and simplify_let_symbol
           Name_occurrences.overlap bound_names
             (Static_const.free_names defining_expr)
         in
+Format.eprintf "...new defn of %a, overlap? %b\n%!"
+  Bound_symbols.print bound_symbols overlap;
         match bound_symbols_lifted_constant with
         | Singleton _ ->
           let defining_expr_lifted_constants_not_in_same_set =
@@ -148,7 +152,7 @@ and simplify_let_symbol
             defining_expr_lifted_constants_not_in_same_set,
               bound_symbols, defining_expr)
       ([], bound_symbols, defining_expr)
-      defining_expr_lifted_constants
+      (List.rev defining_expr_lifted_constants)
   in
   let bindings_outermost_first =
     defining_expr_lifted_constants_not_in_same_set

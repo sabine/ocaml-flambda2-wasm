@@ -383,17 +383,27 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars
         closure_symbols
         denv)
   in
+  let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
   let _set_of_closures, dacc, types_of_symbols, bound_symbols, static_const =
     Simplify_static_const.simplify_set_of_closures0 dacc
       set_of_closures ~closure_symbols ~closure_elements ~closure_element_types
   in
-  let r =
-    let lifted_constant =
-      Lifted_constant.create (DA.denv dacc) bound_symbols static_const
-        ~types_of_symbols
-    in
-    R.new_lifted_constant (DA.r dacc) lifted_constant
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Closure_id.Map.fold (fun _closure_id closure_symbol denv ->
+          DE.no_longer_defining_symbol denv closure_symbol)
+        closure_symbols
+        denv)
   in
+  let set_of_closures_lifted_constant =
+    Lifted_constant.create (DA.denv dacc) bound_symbols static_const
+      ~types_of_symbols
+  in
+  let dacc =
+    DA.map_r dacc ~f:(fun r ->
+      R.new_lifted_constant r set_of_closures_lifted_constant)
+  in
+  let r = DA.r dacc in
   let denv =
     DE.add_lifted_constants (DA.denv dacc) ~lifted:(R.get_lifted_constants r)
   in
