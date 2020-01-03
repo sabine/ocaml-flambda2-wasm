@@ -91,10 +91,6 @@ and simplify_let_symbol
         defining
         denv)
   in
-Format.eprintf "dacc after %a = static const@ %a@ is:@ %a\n%!"
-  Bound_symbols.print bound_symbols
-  Static_const.print defining_expr
-  DA.print dacc;
   let defining_expr_lifted_constants = R.get_lifted_constants (DA.r dacc) in
   let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
   let body, user_data, uacc = simplify_expr dacc body k in

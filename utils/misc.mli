@@ -151,6 +151,12 @@ module Stdlib : sig
       -> Format.formatter
       -> 'a t
       -> unit
+
+    val print_compact
+       : (Format.formatter -> 'a -> unit)
+      -> Format.formatter
+      -> 'a t
+      -> unit
   end
 
   module Array : sig

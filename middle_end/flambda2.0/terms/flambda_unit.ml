@@ -44,7 +44,7 @@ let print ppf
         @[<hov 1>(imported_symbols@ %a)@]@ \
         @[<hov 1>(return_continuation@ %a)@]@ \
         @[<hov 1>(exn_continuation@ %a)@]@ \
-        @[<hov 1>(body@ %a)@]\
+        @[<hov 1>%a@]\
       )@]"
     (Symbol.Map.print Flambda_kind.print) imported_symbols
     Continuation.print return_continuation

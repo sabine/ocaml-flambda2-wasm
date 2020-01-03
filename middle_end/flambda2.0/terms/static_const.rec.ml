@@ -196,7 +196,7 @@ let free_names t =
 
 let print_params_and_body_with_cache ~cache ppf params_and_body =
   match params_and_body with
-  | Deleted -> Format.fprintf ppf "@[<hov 1>(params_and_body@ Deleted)@]"
+  | Deleted -> Format.fprintf ppf "Deleted"
   | Present params_and_body ->
     Function_params_and_body.print_with_cache ~cache ppf
       params_and_body
@@ -208,7 +208,7 @@ let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
       )@]"
     (if Option.is_none newer_version_of then Flambda_colours.elide ()
      else Flambda_colours.normal ())
-    (Misc.Stdlib.Option.print Code_id.print) newer_version_of
+    (Misc.Stdlib.Option.print_compact Code_id.print) newer_version_of
     (Flambda_colours.normal ())
     (print_params_and_body_with_cache ~cache) params_and_body
 
