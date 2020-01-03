@@ -231,6 +231,8 @@ end and Let_symbol_expr : sig
 
     val closure_symbols_being_defined : t -> Symbol.Set.t
 
+    val everything_being_defined : t -> Code_id_or_symbol.Set.t
+
     val disjoint_union : t -> t -> t
 
     include Expr_std.S with type t := t
