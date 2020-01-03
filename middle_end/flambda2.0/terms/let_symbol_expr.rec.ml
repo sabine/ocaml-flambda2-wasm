@@ -197,7 +197,7 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
             in
             flattened :: flattened', false)
           closure_symbols
-          ([], true)
+          ([], Code_id.Map.is_empty code)
     in
     (List.rev flattened) @ (List.rev flattened')
 
@@ -214,13 +214,14 @@ let print_flattened_descr_rhs ppf descr =
   | Other (_, static_const) -> Static_const.print ppf static_const
 
 let print_flattened ppf { second_or_more_binding_within_rec; descr; } =
+  fprintf ppf "@[<hov 0>";
   if second_or_more_binding_within_rec then begin
     fprintf ppf "@<0>%sand @<0>%s"
-      (Flambda_colours.elide ())
+      (Flambda_colours.expr_keyword ())
       (Flambda_colours.normal ())
   end;
   fprintf ppf
-    "@ @[<hov 1>%a@<0>%s =@<0>%s@ %a@]"
+    "%a@<0>%s =@<0>%s@ %a@]"
     print_flattened_descr_lhs descr
     (Flambda_colours.elide ())
     (Flambda_colours.normal ())
@@ -244,6 +245,7 @@ let print_with_cache ~cache ppf t =
     match flattened with
     | [] -> ()
     | flat::flattened ->
+      fprintf ppf "@ ";
       print_flattened ppf flat;
       print_more flattened
   in
