@@ -83,6 +83,21 @@ module Bound_symbols = struct
     | Singleton _ -> Code_id.Set.empty
     | Code_and_set_of_closures { code_ids; closure_symbols = _; } -> code_ids
 
+  let everything_being_defined t =
+    let code =
+      Code_id.Set.fold (fun code_id code ->
+          Code_id_or_symbol.Set.add (Code_id code_id) code)
+        (code_being_defined t)
+        Code_id_or_symbol.Set.empty
+    in
+    let closure_symbols =
+      Symbol.Set.fold (fun symbol closure_symbols ->
+          Code_id_or_symbol.Set.add (Symbol symbol) closure_symbols)
+        (being_defined t)
+        Code_id_or_symbol.Set.empty
+    in
+    Code_id_or_symbol.Set.union code closure_symbols
+
   let apply_name_permutation t _perm = t
 
   let free_names t =
