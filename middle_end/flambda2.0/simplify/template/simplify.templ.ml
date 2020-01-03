@@ -79,7 +79,6 @@ let run ~backend ~round unit =
     ~imported_symbols:imported_symbols ~predef_exn_symbols
     ~descr:"after simplification";
   FU.create ~imported_symbols
-    ~root_symbol:(FU.root_symbol unit)
     ~return_continuation
     ~exn_continuation
     ~body

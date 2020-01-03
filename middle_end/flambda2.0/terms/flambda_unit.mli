@@ -29,7 +29,6 @@ val print : Format.formatter -> t -> unit
 (** Create a unit. *)
 val create
    : imported_symbols:Flambda_kind.t Symbol.Map.t
-  -> root_symbol:Symbol.t
   -> return_continuation:Continuation.t
   -> exn_continuation:Continuation.t
   -> body:Flambda.Expr.t
@@ -44,10 +43,6 @@ val used_closure_vars : t -> Var_within_closure.Set.t
 
 (** All symbols imported from other compilation units by the given unit. *)
 val imported_symbols : t -> Flambda_kind.t Symbol.Map.t
-
-(** The module block symbol for the given unit (the only symbol that can never
-    be eliminated). *)
-val root_symbol : t -> Symbol.t
 
 val body : t -> Flambda.Expr.t
 

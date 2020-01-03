@@ -132,8 +132,7 @@ let lift_set_of_closures_discovered_via_reified_continuation_param_types dacc
     dacc, reified_continuation_params_to_symbols, reified_definitions,
       closure_symbols_by_set
 
-let reify_types_of_continuation_param_types dacc
-      reified_continuation_param_types =
+let reify_types_of_continuation_param_types dacc ~params =
   let orig_typing_env = DE.typing_env (DA.denv dacc) in
   Variable.Set.fold
     (fun var (dacc, reified_continuation_params_to_symbols, reified_definitions,
@@ -154,9 +153,17 @@ let reify_types_of_continuation_param_types dacc
         dacc, reified_continuation_params_to_symbols, reified_definitions,
           closure_symbols_by_set
       | None | Some None ->
+        (* Since the continuation we're dealing with might be inlined and
+           we don't handle [extra_params_and_args] on such continuations at
+           the [Apply_cont] site, be certain that the only variables appearing
+           in our new [Let_symbol] bindings don't involve any of those
+           (extra) parameters. *)
+        let typing_env = DE.typing_env (DA.denv dacc) in
+        let allowed_free_vars =
+          Variable.Set.diff (TE.var_domain typing_env) params
+        in
         match
-          T.reify ~allowed_free_vars:reified_continuation_param_types
-            (DE.typing_env (DA.denv dacc)) ~min_name_mode:NM.normal ty
+          T.reify ~allowed_free_vars typing_env ~min_name_mode:NM.normal ty
         with
         | Lift to_lift ->
           lift_non_closure_discovered_via_reified_continuation_param_types
@@ -170,7 +177,7 @@ let reify_types_of_continuation_param_types dacc
         | Simple _ | Cannot_reify | Invalid ->
           dacc, reified_continuation_params_to_symbols, reified_definitions,
             closure_symbols_by_set)
-    reified_continuation_param_types
+    params
     (dacc, Variable.Map.empty, [], Set_of_closures.Map.empty)
 
 module Bindings_top_sort =
@@ -191,13 +198,13 @@ module Bindings_top_sort =
 let lift_via_reification_of_continuation_param_types dacc ~params
       ~(extra_params_and_args : Continuation_extra_params_and_args.t)
       ~(handler : Expr.t) =
-  let allowed_free_vars =
-    Variable.Set.union (KP.List.var_set params)
-      (KP.List.var_set extra_params_and_args.extra_params)
-  in
   let dacc, reified_continuation_params_to_symbols, reified_definitions,
       _closure_symbols_by_set =
-    reify_types_of_continuation_param_types dacc allowed_free_vars
+    let params =
+      Variable.Set.union (KP.List.var_set params)
+        (KP.List.var_set extra_params_and_args.extra_params)
+    in
+    reify_types_of_continuation_param_types dacc ~params
   in
   (* CR mshinwell: If recursion extends beyond that which can be handled
      by the set-of-closures cases, then we would need a strongly connected

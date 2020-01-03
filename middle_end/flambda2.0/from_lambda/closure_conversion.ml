@@ -972,5 +972,5 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
       Backend.all_predefined_exception_symbols
       imported_symbols
   in
-  Flambda_unit.create ~imported_symbols ~root_symbol:module_symbol
-    ~return_continuation:return_cont ~exn_continuation ~body
+  Flambda_unit.create ~imported_symbols ~return_continuation:return_cont
+    ~exn_continuation ~body

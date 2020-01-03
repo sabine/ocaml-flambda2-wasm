@@ -316,7 +316,7 @@ and simplify_non_recursive_let_cont_handler
                     | Normal when is_single_inlinable_use ->
                       assert (not is_exn_handler);
                       handler_typing_env, extra_params_and_args
-                    | Normal | Toplevel_return ->
+                    | Normal | Define_root_symbol ->
                       assert (not is_exn_handler);
                       let param_types =
                         TE.find_params handler_typing_env params
@@ -324,7 +324,7 @@ and simplify_non_recursive_let_cont_handler
                       Unbox_continuation_params.make_unboxing_decisions
                         handler_typing_env ~arg_types_by_use_id ~params
                         ~param_types extra_params_and_args
-                    | Return ->
+                    | Return | Toplevel_return ->
                       assert (not is_exn_handler);
                       handler_typing_env, extra_params_and_args
                     | Exn ->
@@ -340,8 +340,10 @@ and simplify_non_recursive_let_cont_handler
                     | Normal
                        when is_single_inlinable_use
                          || not at_unit_toplevel -> dacc, handler
-                    | Return | Exn -> dacc, handler
-                    | Normal | Toplevel_return ->
+                    | Return | Toplevel_return | Exn -> dacc, handler
+                    | Normal | Define_root_symbol ->
+                      (* CR mshinwell: This shouldn't be [assert] in the
+                         [Define_root_symbol] case *)
                       assert at_unit_toplevel;
                       Reify_continuation_param_types.
                         lift_via_reification_of_continuation_param_types dacc
@@ -380,28 +382,37 @@ and simplify_non_recursive_let_cont_handler
                 match uses with
                 | No_uses -> uenv
                 | Uses _ ->
-                  match CH.behaviour handler with
-                  | Unreachable { arity; } ->
-                    UE.add_unreachable_continuation uenv cont scope arity
-                  | Alias_for { arity; alias_for; } ->
-                    UE.add_continuation_alias uenv cont arity ~alias_for
-                  | Apply_cont_with_constant_arg
-                      { cont = destination_cont; arg = destination_arg;
-                        arity; } ->
-                    UE.add_continuation_apply_cont_with_constant_arg uenv cont
-                      scope arity ~destination_cont ~destination_arg
-                  | Unknown { arity; } ->
-                    let can_inline =
-                      if is_single_inlinable_use && (not is_exn_handler) then
-                        Some handler
-                      else
-                        None
+                  let can_inline =
+                    if is_single_inlinable_use && (not is_exn_handler) then begin
+                      Some handler
+                    end else
+                      None
+                  in
+                  match can_inline with
+                  | Some handler ->
+                    (* CR mshinwell: tidy up *)
+                    let arity =
+                      match CH.behaviour handler with
+                      | Unreachable { arity; }
+                      | Alias_for { arity; _ }
+                      | Apply_cont_with_constant_arg { arity; _ }
+                      | Unknown { arity; } -> arity
                     in
-                    match can_inline with
-                    | None -> UE.add_continuation uenv cont scope arity
-                    | Some handler ->
-                      UE.add_continuation_to_inline uenv cont scope arity
-                        handler
+                    UE.add_continuation_to_inline uenv cont scope arity
+                      handler
+                  | None ->
+                    match CH.behaviour handler with
+                    | Unreachable { arity; } ->
+                      UE.add_unreachable_continuation uenv cont scope arity
+                    | Alias_for { arity; alias_for; } ->
+                      UE.add_continuation_alias uenv cont arity ~alias_for
+                    | Apply_cont_with_constant_arg
+                        { cont = destination_cont; arg = destination_arg;
+                          arity; } ->
+                      UE.add_continuation_apply_cont_with_constant_arg uenv cont
+                        scope arity ~destination_cont ~destination_arg
+                    | Unknown { arity; } ->
+                      UE.add_continuation uenv cont scope arity
               in
               let uacc = UA.with_uenv uacc uenv in
               (handler, uenv_to_return, user_data), uacc))
@@ -1192,6 +1203,9 @@ and simplify_apply_cont
         if Option.is_none (Apply_cont.trap_action apply_cont) then Inlinable
         else Non_inlinable
       | Return | Toplevel_return | Exn -> Non_inlinable
+      | Define_root_symbol ->
+        assert (Option.is_none (Apply_cont.trap_action apply_cont));
+        Inlinable
     in
     let dacc, rewrite_id =
       DA.record_continuation_use dacc
