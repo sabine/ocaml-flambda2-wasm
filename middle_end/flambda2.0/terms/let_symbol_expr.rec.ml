@@ -143,29 +143,120 @@ let bound_symbols t = t.bound_symbols
 let defining_expr t = t.defining_expr
 let body t = t.body
 
-let print_with_cache ~cache ppf { bound_symbols; defining_expr; body; } =
-  let rec let_symbol_body (expr : Expr.t) =
-    match Expr.descr expr with
-    | Let_symbol { bound_symbols; defining_expr; body; } ->
-      fprintf ppf
-        "@ @[<hov 1>%a@<0>%s =@<0>%s@ %a@]"
-        Bound_symbols.print bound_symbols
-        (Flambda_colours.elide ())
-        (Flambda_colours.normal ())
-        Static_const.print defining_expr; (* CR mshinwell: print_with_cache? *)
-      let_symbol_body body
-    | _ -> expr
-  in
-  fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ (@[<v 0>\
-      @[<hov 1>%a@<0>%s =@<0>%s@ %a@]"
-    (Flambda_colours.expr_keyword ())
-    (Flambda_colours.normal ())
-    Bound_symbols.print bound_symbols
+type flattened_for_printing_descr =
+  | Code of Code_id.t * Static_const.code
+  | Closure of Symbol.t * Function_declaration.t
+  | Other of Symbol.t * Static_const.t
+
+type flattened_for_printing = {
+  second_or_more_binding_within_rec : bool;
+  descr : flattened_for_printing_descr;
+}
+
+let flatten_for_printing { bound_symbols; defining_expr; _ } =
+  match bound_symbols with
+  | Singleton symbol ->
+    [{ second_or_more_binding_within_rec = false;
+      descr = Other (symbol, defining_expr);
+    }]
+  | Code_and_set_of_closures { code_ids = _; closure_symbols; } ->
+    let code, set_of_closures =
+      match defining_expr with
+      | Code_and_set_of_closures { code; set_of_closures; } ->
+        code, set_of_closures
+      | _ ->
+        Misc.fatal_errorf "Bad form of static constant:@ %a"
+          Static_const.print defining_expr
+    in
+    let flattened,_ =
+      Code_id.Map.fold (fun code_id code (flattened', first) ->
+          let flattened =
+            { second_or_more_binding_within_rec = not first;
+              descr = Code (code_id, code);
+            }
+          in
+          flattened :: flattened', false)
+        code
+        ([], true)
+    in
+    let flattened', _ =
+      match set_of_closures with
+      | None -> [], false
+      | Some set_of_closures ->
+        Closure_id.Map.fold
+          (fun closure_id closure_symbol (flattened', first) ->
+            let function_decl =
+              Function_declarations.find
+                (Set_of_closures.function_decls set_of_closures)
+                closure_id
+            in
+            let flattened =
+              { second_or_more_binding_within_rec = not first;
+                descr = Closure (closure_symbol, function_decl);
+              }
+            in
+            flattened :: flattened', false)
+          closure_symbols
+          ([], true)
+    in
+    (List.rev flattened) @ (List.rev flattened')
+
+let print_flattened_descr_lhs ppf descr =
+  match descr with
+  | Code (code_id, _) -> Code_id.print ppf code_id
+  | Closure (symbol, _) | Other (symbol, _) -> Symbol.print ppf symbol
+
+(* CR mshinwell: Use [print_with_cache]? *)
+let print_flattened_descr_rhs ppf descr =
+  match descr with
+  | Code (_, code) -> Static_const.print_code ppf code
+  | Closure (_, function_decl) -> Function_declaration.print ppf function_decl
+  | Other (_, static_const) -> Static_const.print ppf static_const
+
+let print_flattened ppf { second_or_more_binding_within_rec; descr; } =
+  if second_or_more_binding_within_rec then begin
+    fprintf ppf "@<0>%sand @<0>%s"
+      (Flambda_colours.elide ())
+      (Flambda_colours.normal ())
+  end;
+  fprintf ppf
+    "@ @[<hov 1>%a@<0>%s =@<0>%s@ %a@]"
+    print_flattened_descr_lhs descr
     (Flambda_colours.elide ())
     (Flambda_colours.normal ())
-    Static_const.print defining_expr;
-  let body = let_symbol_body body in
-  fprintf ppf "@])@ %a)@]" (Expr.print_with_cache ~cache) body
+    print_flattened_descr_rhs descr
+
+let flatten t : _ * Expr.t =
+  let rec flatten (expr : Expr.t) : _ * Expr.t =
+    match Expr.descr expr with
+    | Let_symbol t ->
+      let flattened = flatten_for_printing t in
+      let flattened', body = flatten t.body in
+      flattened @ flattened', body
+    | _ -> [], expr
+  in
+  let flattened = flatten_for_printing t in
+  let flattened', body = flatten t.body in
+  flattened @ flattened', body
+
+let print_with_cache ~cache ppf t =
+  let rec print_more flattened =
+    match flattened with
+    | [] -> ()
+    | flat::flattened ->
+      print_flattened ppf flat;
+      print_more flattened
+  in
+  let flattened, body = flatten t in
+  match flattened with
+  | [] -> assert false
+  | flat::flattened ->
+    fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ (@[<v 0>%a"
+      (Flambda_colours.expr_keyword ())
+      (Flambda_colours.normal ())
+      print_flattened flat;
+    print_more flattened;
+    fprintf ppf "@])@ %a)@]" (Expr.print_with_cache ~cache) body
 
 let print ppf t = print_with_cache ~cache:(Printing_cache.create ()) ppf t
 

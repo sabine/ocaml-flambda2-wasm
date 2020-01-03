@@ -212,6 +212,9 @@ let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
     (Flambda_colours.normal ())
     (print_params_and_body_with_cache ~cache) params_and_body
 
+let print_code ppf code =
+  print_code_with_cache ~cache:(Printing_cache.create ()) ppf code
+
 let print_with_cache ~cache ppf t =
   let print_float_array_field ppf = function
     | Const f -> fprintf ppf "%a" Numbers.Float_by_bit_pattern.print f

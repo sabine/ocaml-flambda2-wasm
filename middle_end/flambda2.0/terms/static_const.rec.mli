@@ -51,6 +51,8 @@ and 'a or_deleted =
   | Present of 'a
   | Deleted
 
+val print_code : Format.formatter -> code -> unit
+
 (** The possibly-recursive declaration of pieces of code and any associated set
     of closures. *)
 type code_and_set_of_closures = {
