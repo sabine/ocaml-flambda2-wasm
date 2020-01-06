@@ -132,8 +132,12 @@ let bind_closure_types_inside_function ~denv_outside_function
     Closure_id.Map.fold (fun closure_id closure_type denv ->
         match Closure_id.Map.find closure_id closure_bound_names_inside with
         | exception Not_found ->
-          Misc.fatal_errorf "No bound variable for closure ID %a"
+          Misc.fatal_errorf "No closure name for closure ID %a.@ \
+              closure_bound_names = %a.@ closure_bound_names_inside = %a."
             Closure_id.print closure_id
+            (Closure_id.Map.print Name_in_binding_pos.print) closure_bound_names
+            (Closure_id.Map.print Name_in_binding_pos.print)
+            closure_bound_names_inside
         | bound_name ->
           DE.add_equation_on_name denv
             (Name_in_binding_pos.name bound_name)
@@ -175,8 +179,12 @@ let denv_inside_function ~denv_outside_function ~denv_after_enter_closure
   let denv = DE.add_parameters_with_unknown_types denv params in
   match Closure_id.Map.find closure_id closure_bound_names_inside with
   | exception Not_found ->
-    Misc.fatal_errorf "No closure name for closure ID %a"
+    Misc.fatal_errorf "No closure name for closure ID %a.@ \
+        closure_bound_names = %a.@ closure_bound_names_inside = %a."
       Closure_id.print closure_id
+      (Closure_id.Map.print Name_in_binding_pos.print) closure_bound_names
+      (Closure_id.Map.print Name_in_binding_pos.print)
+      closure_bound_names_inside
   | name ->
     let name = Name_in_binding_pos.name name in
     DE.add_variable denv
