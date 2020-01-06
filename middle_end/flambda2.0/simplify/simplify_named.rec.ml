@@ -383,7 +383,6 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars
         closure_symbols
         denv)
   in
-  let dacc = DA.map_r dacc ~f:R.clear_lifted_constants in
   let _set_of_closures, dacc, types_of_symbols, bound_symbols, static_const =
     Simplify_static_const.simplify_set_of_closures0 dacc
       set_of_closures ~closure_symbols ~closure_elements ~closure_element_types

@@ -180,25 +180,10 @@ let reify_types_of_continuation_param_types dacc ~params =
     params
     (dacc, Variable.Map.empty, [], Set_of_closures.Map.empty)
 
-module Bindings_top_sort =
-  Top_closure.Make
-    (struct
-      type t = Symbol.Set.Set.t
-      type elt = Symbol.Set.t
-      let empty = Symbol.Set.Set.empty
-      let add t elt = Symbol.Set.Set.add elt t
-      let mem t elt = Symbol.Set.Set.mem elt t
-    end)
-    (struct
-      type 'a t = 'a
-      let return t = t
-      let (>>=) t f = f t
-    end)
-
 let lift_via_reification_of_continuation_param_types dacc ~params
       ~(extra_params_and_args : Continuation_extra_params_and_args.t)
       ~(handler : Expr.t) =
-  let dacc, reified_continuation_params_to_symbols, reified_definitions,
+  let dacc, _reified_continuation_params_to_symbols, reified_definitions,
       _closure_symbols_by_set =
     let params =
       Variable.Set.union (KP.List.var_set params)
@@ -206,90 +191,18 @@ let lift_via_reification_of_continuation_param_types dacc ~params
     in
     reify_types_of_continuation_param_types dacc ~params
   in
-  (* CR mshinwell: If recursion extends beyond that which can be handled
-     by the set-of-closures cases, then we would need a strongly connected
-     components analysis, prior to the top sort.  Any set arising from SCC
-     that has more than one element must be a complicated recursive case,
-     which could be dealt with using the "symbol placeholder" approach
-     (variables that are substituted for the continuation's parameters, which
-     are in turn substituted for symbols at the Cmm translation phase).
-     (Any case containing >1 set of closures is maybe a bug?) *)
-  let reified_definitions =
-    let sorted =
-      Bindings_top_sort.top_closure reified_definitions
-        ~key:(fun (bound_syms, _static_const) ->
-          Let_symbol.Bound_symbols.being_defined bound_syms)
-        ~deps:(fun (bound_syms, static_const) ->
-          let var_deps =
-            static_const
-            |> Static_const.free_names
-            |> Name_occurrences.variables
-            |> Variable.Set.elements
-          in
-          let sym_deps =
-            List.fold_left (fun sym_deps var ->
-                match
-                  Variable.Map.find var reified_continuation_params_to_symbols
-                with
-                | exception Not_found ->
-                  (* The variable's type couldn't be reified. *)
-                  sym_deps
-                | symbol -> Symbol.Set.add symbol sym_deps)
-              Symbol.Set.empty
-              var_deps
-          in
-          let sym_deps =
-            let closure_symbols_being_defined =
-              (* Closure symbols are bound recursively within the same set. We
-                 need to remove them from the dependency sets to avoid the
-                 topological sort seeing cycles. We don't unilaterally remove
-                 all symbols in [Bound_symbols.being_defined syms] (as opposed
-                 to [closure_symbols_being_defined]) as, in the case where
-                 illegal recursion has been constructed, it could cause the
-                 topological sort to succeed and the fatal error below to be
-                 concealed. *)
-              Let_symbol.Bound_symbols.closure_symbols_being_defined bound_syms
-            in
-            Symbol.Set.diff sym_deps closure_symbols_being_defined
-          in
-          Symbol.Set.fold (fun sym deps ->
-              let dep =
-                List.find_opt (fun (bound_symbols, _static_const) ->
-                    Symbol.Set.mem sym
-                      (Let_symbol.Bound_symbols.being_defined bound_symbols))
-                  reified_definitions
-              in
-              match dep with
-              | Some dep -> dep :: deps
-              | None ->
-                Misc.fatal_errorf "Couldn't find definition for %a"
-                  Symbol.print sym)
-            sym_deps
-            [])
-    in
-    match sorted with
-    | Ok sorted -> sorted
-    | Error _ ->
-      Misc.fatal_errorf "Potential [Let_symbol] bindings arising from reified \
-          types of continuation parameters contain recursion that cannot be \
-          compiled:@ %a"
-        (Format.pp_print_list ~pp_sep:Format.pp_print_space
-          (fun ppf (bound_symbols, defining_expr) ->
-            Format.fprintf ppf "@[<hov 1>%a@ %a@]"
-              Let_symbol.Bound_symbols.print bound_symbols
-              Static_const.print defining_expr))
-        reified_definitions
-  in
-  (* By effectively reversing the list during the fold, we rely on the
-     following property:
-       Let the list L be a topological sort of a directed graph G.
-       Then the reverse of L is a topological sort of the transpose of G.
-  *)
+  (* CR mshinwell: If recursion extends beyond that which can be handled by the
+     set-of-closures cases, then we would need something like the "symbol
+     placeholder" approach (variables that are substituted for the
+     continuation's parameters, which are in turn substituted for symbols at the
+     Cmm translation phase). (Any SCC class containing >1 set of closures is
+     maybe a bug?) *)
+  let reified_definitions = Sort_lifted_constants.sort reified_definitions in
   let handler =
     List.fold_left (fun handler (bound_symbols, defining_expr) ->
         Let_symbol.create bound_symbols defining_expr handler
         |> Expr.create_let_symbol)
       handler
-      reified_definitions
+      reified_definitions.bindings_outermost_last
   in
   dacc, handler
