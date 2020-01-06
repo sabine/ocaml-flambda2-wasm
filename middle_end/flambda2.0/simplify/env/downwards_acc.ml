@@ -106,6 +106,3 @@ let with_code_age_relation t code_age_relation =
     TE.with_code_age_relation (DE.typing_env (denv t)) code_age_relation
   in
   with_denv t (DE.with_typing_env (denv t) typing_env)
-
-let find_name_mode t name =
-  TE.find_name_mode (DE.typing_env (denv t)) name

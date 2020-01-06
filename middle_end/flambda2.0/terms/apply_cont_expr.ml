@@ -70,10 +70,7 @@ let print ppf { k; args; trap_action; dbg; } =
   | args ->
     Format.fprintf ppf " %a" Simple.List.print args
   end;
-  Format.fprintf ppf "@<0>%s%a@<0>%s"
-    (Flambda_colours.elide ())
-    Debuginfo.print_or_elide dbg
-    (Flambda_colours.normal ());
+  Format.fprintf ppf "%a" Debuginfo.print_or_elide dbg;
   Format.fprintf ppf "@]"
 
 let print_with_cache ~cache:_ ppf t = print ppf t

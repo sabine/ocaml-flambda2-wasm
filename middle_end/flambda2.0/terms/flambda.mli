@@ -134,14 +134,12 @@ module rec Expr : sig
       [Immutable] [Let] expressions the given [(var, expr)] pairs around the
       body. *)
   val bind
-     : name_mode_of_var:(Variable.t -> Name_mode.t)
-    -> bindings:(Var_in_binding_pos.t * Named.t) list
+     : bindings:(Var_in_binding_pos.t * Named.t) list
     -> body:t
     -> t
 
   val bind_parameters
-     : name_mode_of_var:(Variable.t -> Name_mode.t)
-    -> bindings:(Kinded_parameter.t * Named.t) list
+     : bindings:(Kinded_parameter.t * Named.t) list
     -> body:t
     -> t
 
@@ -150,8 +148,7 @@ module rec Expr : sig
       expression with bindings of each [p_i] to the corresponding [s_i],
       such as is typically used when performing an inlining transformation. *)
   val bind_parameters_to_simples
-     : name_mode_of_var:(Variable.t -> Name_mode.t)
-    -> bind:Kinded_parameter.t list
+     : bind:Kinded_parameter.t list
     -> target:Simple.t list
     -> t
     -> t

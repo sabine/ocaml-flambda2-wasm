@@ -79,10 +79,7 @@ let inline dacc ~callee ~args function_decl
                 apply_exn_continuation
             in
             Expr.apply_name_permutation
-              (Expr.bind_parameters_to_simples
-                ~name_mode_of_var:
-                  (fun var -> DA.find_name_mode dacc (Name.var var))
-                ~bind:params ~target:args
+              (Expr.bind_parameters_to_simples ~bind:params ~target:args
                 (Expr.create_let
                   (VB.create my_closure Name_mode.normal)
                   (Named.create_simple callee)

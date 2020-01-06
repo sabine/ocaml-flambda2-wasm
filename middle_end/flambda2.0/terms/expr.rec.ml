@@ -389,29 +389,38 @@ let create_if_then_else ~scrutinee ~if_true ~if_false =
   in
   create_switch ~scrutinee ~arms
 
-let bind ~name_mode_of_var ~bindings ~body =
+let bind ~bindings ~body =
   List.fold_left (fun expr (var, (target : Named.t)) ->
-      let var_name_mode = Var_in_binding_pos.name_mode var in
+(*
       match target with
       | Simple simple ->
-        begin match Simple.must_be_var simple with
-        (* This isn't guaranteed to delete the [Let] (it won't in the case
-           where [rhs_var] appears in [body]), but will in many cases, and
-           helps with legibility of terms. *)
-        | Some rhs_var
-            when Name_mode.equal (name_mode_of_var rhs_var) var_name_mode ->
-          let perm =
-            Name_permutation.add_variable Name_permutation.empty
-              (Var_in_binding_pos.var var) rhs_var
-          in
-          create_let var target (apply_name_permutation expr perm)
-        | Some _ | None -> create_let var target expr
+        begin match Simple.descr simple with
+        | Name (Var rhs_var) ->
+          begin match Simple.rec_info simple with
+          | None ->
+            let perm =
+              Can't do this unless the name modes match!
+              Name_permutation.add_variable Name_permutation.empty
+                (Var_in_binding_pos.var var) rhs_var
+            in
+            (* CR mshinwell: Think more about this.
+               This is still leaving some let-bindings behind when it
+               shouldn't need to, e.g.
+                 let bar = foo in
+                 switch foo ...
+               seems to be turning into
+                 let bar = foo in
+                 switch bar *)
+            create_let var target (apply_name_permutation expr perm)
+          | Some _ -> create_let var target expr
+          end
+        | _ -> create_let var target expr
         end
-      | Prim _ | Set_of_closures _ -> create_let var target expr)
+      | _ -> *) create_let var target expr)
     body
     (List.rev bindings)
 
-let bind_parameters ~name_mode_of_var ~bindings ~body =
+let bind_parameters ~bindings ~body =
   let bindings =
     List.map (fun (bind, target) ->
         let var =
@@ -420,9 +429,9 @@ let bind_parameters ~name_mode_of_var ~bindings ~body =
         var, target)
       bindings
   in
-  bind ~name_mode_of_var ~bindings ~body
+  bind ~bindings ~body
 
-let bind_parameters_to_simples ~name_mode_of_var ~bind ~target body =
+let bind_parameters_to_simples ~bind ~target body =
   if List.compare_lengths bind target <> 0 then begin
     Misc.fatal_errorf "Mismatching parameters and arguments: %a and %a"
       KP.List.print bind
@@ -432,4 +441,4 @@ let bind_parameters_to_simples ~name_mode_of_var ~bind ~target body =
     List.map (fun (bind, target) -> bind, Named.create_simple target)
       (List.combine bind target)
   in
-  bind_parameters ~name_mode_of_var ~bindings ~body
+  bind_parameters ~bindings ~body

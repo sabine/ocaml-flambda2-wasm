@@ -116,8 +116,6 @@ module Typing_env : sig
     -> bound_to:Simple.t
     -> Flambda_primitive.Eligible_for_cse.t option
 
-  val find_name_mode : t -> Name.t -> Name_mode.t
-
   val add_env_extension
      : t
     -> env_extension:Typing_env_extension.t

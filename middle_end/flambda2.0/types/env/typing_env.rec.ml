@@ -716,8 +716,6 @@ let find_cse_rev t ~bound_to =
   | exception Not_found -> None
   | equation -> Some equation
 
-let find_name_mode t name = snd (find_with_name_mode t name)
-
 let meet_equation t name ty =
   let existing_ty = find t name in
   Format.eprintf "For %a, new type is %a, existing type %a\n%!"

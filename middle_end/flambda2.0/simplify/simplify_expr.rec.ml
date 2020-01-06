@@ -37,7 +37,7 @@ let rec simplify_let
       Simplify_named.simplify_named dacc ~bound_vars (L.defining_expr let_expr)
     in
     let body, user_data, uacc = simplify_expr dacc body k in
-    Simplify_common.bind_let_bound dacc ~bindings ~body, user_data, uacc)
+    Simplify_common.bind_let_bound ~bindings ~body, user_data, uacc)
 
 and simplify_let_symbol
   : 'a. DA.t -> Let_symbol.t -> 'a k -> Expr.t * 'a * UA.t
@@ -1303,10 +1303,7 @@ Format.eprintf "Apply_cont is now %a\n%!" Expr.print apply_cont_expr;
                 (List.combine params args)
             in
             let expr =
-              Expr.bind_parameters
-                ~name_mode_of_var:(fun _var -> Name_mode.normal)
-                (* All parameters and arguments must have [Normal] mode. *)
-                ~bindings:params_and_args ~body:handler
+              Expr.bind_parameters ~bindings:params_and_args ~body:handler
             in
             expr, user_data, uacc)
 
@@ -1458,8 +1455,7 @@ and simplify_switch
         Simplify_named.simplify_named dacc ~bound_vars named
       in
       let body = k ~tagged_scrutinee:(Simple.var bound_to) in
-      let body = Simplify_common.bind_let_bound dacc ~bindings ~body in
-      body, user_data, uacc
+      Simplify_common.bind_let_bound ~bindings ~body, user_data, uacc
     in
     let body, user_data, uacc =
       match switch_is_identity with

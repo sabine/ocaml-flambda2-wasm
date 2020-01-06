@@ -144,8 +144,7 @@ let update_exn_continuation_extra_args uacc ~exn_cont_use_id apply =
 (* CR mshinwell: Should probably move [Reachable] into the [Flambda] recursive
    loop and then move this into [Expr].  Maybe this could be tidied up a bit
    too? *)
-let bind_let_bound dacc ~bindings ~body =
-  let name_mode_of_var var = DA.find_name_mode dacc (Name.var var) in
+let bind_let_bound ~bindings ~body =
   List.fold_left
     (fun expr
          ((bound : Bindable_let_bound.t), (defining_expr : Reachable.t)) ->
@@ -153,8 +152,7 @@ let bind_let_bound dacc ~bindings ~body =
       | Invalid _ -> Expr.create_invalid ()
       | Reachable defining_expr ->
         match bound with
-        | Singleton var ->
-          Expr.bind ~name_mode_of_var ~bindings:[var, defining_expr] ~body:expr
+        | Singleton var -> Expr.bind ~bindings:[var, defining_expr] ~body:expr
         | Set_of_closures _ -> Expr.create_pattern_let bound defining_expr expr)
     body
     (List.rev bindings)
