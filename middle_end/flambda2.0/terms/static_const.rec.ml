@@ -94,7 +94,9 @@ type 'a or_variable =
   | Const of 'a
   | Var of Variable.t
 
+(* CR mshinwell: Move to its own module *)
 type mutable_or_immutable = Mutable | Immutable
+let compare_mutable_or_immutable mut1 mut2 = Stdlib.compare mut1 mut2
 
 type code = {
   params_and_body : Function_params_and_body.t or_deleted;
@@ -103,6 +105,27 @@ type code = {
 and 'a or_deleted =
   | Present of 'a
   | Deleted
+
+let print_params_and_body_with_cache ~cache ppf params_and_body =
+  match params_and_body with
+  | Deleted -> Format.fprintf ppf "Deleted"
+  | Present params_and_body ->
+    Function_params_and_body.print_with_cache ~cache ppf
+      params_and_body
+
+let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
+  Format.fprintf ppf "@[<hov 1>(\
+      @[<hov 1>@<0>%s(newer_version_of@ %a)@<0>%s@]@ \
+      %a\
+      )@]"
+    (if Option.is_none newer_version_of then Flambda_colours.elide ()
+     else Flambda_colours.normal ())
+    (Misc.Stdlib.Option.print_compact Code_id.print) newer_version_of
+    (Flambda_colours.normal ())
+    (print_params_and_body_with_cache ~cache) params_and_body
+
+let print_code ppf code =
+  print_code_with_cache ~cache:(Printing_cache.create ()) ppf code
 
 type code_and_set_of_closures = {
   code : code Code_id.Map.t;
@@ -119,6 +142,185 @@ type t =
   | Immutable_float_array of Numbers.Float_by_bit_pattern.t or_variable list
   | Mutable_string of { initial_value : string; }
   | Immutable_string of string
+
+include Identifiable.Make (struct
+  type nonrec t = t
+
+  let print_with_cache ~cache ppf t =
+    let print_float_array_field ppf = function
+      | Const f -> fprintf ppf "%a" Numbers.Float_by_bit_pattern.print f
+      | Var v -> Variable.print ppf v
+    in
+    match t with
+    | Block (tag, mut, fields) ->
+      fprintf ppf "@[<hov 1>(@<0>%s%sblock@<0>%s (tag %a) (%a))@]"
+        (Flambda_colours.static_part ())
+        (match mut with Immutable -> "Immutable_" | Mutable -> "Mutable_")
+        (Flambda_colours.normal ())
+        Tag.Scannable.print tag
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space
+          Field_of_block.print) fields
+    | Code_and_set_of_closures { code; set_of_closures; } ->
+      if Option.is_none set_of_closures then
+        match Code_id.Map.get_singleton code with
+        | None ->
+          fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+              @[<hov 1>%a@]\
+              ))@]"
+            (Flambda_colours.static_part ())
+            (Flambda_colours.normal ())
+            (Code_id.Map.print (print_code_with_cache ~cache)) code
+        | Some (_code_id, code) ->
+          fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+              @[<hov 1>%a@]\
+              ))@]"
+            (Flambda_colours.static_part ())
+            (Flambda_colours.normal ())
+            (print_code_with_cache ~cache) code
+      else
+        fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
+            @[<hov 1>(code@ (%a))@]@ \
+            @[<hov 1>(set_of_closures@ (%a))@]\
+            ))@]"
+          (Flambda_colours.static_part ())
+          (Flambda_colours.normal ())
+          (Code_id.Map.print (print_code_with_cache ~cache)) code
+          (Misc.Stdlib.Option.print
+            (Set_of_closures.print_with_cache ~cache))
+            set_of_closures
+    | Boxed_float (Const f) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        Numbers.Float_by_bit_pattern.print f
+    | Boxed_float (Var v) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        Variable.print v
+    | Boxed_int32 (Const n) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %ld)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        n
+    | Boxed_int32 (Var v) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %a)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        Variable.print v
+    | Boxed_int64 (Const n) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %Ld)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        n
+    | Boxed_int64 (Var v) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %a)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        Variable.print v
+    | Boxed_nativeint (Const n) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        Targetint.print n
+    | Boxed_nativeint (Var v) ->
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        Variable.print v
+    | Immutable_float_array fields ->
+      fprintf ppf "@[<hov 1>(@<0>%sImmutable_float_array@<0>%s@ @[[| %a |]@])@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        (Format.pp_print_list
+           ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+           print_float_array_field)
+        fields
+    | Mutable_string { initial_value = s; } ->
+      fprintf ppf "@[<hov 1>(@<0>%sMutable_string@<0>%s@ \"%s\")@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        s
+    | Immutable_string s ->
+      fprintf ppf "@[<hov 1>(@<0>%sImmutable_string@<0>%s@ \"%s\")@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        s
+
+  let print ppf t =
+    print_with_cache ~cache:(Printing_cache.create ()) ppf t
+
+  let compare t1 t2 =
+    match t1, t2 with
+    | Block (tag1, mut1, fields1), Block (tag2, mut2, fields2) ->
+      let c = Tag.Scannable.compare tag1 tag2 in
+      if c <> 0 then c
+      else
+        let c = compare_mutable_or_immutable mut1 mut2 in
+        if c <> 0 then c
+        else Misc.Stdlib.List.compare Field_of_block.compare fields1 fields2
+    | Code_and_set_of_closures { code = code1; set_of_closures = set1; },
+      Code_and_set_of_closures { code = code2; set_of_closures = set2; } ->
+      let c =
+        Code_id.Set.compare (Code_id.Map.keys code1) (Code_id.Map.keys code2)
+      in
+      if c <> 0 then c
+      else Option.compare Set_of_closures.compare set1 set2
+    | Boxed_float (Const f1), Boxed_float (Const f2) ->
+      Numbers.Float_by_bit_pattern.compare f1 f2
+    (* CR mshinwell: Move [or_variable] into its own module and add
+       [compare] *)
+    | Boxed_float (Var v1), Boxed_float (Var v2) -> Variable.compare v1 v2
+    | Boxed_float (Const _), Boxed_float (Var _) -> -1
+    | Boxed_float (Var _), Boxed_float (Const _) -> 1
+    | Boxed_int32 (Const n1), Boxed_int32 (Const n2) -> Int32.compare n1 n2
+    | Boxed_int32 (Var v1), Boxed_int32 (Var v2) -> Variable.compare v1 v2
+    | Boxed_int32 (Const _), Boxed_int32 (Var _) -> -1
+    | Boxed_int32 (Var _), Boxed_int32 (Const _) -> 1
+    | Boxed_int64 (Const n1), Boxed_int64 (Const n2) -> Int64.compare n1 n2
+    | Boxed_int64 (Var v1), Boxed_int64 (Var v2) -> Variable.compare v1 v2
+    | Boxed_int64 (Const _), Boxed_int64 (Var _) -> -1
+    | Boxed_int64 (Var _), Boxed_int64 (Const _) -> 1
+    | Boxed_nativeint (Const n1), Boxed_nativeint (Const n2) ->
+      Targetint.compare n1 n2
+    | Boxed_nativeint (Var v1), Boxed_nativeint (Var v2) ->
+      Variable.compare v1 v2
+    | Boxed_nativeint (Const _), Boxed_nativeint (Var _) -> -1
+    | Boxed_nativeint (Var _), Boxed_nativeint (Const _) -> 1
+    | Immutable_float_array fields1, Immutable_float_array fields2 ->
+      Misc.Stdlib.List.compare (fun field1 field2 ->
+          match field1, field2 with
+          | Var var1, Var var2 -> Variable.compare var1 var2
+          | Const f1, Const f2 -> Numbers.Float_by_bit_pattern.compare f1 f2
+          | Const _, Var _ -> -1
+          | Var _, Const _ -> 1)
+        fields1 fields2
+    | Mutable_string { initial_value = s1; },
+      Mutable_string { initial_value = s2; }
+    | Immutable_string s1, Immutable_string s2 -> String.compare s1 s2
+    | Block _, _ -> -1
+    | _, Block _ -> 1
+    | Code_and_set_of_closures _, _ -> -1
+    | _, Code_and_set_of_closures _ -> 1
+    | Boxed_float _, _ -> -1
+    | _, Boxed_float _ -> 1
+    | Boxed_int32 _, _ -> -1
+    | _, Boxed_int32 _ -> 1
+    | Boxed_int64 _, _ -> -1
+    | _, Boxed_int64 _ -> 1
+    | Boxed_nativeint _, _ -> -1
+    | _, Boxed_nativeint _ -> 1
+    | Immutable_float_array _, _ -> -1
+    | _, Immutable_float_array _ -> 1
+    | Mutable_string _, _ -> -1
+    | Immutable_string _, Mutable_string _ -> 1
+
+  let equal t1 t2 = (compare t1 t2 = 0)
+
+  let hash _t = Misc.fatal_error "Not yet implemented"
+
+  let output _ _ = Misc.fatal_error "Not yet implemented"
+end)
 
 let get_pieces_of_code t =
   match t with
@@ -193,131 +395,6 @@ let free_names t =
         | Const _ -> fns)
       (Name_occurrences.empty)
       fields
-
-let print_params_and_body_with_cache ~cache ppf params_and_body =
-  match params_and_body with
-  | Deleted -> Format.fprintf ppf "Deleted"
-  | Present params_and_body ->
-    Function_params_and_body.print_with_cache ~cache ppf
-      params_and_body
-
-let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
-  Format.fprintf ppf "@[<hov 1>(\
-      @[<hov 1>@<0>%s(newer_version_of@ %a)@<0>%s@]@ \
-      %a\
-      )@]"
-    (if Option.is_none newer_version_of then Flambda_colours.elide ()
-     else Flambda_colours.normal ())
-    (Misc.Stdlib.Option.print_compact Code_id.print) newer_version_of
-    (Flambda_colours.normal ())
-    (print_params_and_body_with_cache ~cache) params_and_body
-
-let print_code ppf code =
-  print_code_with_cache ~cache:(Printing_cache.create ()) ppf code
-
-let print_with_cache ~cache ppf t =
-  let print_float_array_field ppf = function
-    | Const f -> fprintf ppf "%a" Numbers.Float_by_bit_pattern.print f
-    | Var v -> Variable.print ppf v
-  in
-  match t with
-  | Block (tag, mut, fields) ->
-    fprintf ppf "@[<hov 1>(@<0>%s%sblock@<0>%s (tag %a) (%a))@]"
-      (Flambda_colours.static_part ())
-      (match mut with Immutable -> "Immutable_" | Mutable -> "Mutable_")
-      (Flambda_colours.normal ())
-      Tag.Scannable.print tag
-      (Format.pp_print_list ~pp_sep:Format.pp_print_space
-        Field_of_block.print) fields
-  | Code_and_set_of_closures { code; set_of_closures; } ->
-    if Option.is_none set_of_closures then
-      match Code_id.Map.get_singleton code with
-      | None ->
-        fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
-            @[<hov 1>%a@]\
-            ))@]"
-          (Flambda_colours.static_part ())
-          (Flambda_colours.normal ())
-          (Code_id.Map.print (print_code_with_cache ~cache)) code
-      | Some (_code_id, code) ->
-        fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
-            @[<hov 1>%a@]\
-            ))@]"
-          (Flambda_colours.static_part ())
-          (Flambda_colours.normal ())
-          (print_code_with_cache ~cache) code
-    else
-      fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
-          @[<hov 1>(code@ (%a))@]@ \
-          @[<hov 1>(set_of_closures@ (%a))@]\
-          ))@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        (Code_id.Map.print (print_code_with_cache ~cache)) code
-        (Misc.Stdlib.Option.print
-          (Set_of_closures.print_with_cache ~cache))
-          set_of_closures
-  | Boxed_float (Const f) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Numbers.Float_by_bit_pattern.print f
-  | Boxed_float (Var v) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print v
-  | Boxed_int32 (Const n) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %ld)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      n
-  | Boxed_int32 (Var v) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print v
-  | Boxed_int64 (Const n) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %Ld)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      n
-  | Boxed_int64 (Var v) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print v
-  | Boxed_nativeint (Const n) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Targetint.print n
-  | Boxed_nativeint (Var v) ->
-    fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      Variable.print v
-  | Immutable_float_array fields ->
-    fprintf ppf "@[<hov 1>(@<0>%sImmutable_float_array@<0>%s@ @[[| %a |]@])@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      (Format.pp_print_list
-         ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
-         print_float_array_field)
-      fields
-  | Mutable_string { initial_value = s; } ->
-    fprintf ppf "@[<hov 1>(@<0>%sMutable_string@<0>%s@ \"%s\")@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      s
-  | Immutable_string s ->
-    fprintf ppf "@[<hov 1>(@<0>%sImmutable_string@<0>%s@ \"%s\")@]"
-      (Flambda_colours.static_part ())
-      (Flambda_colours.normal ())
-      s
-
-let print ppf t =
-  print_with_cache ~cache:(Printing_cache.create ()) ppf t
 
 (*
 let _invariant env t =
@@ -505,3 +582,16 @@ let disjoint_union t1 t2 =
     Misc.fatal_errorf "Cannot [disjoint_union] the following:@ %a@ and@ %a"
       print t1
       print t2
+
+let can_share t =
+  match t with
+  | Block (_, Immutable, _)
+  | Code_and_set_of_closures _
+  | Boxed_float _
+  | Boxed_int32 _
+  | Boxed_int64 _
+  | Boxed_nativeint _
+  | Immutable_float_array _
+  | Immutable_string _ -> true
+  | Block (_, Mutable, _)
+  | Mutable_string _ -> false

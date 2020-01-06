@@ -37,27 +37,39 @@ let create_static_const (to_lift : T.to_lift) : Static_const.t =
   | Boxed_nativeint i -> Boxed_nativeint (Const i)
 
 let lift dacc ty ~bound_to static_const =
-  let symbol =
-    Symbol.create (Compilation_unit.get_current_exn ())
-      (Linkage_name.create (Variable.unique_name bound_to))
-  in
-  if not (K.equal (T.kind ty) K.value) then begin
-    Misc.fatal_errorf "Cannot lift non-[Value] variable: %a"
-      Variable.print bound_to
-  end;
-  let dacc =
-    DA.map_r dacc ~f:(fun r ->
-      Lifted_constant.create (DA.denv dacc)
-        (Singleton symbol) static_const
-        ~types_of_symbols:(Symbol.Map.singleton symbol ty)
-      |> R.new_lifted_constant r)
+  let dacc, symbol =
+    match R.find_shareable_constant (DA.r dacc) static_const with
+    | Some symbol -> dacc, symbol
+    | None ->
+      let symbol =
+        Symbol.create (Compilation_unit.get_current_exn ())
+          (Linkage_name.create (Variable.unique_name bound_to))
+      in
+      if not (K.equal (T.kind ty) K.value) then begin
+        Misc.fatal_errorf "Cannot lift non-[Value] variable: %a"
+          Variable.print bound_to
+      end;
+      let dacc =
+        DA.map_r dacc ~f:(fun r ->
+          Lifted_constant.create (DA.denv dacc)
+            (Singleton symbol) static_const
+            ~types_of_symbols:(Symbol.Map.singleton symbol ty)
+          |> R.new_lifted_constant r)
+      in
+      let dacc =
+        DA.map_r dacc ~f:(fun r ->
+          R.consider_constant_for_sharing r symbol static_const)
+      in
+      let dacc =
+        DA.map_denv dacc ~f:(fun denv -> DE.add_symbol denv symbol ty)
+      in
+      dacc, symbol
   in
   let symbol' = Simple.symbol symbol in
   let term = Named.create_simple symbol' in
   let var_ty = T.alias_type_of (T.kind ty) symbol' in
   let dacc =
     DA.map_denv dacc ~f:(fun denv ->
-      let denv = DE.add_symbol denv symbol ty in
       DE.add_equation_on_variable denv bound_to var_ty)
   in
   Reachable.reachable term, dacc, var_ty

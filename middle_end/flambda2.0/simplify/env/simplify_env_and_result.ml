@@ -630,23 +630,28 @@ end = struct
     { resolver : (Export_id.t -> Flambda_type.t option);
       imported_symbols : Flambda_kind.t Symbol.Map.t;
       lifted_constants_innermost_last : Lifted_constant.t list;
+      shareable_constants : Symbol.t Static_const.Map.t;
     }
 
   let print ppf { resolver = _; imported_symbols;
                   lifted_constants_innermost_last;
+                  shareable_constants;
                 } =
     Format.fprintf ppf "@[<hov 1>(\
         @[<hov 1>(imported_symbols@ %a)@]@ \
-        @[<hov 1>(lifted_constants_innermost_last@ %a)@]\
+        @[<hov 1>(lifted_constants_innermost_last@ %a)@]@ \
+        @[<hov 1>(shareable_constants@ %a)@]\
         )@]"
       (Symbol.Map.print Flambda_kind.print) imported_symbols
       (Format.pp_print_list ~pp_sep:Format.pp_print_space Lifted_constant.print)
         lifted_constants_innermost_last
+      (Static_const.Map.print Symbol.print) shareable_constants
 
   let create ~resolver =
     { resolver;
       imported_symbols = Symbol.Map.empty;
       lifted_constants_innermost_last = [];
+      shareable_constants = Static_const.Map.empty;
     }
 
   let imported_symbols t = t.imported_symbols
@@ -666,6 +671,17 @@ end = struct
     { t with
       lifted_constants_innermost_last = [];
     }
+
+  let find_shareable_constant t static_const =
+    Static_const.Map.find_opt static_const t.shareable_constants
+
+  let consider_constant_for_sharing t symbol static_const =
+    if not (Static_const.can_share static_const) then t
+    else
+      { t with
+        shareable_constants =
+          Static_const.Map.add static_const symbol t.shareable_constants;
+      }
 end and Lifted_constant : sig
   include Simplify_env_and_result_intf.Lifted_constant
     with type downwards_env := Downwards_env.t

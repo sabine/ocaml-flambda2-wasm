@@ -537,9 +537,7 @@ end and Static_const : sig
     | Mutable_string of { initial_value : string; }
     | Immutable_string of string
 
-  (** Print a static structure definition to a formatter. *)
-  val print : Format.formatter -> t -> unit
-
+  include Identifiable.S with type t := t
   include Contains_names.S with type t := t
 
   (** Return all pieces of code defined by the given term. *)
@@ -553,6 +551,8 @@ end and Static_const : sig
   val is_fully_static : t -> bool
 
   val disjoint_union : t -> t -> t
+
+  val can_share : t -> bool
 end
 
 module Function_declaration = Function_declaration

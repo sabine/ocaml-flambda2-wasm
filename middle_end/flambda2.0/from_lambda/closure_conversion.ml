@@ -40,6 +40,7 @@ type t = {
   mutable imported_symbols : Symbol.Set.t;
   (* All symbols in [imported_symbols] are to be of kind [Value]. *)
   mutable declared_symbols : (Symbol.t * Static_const.t) list;
+  mutable shareable_constants : Symbol.t Static_const.Map.t;
   mutable code : (Code_id.t * Function_params_and_body.t) list;
 }
 
@@ -148,16 +149,23 @@ let tupled_function_call_stub
   func_decl, code_id, params_and_body
 
 let register_const0 t constant name =
-  let current_compilation_unit = Compilation_unit.get_current_exn () in
-  (* Create a variable to ensure uniqueness of the symbol. *)
-  let var = Variable.create ~current_compilation_unit name in
-  let symbol =
-    Symbol.create (Compilation_unit.get_current_exn ())
-      (Linkage_name.create
-         (Variable.unique_name (Variable.rename var)))
-  in
-  t.declared_symbols <- (symbol, constant) :: t.declared_symbols;
-  symbol
+  match Static_const.Map.find constant t.shareable_constants with
+  | exception Not_found ->
+    let current_compilation_unit = Compilation_unit.get_current_exn () in
+    (* Create a variable to ensure uniqueness of the symbol. *)
+    let var = Variable.create ~current_compilation_unit name in
+    let symbol =
+      Symbol.create (Compilation_unit.get_current_exn ())
+        (Linkage_name.create
+           (Variable.unique_name (Variable.rename var)))
+    in
+    t.declared_symbols <- (symbol, constant) :: t.declared_symbols;
+    if Static_const.can_share constant then begin
+      t.shareable_constants
+        <- Static_const.Map.add constant symbol t.shareable_constants
+    end;
+    symbol
+  | symbol -> symbol
 
 let register_const t constant name : Static_const.Field_of_block.t * string =
   let symbol = register_const0 t constant name in
@@ -851,6 +859,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
       filename;
       imported_symbols = Symbol.Set.empty;
       declared_symbols = [];
+      shareable_constants = Static_const.Map.empty;
       code = [];
     }
   in

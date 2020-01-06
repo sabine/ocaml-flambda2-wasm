@@ -273,6 +273,12 @@ module type Result = sig
 
   val set_lifted_constants : t -> lifted_constant list -> t
 
+  (* CR mshinwell: This whole lifted/shareable constant interface probably
+     still needs some work *)
+  val find_shareable_constant : t -> Static_const.t -> Symbol.t option
+
+  val consider_constant_for_sharing : t -> Symbol.t -> Static_const.t -> t
+
   val imported_symbols : t -> Flambda_kind.t Symbol.Map.t
 
   val clear_lifted_constants : t -> t

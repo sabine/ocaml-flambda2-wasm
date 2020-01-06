@@ -74,9 +74,7 @@ type t =
   | Mutable_string of { initial_value : string; }
   | Immutable_string of string
 
-(** Print a static structure definition to a formatter. *)
-val print : Format.formatter -> t -> unit
-
+include Identifiable.S with type t := t
 include Contains_names.S with type t := t
 
 val get_pieces_of_code
@@ -86,3 +84,5 @@ val get_pieces_of_code
 val is_fully_static : t -> bool
 
 val disjoint_union : t -> t -> t
+
+val can_share : t -> bool

@@ -22,25 +22,37 @@ let lift_non_closure_discovered_via_reified_continuation_param_types dacc
       var to_lift ~reified_continuation_params_to_symbols
       ~reified_definitions ~closure_symbols_by_set =
   let static_const = Reification.create_static_const to_lift in
-  let symbol =
-    Symbol.create (Compilation_unit.get_current_exn ())
-      (Linkage_name.create (Variable.unique_name var))
-  in
-  let dacc =
-    DA.map_denv dacc ~f:(fun denv ->
-      DE.add_equation_on_name (DE.define_symbol denv symbol K.value)
-        (Name.var var)
-        (T.alias_type_of K.value (Simple.symbol symbol)))
-  in
-  let reified_definitions =
-    (Let_symbol.Bound_symbols.Singleton symbol, static_const)
-      :: reified_definitions
-  in
-  let reified_continuation_params_to_symbols =
-    Variable.Map.add var symbol reified_continuation_params_to_symbols
-  in
-  dacc, reified_continuation_params_to_symbols, reified_definitions,
-    closure_symbols_by_set
+  match R.find_shareable_constant (DA.r dacc) static_const with
+  | Some symbol ->
+    let reified_continuation_params_to_symbols =
+      Variable.Map.add var symbol reified_continuation_params_to_symbols
+    in
+    dacc, reified_continuation_params_to_symbols, reified_definitions,
+      closure_symbols_by_set
+  | None ->
+    let symbol =
+      Symbol.create (Compilation_unit.get_current_exn ())
+        (Linkage_name.create (Variable.unique_name var))
+    in
+    let dacc =
+      DA.map_denv dacc ~f:(fun denv ->
+        DE.add_equation_on_name (DE.define_symbol denv symbol K.value)
+          (Name.var var)
+          (T.alias_type_of K.value (Simple.symbol symbol)))
+    in
+    let dacc =
+      DA.map_r dacc ~f:(fun r ->
+        R.consider_constant_for_sharing r symbol static_const)
+    in
+    let reified_definitions =
+      (Let_symbol.Bound_symbols.Singleton symbol, static_const)
+        :: reified_definitions
+    in
+    let reified_continuation_params_to_symbols =
+      Variable.Map.add var symbol reified_continuation_params_to_symbols
+    in
+    dacc, reified_continuation_params_to_symbols, reified_definitions,
+      closure_symbols_by_set
 
 let lift_set_of_closures_discovered_via_reified_continuation_param_types dacc
       var closure_id function_decls ~closure_vars
