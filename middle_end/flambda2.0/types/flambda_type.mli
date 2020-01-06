@@ -198,6 +198,8 @@ end
 module Closures_entry : sig
   type t
 
+  val closure_types : t -> flambda_type Closure_id.Map.t
+  val function_decl_types : t -> Function_declaration_type.t Closure_id.Map.t
   val closure_var_types : t -> flambda_type Var_within_closure.Map.t
 end
 
@@ -451,10 +453,10 @@ val prove_unique_tag_and_size
 
 val prove_is_int : Typing_env.t -> t -> bool proof
 
-(** Prove that the given type, of kind [Value], is a closures type
-    describing exactly one closure.  The function declaration type corresponding
-    to such closure is returned together with its closure ID, if it is
-    known. *)
+(** Prove that the given type, of kind [Value], is a closures type describing
+    exactly one set of closures. The function declaration type corresponding to
+    such closure is returned together with its closure ID, if it is known. *)
+(* CR mshinwell: Fix comment and/or function name *)
 val prove_single_closures_entry
    : Typing_env.t
   -> t

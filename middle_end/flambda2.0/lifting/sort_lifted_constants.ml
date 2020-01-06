@@ -91,7 +91,15 @@ let sort lifted_constants =
                       ignore closure_id;
                       (* We take the free names of the whole set of closures
                          for every closure symbol defined by it. *)
-                      Set_of_closures.free_names set_of_closures
+                      (* CR mshinwell: Think about this more.  We need to
+                         prevent sets of closures being split apart somehow. For
+                         the moment add explicit dependencies between all
+                         closure symbols in the set. *)
+                      Symbol.Map.fold (fun symbol _ free_names ->
+                          Name_occurrences.add_symbol free_names symbol
+                            NM.normal)
+                        closure_symbols
+                        (Set_of_closures.free_names set_of_closures)
                     end
                   | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
                   | Boxed_nativeint _ | Immutable_float_array _

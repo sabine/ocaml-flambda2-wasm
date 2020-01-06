@@ -39,6 +39,10 @@ val find_function_declaration
   -> Closure_id.t
   -> Function_declaration_type.t Or_bottom.t
 
+val closure_types : t -> Type_grammar.t Closure_id.Map.t
+
+val function_decl_types : t -> Function_declaration_type.t Closure_id.Map.t
+
 val closure_var_types : t -> Type_grammar.t Var_within_closure.Map.t
 
 include Type_structure_intf.S

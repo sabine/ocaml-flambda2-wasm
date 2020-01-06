@@ -202,6 +202,8 @@ type simplify_function_result = {
 let simplify_function dacc closure_id function_decl ~all_function_decls_in_set
       ~closure_bound_names ~closure_element_types ~old_to_new_code_ids =
   let name = Format.asprintf "%a" Closure_id.print closure_id in
+  Format.eprintf "simplify_function %s, closure_bound_names %a\n%!" name
+    (Closure_id.Map.print Name_in_binding_pos.print) closure_bound_names;
   Profile.record_call ~accumulate:true name (fun () ->
     let denv_after_enter_closure = DE.enter_closure (DA.denv dacc) in
     let code_id = FD.code_id function_decl in
@@ -217,6 +219,7 @@ let simplify_function dacc closure_id function_decl ~all_function_decls_in_set
                 closure_id ~all_function_decls_in_set ~closure_bound_names
                 ~closure_element_types ~old_to_new_code_ids)
           in
+Format.eprintf "DA for body of %s:@ %a\n%!" name DA.print dacc;
           match
             Simplify_toplevel.simplify_toplevel dacc body
               ~return_continuation
@@ -353,7 +356,7 @@ let simplify_set_of_closures0 dacc set_of_closures
               ~bind_to:(Name_in_binding_pos.to_name bound_name)
           in
           DE.with_typing_env denv
-            (TE.add_env_extension suitable_for ~env_extension))
+            (TE.add_env_extension (DE.typing_env denv) ~env_extension))
         closure_types_by_bound_name
         suitable_for_denv)
   in

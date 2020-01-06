@@ -192,6 +192,8 @@ let simplify_static_const_of_kind_value dacc
 let simplify_static_const_of_kind_fabricated dacc code_ids bound_symbols
       (static_const : Static_const.t) ~closure_symbols
       : Bound_symbols.t * SC.t * DA.t =
+Format.eprintf "Simplifying with closure symbols %a\n%!"
+  (Closure_id.Map.print Symbol.print) closure_symbols;
   match static_const with
   | Code_and_set_of_closures { code; set_of_closures; } ->
     let code_ids' = Code_id.Map.keys code in

@@ -171,6 +171,8 @@ let free_names { function_decls; closure_types; closure_var_types; } =
     (Name_occurrences.union (PC.free_names closure_types)
       (PV.free_names closure_var_types))
 
+let function_decl_types t = t.function_decls
+let closure_types t = PC.to_map t.closure_types
 let closure_var_types t = PV.to_map t.closure_var_types
 
 let find_function_declaration t closure_id : _ Or_bottom.t =

@@ -149,21 +149,17 @@ let prove_single_closures_entry' env t : _ proof_allowing_kind_mismatch =
       with
       | None -> Unknown
       | Some ((closure_id, set_of_closures_contents), closures_entry) ->
-        let closure_id' =
+        let closure_ids =
           Set_of_closures_contents.closures set_of_closures_contents
-          |> Closure_id.Set.get_singleton
         in
-        match closure_id' with
-        | None -> Unknown
-        | Some closure_id' ->
-          assert (Closure_id.equal closure_id closure_id');
-          let function_decl =
-            Closures_entry.find_function_declaration closures_entry closure_id
-          in
-          match function_decl with
-          | Bottom -> Invalid
-          | Ok function_decl ->
-            Proved (closure_id, closures_entry, function_decl)
+        assert (Closure_id.Set.mem closure_id closure_ids);
+        let function_decl =
+          Closures_entry.find_function_declaration closures_entry closure_id
+        in
+        match function_decl with
+        | Bottom -> Invalid
+        | Ok function_decl ->
+          Proved (closure_id, closures_entry, function_decl)
       end
     | Value (Ok _) -> Invalid
     | Value Unknown -> Unknown
