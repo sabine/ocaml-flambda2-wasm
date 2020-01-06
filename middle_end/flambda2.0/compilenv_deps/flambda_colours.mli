@@ -35,7 +35,10 @@ val name : unit -> string
 val parameter : unit -> string
 val symbol : unit -> string
 val variable : unit -> string
+
 val closure_element : unit -> string
+val closure_var : unit -> string
+
 val code_id : unit -> string
 
 val expr_keyword : unit -> string
