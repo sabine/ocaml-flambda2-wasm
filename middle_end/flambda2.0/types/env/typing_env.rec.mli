@@ -80,6 +80,8 @@ val find_cse_rev
   -> bound_to:Simple.t
   -> Flambda_primitive.Eligible_for_cse.t option
 
+val find_name_mode : t -> Name.t -> Name_mode.t
+
 val add_env_extension_from_level
    : t
   -> Typing_env_level.t

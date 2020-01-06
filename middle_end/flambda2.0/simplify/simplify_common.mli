@@ -70,7 +70,8 @@ val update_exn_continuation_extra_args
   -> Apply_expr.t
 
 val bind_let_bound
-   : bindings:((Bindable_let_bound.t * Reachable.t) list)
+   : Downwards_acc.t
+  -> bindings:((Bindable_let_bound.t * Reachable.t) list)
   -> body:Flambda.Expr.t
   -> Flambda.Expr.t
 
