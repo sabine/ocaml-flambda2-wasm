@@ -26,7 +26,7 @@ module Bound_symbols = struct
 
   (* CR mshinwell: Share with [Bindable_let_bound] and below *)
   let print_closure_binding ppf (closure_id, sym) =
-    Format.fprintf ppf "@[%a @<0>%s\u{21a6}@<0>%s %a@]"
+    Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]"
       Symbol.print sym
       (Flambda_colours.elide ())
       (Flambda_colours.elide ())
@@ -224,7 +224,7 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
     (List.rev flattened) @ (List.rev flattened')
 
 let print_closure_binding ppf (closure_id, sym) =
-  Format.fprintf ppf "@[%a @<0>%s\u{21a6}@<0>%s %a@]"
+  Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]"
     Symbol.print sym
     (Flambda_colours.elide ())
     (Flambda_colours.elide ())
