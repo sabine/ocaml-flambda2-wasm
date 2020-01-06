@@ -421,59 +421,59 @@ and simplify_recursive_let_cont_handlers
       in
       let params_and_handler = CH.params_and_handler cont_handler in
       CPH.pattern_match params_and_handler ~f:(fun params ~handler ->
-          let arity = KP.List.arity params in
-          let dacc =
-            DA.map_denv dacc ~f:DE.increment_continuation_scope_level
-          in
-          (* let set = Continuation_handlers.domain rec_handlers in *)
-          let body, (handlers, user_data), uacc =
-            simplify_expr dacc body (fun cont_uses_env _code_age_relation r ->
-              let arg_types =
-                (* We can't know a good type from the call types *)
-                List.map T.unknown arity
-              in
-              let (cont_uses_env, _apply_cont_rewrite_id) :
-                Continuation_uses_env.t * Apply_cont_rewrite_id.t =
-                (* We don't know anything, it's like it was called
-                   with an arbitrary argument! *)
-                CUE.record_continuation_use cont_uses_env
-                  cont
-                  Non_inlinable (* Maybe simpler ? *)
-                  ~typing_env_at_use:(
-                    (* not useful as we will have only top *)
-                    DE.typing_env definition_denv
-                  )
-                  ~arg_types
-              in
-              let denv =
-                (* XXX These don't have the same scope level as the
-                   non-recursive case *)
-                DE.add_parameters definition_denv params ~param_types:arg_types
-              in
-              let dacc = DA.create denv cont_uses_env r in
-              let dacc =
-                DA.map_denv dacc ~f:DE.set_not_at_unit_toplevel
-              in
-              let handler, user_data, uacc =
-                simplify_one_continuation_handler dacc cont Recursive
-                  cont_handler ~params ~handler
-                  ~extra_params_and_args:
-                    Continuation_extra_params_and_args.empty
-                  (fun cont_uses_env code_age_relation r ->
-                    let user_data, uacc = k cont_uses_env code_age_relation r in
-                    let uacc =
-                      UA.map_uenv uacc ~f:(fun uenv ->
-                        UE.add_continuation uenv cont
-                          original_cont_scope_level
-                          arity)
-                    in
-                    user_data, uacc)
-              in
-              let handlers = Continuation.Map.singleton cont handler in
-              (handlers, user_data), uacc)
-          in
-          let expr = Flambda.Let_cont.create_recursive handlers ~body in
-          expr, user_data, uacc))
+        let arity = KP.List.arity params in
+        let dacc =
+          DA.map_denv dacc ~f:DE.increment_continuation_scope_level
+        in
+        (* let set = Continuation_handlers.domain rec_handlers in *)
+        let body, (handlers, user_data), uacc =
+          simplify_expr dacc body (fun cont_uses_env _code_age_relation r ->
+            let arg_types =
+              (* We can't know a good type from the call types *)
+              List.map T.unknown arity
+            in
+            let (cont_uses_env, _apply_cont_rewrite_id) :
+              Continuation_uses_env.t * Apply_cont_rewrite_id.t =
+              (* We don't know anything, it's like it was called
+                 with an arbitrary argument! *)
+              CUE.record_continuation_use cont_uses_env
+                cont
+                Non_inlinable (* Maybe simpler ? *)
+                ~typing_env_at_use:(
+                  (* not useful as we will have only top *)
+                  DE.typing_env definition_denv
+                )
+                ~arg_types
+            in
+            let denv =
+              (* XXX These don't have the same scope level as the
+                 non-recursive case *)
+              DE.add_parameters definition_denv params ~param_types:arg_types
+            in
+            let dacc = DA.create denv cont_uses_env r in
+            let dacc =
+              DA.map_denv dacc ~f:DE.set_not_at_unit_toplevel
+            in
+            let handler, user_data, uacc =
+              simplify_one_continuation_handler dacc cont Recursive
+                cont_handler ~params ~handler
+                ~extra_params_and_args:
+                  Continuation_extra_params_and_args.empty
+                (fun cont_uses_env code_age_relation r ->
+                  let user_data, uacc = k cont_uses_env code_age_relation r in
+                  let uacc =
+                    UA.map_uenv uacc ~f:(fun uenv ->
+                      UE.add_continuation uenv cont
+                        original_cont_scope_level
+                        arity)
+                  in
+                  user_data, uacc)
+            in
+            let handlers = Continuation.Map.singleton cont handler in
+            (handlers, user_data), uacc)
+        in
+        let expr = Flambda.Let_cont.create_recursive handlers ~body in
+        expr, user_data, uacc))
 
 and simplify_let_cont
   : 'a. DA.t -> Let_cont.t -> 'a k -> Expr.t * 'a * UA.t
