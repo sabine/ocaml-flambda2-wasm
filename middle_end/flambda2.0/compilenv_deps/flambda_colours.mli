@@ -45,6 +45,7 @@ val static_part : unit -> string
 
 val continuation : unit -> string
 val continuation_definition : unit -> string
+val continuation_annotation : unit -> string
 
 val name_abstraction : unit -> string
 
