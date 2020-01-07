@@ -276,7 +276,18 @@ let sort lifted_constants =
                         | None -> Some set
                         | Some set' ->
                           if not (Set_of_closures.equal set set') then
-                            Some (Set_of_closures.disjoint_union set set')
+                            match Set_of_closures.disjoint_union set set' with
+                            | exception (Invalid_argument _) ->
+                              Misc.fatal_errorf "Sets of closures for SCC \
+                                  component {%a} are not disjoint:@ %a@ and@ \
+                                  %a"
+                                (Format.pp_print_list
+                                  ~pp_sep:Format.pp_print_space
+                                  Code_id_or_symbol.print)
+                                members
+                                Set_of_closures.print set
+                                Set_of_closures.print set'
+                            | set -> Some set
                           else
                             set_of_closures
                       in
