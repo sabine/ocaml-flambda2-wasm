@@ -124,6 +124,8 @@ let bind_closure_types_inside_function ~denv_outside_function
         (* The name may be bound already when reifying computed values
            at toplevel (see
            [Simplify_static.simplify_return_continuation_handler]). *)
+        (* CR mshinwell: update out of date comment.  Do we still need
+           [define_name_if_undefined] here? *)
         DE.define_name_if_undefined denv bound_name K.value)
       closure_bound_names_inside
       denv

@@ -221,11 +221,6 @@ let simplify_static_const_of_kind_fabricated dacc code_ids bound_symbols
         Code_id.Set.print code_ids'
         Static_const.print static_const
     end;
-    (* CR-someday mshinwell: If we start simplifying code here, then
-       the [Let_symbol] case in [Simplify_expr] will have to be able to cope
-       with lifted constants arriving from the simplification of a
-       [Let_symbol]'s defining expression, that may need to be put into the
-       same set of closures as the current defining expression. *)
     let dacc =
       Code_id.Map.fold
         (fun code_id
