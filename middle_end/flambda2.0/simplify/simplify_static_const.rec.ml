@@ -62,7 +62,7 @@ let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
   let dacc =
     DA.map_denv dacc ~f:(fun denv ->
       Closure_id.Map.fold (fun _closure_id symbol denv ->
-          DE.define_symbol denv symbol K.value)
+          DE.define_symbol_if_undefined denv symbol K.value)
         closure_symbols
         denv)
   in
