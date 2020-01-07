@@ -260,6 +260,12 @@ let simplify_function dacc closure_id function_decl ~all_function_decls_in_set
           ~params_and_body
         |> DE.add_lifted_constants ~lifted:(R.get_lifted_constants r)
       in
+      (* Only holds in the symbols case
+      Closure_id.Map.iter (fun _ name ->
+          DE.check_name_is_bound denv_outside_function
+            (Name_in_binding_pos.to_name name))
+        closure_bound_names;
+      *)
       function_decl_type ~denv_outside_function function_decl Rec_info.initial
     in
     { function_decl;
@@ -357,11 +363,16 @@ let simplify_set_of_closures0 dacc set_of_closures
         closure_types_by_bound_name
         suitable_for_denv)
   in
+  let orig_set_of_closures = set_of_closures in
   let set_of_closures =
     Set_of_closures.create
       (Function_declarations.create all_function_decls_in_set)
       ~closure_elements
   in
+  Format.eprintf "Starting SOC:@ %a@ Returned SOC:@ %a@ dacc:@ %a\n%!"
+    Set_of_closures.print orig_set_of_closures
+    Set_of_closures.print set_of_closures
+    DA.print dacc;
   let newer_versions_of = Code_id.invert_map old_to_new_code_ids in
   { set_of_closures;
     closure_types_by_bound_name;

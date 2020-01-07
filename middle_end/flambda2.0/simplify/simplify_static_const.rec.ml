@@ -59,6 +59,13 @@ let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
   let closure_bound_names =
     Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
   in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Closure_id.Map.fold (fun _closure_id symbol denv ->
+          DE.define_symbol denv symbol K.value)
+        closure_symbols
+        denv)
+  in
   let { Simplify_named.
         set_of_closures;
         closure_types_by_bound_name;
