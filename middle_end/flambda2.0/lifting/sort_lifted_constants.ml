@@ -279,7 +279,7 @@ let sort lifted_constants =
                             match Set_of_closures.disjoint_union set set' with
                             | exception (Invalid_argument _) ->
                               Misc.fatal_errorf "Sets of closures for SCC \
-                                  component {%a} are not disjoint:@ %a@ and@ \
+                                  component@ {%a}@ are not disjoint:@ %a@ and@ \
                                   %a"
                                 (Format.pp_print_list
                                   ~pp_sep:Format.pp_print_space

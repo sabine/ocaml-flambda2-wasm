@@ -70,3 +70,5 @@ val update_code_id : t -> Code_id.t -> t
 val recursive : t -> Recursive.t
 
 val compare : t -> t -> int
+
+val equal : t -> t -> bool

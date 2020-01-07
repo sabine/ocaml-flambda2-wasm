@@ -138,3 +138,5 @@ let update_code_id t code_id = { t with code_id; }
    other things in [t1] and [t2] are equal *)
 let compare t1 t2 =
   Code_id.compare t1.code_id t2.code_id
+
+let equal t1 t2 = (compare t1 t2 = 0)

@@ -42,6 +42,8 @@ val has_empty_environment : t -> bool
     may be lifted.) *)
 val environment_doesn't_mention_variables : t -> bool
 
+(* CR mshinwell: name may be misleading -- equal function decls etc. are
+   allowed *)
 val disjoint_union : t -> t -> t
 
 val filter_function_declarations

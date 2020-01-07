@@ -54,7 +54,11 @@ let apply_name_permutation ({ funs; } as t) perm =
   else { funs = funs'; }
 
 let disjoint_union t1 t2 =
-  let funs = Closure_id.Map.disjoint_union t1.funs t2.funs in
+  let funs =
+    Closure_id.Map.disjoint_union
+      ~eq:Function_declaration.equal
+      t1.funs t2.funs
+  in
   { funs; }
 
 let compare { funs = funs1; } { funs = funs2; } =
