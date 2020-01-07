@@ -380,6 +380,16 @@ end = struct
         Lifted_constant.print) lifted;
     *)
     let module LC = Lifted_constant in
+    let t =
+      List.fold_left (fun t lifted_constant ->
+          let types_of_symbols = LC.types_of_symbols lifted_constant in
+          Symbol.Map.fold (fun sym typ t ->
+              define_symbol_if_undefined t sym (T.kind typ))
+            types_of_symbols
+            t)
+        t
+        lifted
+    in
     List.fold_left (fun denv lifted_constant ->
         let denv_at_definition = LC.denv_at_definition lifted_constant in
         let types_of_symbols = LC.types_of_symbols lifted_constant in
@@ -399,17 +409,7 @@ end = struct
                 to be found:@ %a@ denv:@ %a"
               LC.print lifted_constant
               print denv
-          else
-            let typing_env =
-              Symbol.Map.fold (fun sym typ typing_env ->
-                  let sym =
-                    Name_in_binding_pos.create (Name.symbol sym)
-                      Name_mode.normal
-                  in
-                  TE.add_definition typing_env sym (T.kind typ))
-                types_of_symbols
-                denv.typing_env
-            in
+          else begin
             Symbol.Map.fold (fun sym typ typing_env ->
                 let sym = Name.symbol sym in
                 let env_extension =
@@ -420,7 +420,8 @@ end = struct
                 in
                 TE.add_env_extension typing_env ~env_extension)
               types_of_symbols
-              typing_env
+              denv.typing_env
+          end
         in
         Code_id.Map.fold
           (fun code_id (params_and_body, newer_version_of) denv ->

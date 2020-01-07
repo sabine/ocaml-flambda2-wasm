@@ -272,6 +272,8 @@ and simplify_non_recursive_let_cont_handler
                 KP.List.print params;
       *)
               let denv =
+                (* CR mshinwell: Don't need to re-add constants that were
+                   above the [Let_cont], they will already be in denv. *)
                 DE.add_lifted_constants denv ~lifted:(R.get_lifted_constants r)
               in
               let uses =
