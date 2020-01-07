@@ -69,6 +69,19 @@ let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
     Simplify_named.simplify_set_of_closures0 dacc set_of_closures
       ~closure_bound_names ~closure_elements ~closure_element_types
   in
+  (* CR mshinwell: See comment in simplify_non_lifted_set_of_closures about
+     the following *)
+  let dacc =
+    DA.map_r dacc ~f:(fun r ->
+      R.new_lifted_constant r
+        (Lifted_constant.create_pieces_of_code (DA.denv dacc)
+          code ~newer_versions_of))
+  in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      DE.add_lifted_constants denv
+        ~lifted:(R.get_lifted_constants (DA.r dacc)))
+  in
   let code =
     Code_id.Map.mapi (fun code_id params_and_body : Static_const.code ->
         { params_and_body = Present params_and_body;

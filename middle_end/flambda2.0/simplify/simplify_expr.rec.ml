@@ -84,6 +84,13 @@ and simplify_let_symbol
   let bound_symbols, defining_expr, dacc =
     Simplify_static_const.simplify_static_const dacc bound_symbols defining_expr
   in
+  let bound_symbols_free_names = Bound_symbols.free_names bound_symbols in
+  Symbol.Set.iter (fun sym ->
+      DE.check_symbol_is_bound (DA.denv dacc) sym)
+    (Name_occurrences.symbols bound_symbols_free_names);
+  Code_id.Set.iter (fun code_id ->
+      DE.check_code_id_is_bound (DA.denv dacc) code_id)
+    (Name_occurrences.code_ids bound_symbols_free_names);
   let dacc =
     DA.map_denv dacc ~f:(fun denv ->
       Symbol.Set.fold (fun symbol denv ->

@@ -127,6 +127,8 @@ module type Downwards_env = sig
 
   val check_simple_is_bound : t -> Simple.t -> unit
 
+  val check_code_id_is_bound : t -> Code_id.t -> unit
+
   (** Add the given lifted constants to the given environment.  Symbols
       defined in the lifted constants but already defined in the given
       environment are ignored.

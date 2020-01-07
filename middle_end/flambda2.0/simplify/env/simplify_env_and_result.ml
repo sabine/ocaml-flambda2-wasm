@@ -337,6 +337,13 @@ end = struct
     (* CR mshinwell: Convert [Typing_env] to map from [Simple]s. *)
     | Const _ -> ()
 
+  let check_code_id_is_bound t code_id =
+    if not (Code_id.Map.mem code_id t.code) then begin
+      Misc.fatal_errorf "Unbound code ID %a in environment:@ %a"
+        Code_id.print code_id
+        print t
+    end
+
   let define_code t ?newer_version_of ~code_id ~params_and_body:code =
     if Code_id.Map.mem code_id t.code then begin
       Misc.fatal_errorf "Code ID %a is already defined, cannot redefine to@ %a"

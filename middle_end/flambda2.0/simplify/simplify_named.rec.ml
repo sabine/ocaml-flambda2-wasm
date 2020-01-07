@@ -449,6 +449,9 @@ let simplify_non_lifted_set_of_closures dacc ~bound_vars ~closure_bound_vars
   let defining_expr =
     Reachable.reachable (Named.create_set_of_closures set_of_closures)
   in
+  (* CR mshinwell: This next part should probably be shared between the
+     lifted and non-lifted cases; we always need the new code in the
+     environment and [r]. *)
   let dacc =
     DA.map_r dacc ~f:(fun r ->
       R.new_lifted_constant r
