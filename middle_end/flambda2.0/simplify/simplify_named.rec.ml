@@ -365,16 +365,11 @@ let simplify_set_of_closures0 dacc set_of_closures
         closure_types_by_bound_name
         suitable_for_denv)
   in
-  let orig_set_of_closures = set_of_closures in
   let set_of_closures =
     Set_of_closures.create
       (Function_declarations.create all_function_decls_in_set)
       ~closure_elements
   in
-  Format.eprintf "Starting SOC:@ %a@ Returned SOC:@ %a@ dacc:@ %a\n%!"
-    Set_of_closures.print orig_set_of_closures
-    Set_of_closures.print set_of_closures
-    DA.print dacc;
   let newer_versions_of = Code_id.invert_map old_to_new_code_ids in
   { set_of_closures;
     closure_types_by_bound_name;
