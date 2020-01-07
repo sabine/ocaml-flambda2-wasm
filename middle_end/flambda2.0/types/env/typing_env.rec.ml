@@ -465,7 +465,10 @@ let invariant_for_new_equation t name ty =
     let defined_names =
       Name_occurrences.create_names (domain0 t) Name_mode.in_types
     in
-    let free_names = Type_grammar.free_names ty in
+    (* CR mshinwell: It's a shame we can't check code IDs here. *)
+    let free_names =
+      Name_occurrences.without_code_ids (Type_grammar.free_names ty)
+    in
     if not (Name_occurrences.subset_domain free_names defined_names) then begin
       let unbound_names = Name_occurrences.diff free_names defined_names in
       Misc.fatal_errorf "New equation@ %a@ =@ %a@ has unbound names@ (%a):@ %a"

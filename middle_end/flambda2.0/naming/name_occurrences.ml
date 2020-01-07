@@ -618,3 +618,9 @@ let downgrade_occurrences_at_strictly_greater_kind
     code_ids;
     newer_version_of_code_ids;
   }
+
+let without_code_ids t =
+  { t with
+    code_ids = For_code_ids.empty;
+    newer_version_of_code_ids = For_code_ids.empty;
+  }
