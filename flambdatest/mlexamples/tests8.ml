@@ -4,22 +4,8 @@ type +'a node =
 
 and 'a t = unit -> 'a node
 
-(*
-external rand : unit -> int = "rand"
-let r = rand ()
-*)
-
 let rec map_foo f seq () = match seq() with
   | Nil -> Nil
   | Cons (x, next) ->
-    Cons (f x, fun () -> (map_foo [@inlined never]) (fun x -> x) (fun () -> Nil) ())
-(*
-let iter f seq =
-  let rec aux seq = match seq () with
-    | Nil -> ()
-    | Cons (x, next) ->
-        f x;
-        aux next
-  in
-  aux seq
-*)
+    Cons (f x,
+      fun () -> (map_foo [@inlined never]) (fun x -> x) (fun () -> Nil) ())
