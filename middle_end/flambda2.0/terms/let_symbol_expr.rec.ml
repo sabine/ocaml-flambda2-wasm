@@ -17,28 +17,21 @@
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
 module Bound_symbols = struct
-  type t =
-    | Singleton : Symbol.t -> t
-    | Code_and_set_of_closures of {
-        code_ids : Code_id.Set.t;
-        closure_symbols : Symbol.t Closure_id.Map.t;
-      }
+  module Code_and_set_of_closures = struct
+    type t = {
+      code_ids : Code_id.Set.t;
+      closure_symbols : Symbol.t Closure_id.Map.t;
+    }
 
-  (* CR mshinwell: Share with [Bindable_let_bound] and below *)
-  let print_closure_binding ppf (closure_id, sym) =
-    Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]"
-      Symbol.print sym
-      (Flambda_colours.elide ())
-      (Flambda_colours.elide ())
-      Closure_id.print closure_id
-
-  let print ppf t =
-    match t with
-    | Singleton sym ->
-      Format.fprintf ppf "@[%a@ \u{2237}@ %a@]"
+    (* CR mshinwell: Share with [Bindable_let_bound] and below *)
+    let print_closure_binding ppf (closure_id, sym) =
+      Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]"
         Symbol.print sym
-        K.print K.value
-    | Code_and_set_of_closures { code_ids; closure_symbols; } ->
+        (Flambda_colours.elide ())
+        (Flambda_colours.elide ())
+        Closure_id.print closure_id
+
+    let print ppf { code_ids; closure_symbols; } =
       match
         Code_id.Set.elements code_ids, Closure_id.Map.bindings closure_symbols
       with
@@ -59,6 +52,45 @@ module Bound_symbols = struct
             print_closure_binding)
           (Closure_id.Map.bindings closure_symbols)
 
+    let being_defined { code_ids = _; closure_symbols; } =
+      Symbol.Set.of_list (Closure_id.Map.data closure_symbols)
+
+    let closure_symbols_being_defined { code_ids = _; closure_symbols; } =
+      Symbol.Set.of_list (Closure_id.Map.data closure_symbols)
+
+    let code_being_defined { code_ids; closure_symbols = _; } = code_ids
+
+    let free_names { code_ids; closure_symbols; } =
+      let from_code_ids =
+        Code_id.Set.fold (fun code_id from_code_ids ->
+            Name_occurrences.add_code_id from_code_ids code_id Name_mode.normal)
+          code_ids
+          Name_occurrences.empty
+      in
+      Closure_id.Map.fold (fun _closure_id closure_sym bound_names ->
+          Name_occurrences.add_symbol bound_names closure_sym Name_mode.normal)
+        closure_symbols
+        from_code_ids
+  end
+
+  type t =
+    | Singleton of Symbol.t
+    | Sets_of_closures of Code_and_set_of_closures.t list
+
+  let print ppf t =
+    match t with
+    | Singleton sym ->
+      Format.fprintf ppf "@[%a@ \u{2237}@ %a@]"
+        Symbol.print sym
+        K.print K.value
+    | Sets_of_closures [set] ->
+      Code_and_set_of_closures.print ppf set
+    | Sets_of_closures sets ->
+      Format.fprintf ppf "@[<hov 1>(%a)@]"
+        (Format.pp_print_list ~pp_sep:Format.pp_print_space
+          Code_and_set_of_closures.print)
+        sets
+
   let print_with_cache ~cache:_ ppf t = print ppf t
 
   (* CR mshinwell: This should have an [invariant] function.  One thing to
@@ -69,19 +101,23 @@ module Bound_symbols = struct
   let being_defined t =
     match t with
     | Singleton sym -> Symbol.Set.singleton sym
-    | Code_and_set_of_closures { code_ids = _; closure_symbols; } ->
-      Symbol.Set.of_list (Closure_id.Map.data closure_symbols)
+    | Sets_of_closures sets ->
+      Symbol.Set.union_list
+        (List.map Code_and_set_of_closures.being_defined sets)
 
   let closure_symbols_being_defined t =
     match t with
     | Singleton _sym -> Symbol.Set.empty
-    | Code_and_set_of_closures { code_ids = _; closure_symbols; } ->
-      Symbol.Set.of_list (Closure_id.Map.data closure_symbols)
+    | Sets_of_closures sets ->
+      Symbol.Set.union_list
+        (List.map Code_and_set_of_closures.closure_symbols_being_defined sets)
 
   let code_being_defined t =
     match t with
     | Singleton _ -> Code_id.Set.empty
-    | Code_and_set_of_closures { code_ids; closure_symbols = _; } -> code_ids
+    | Sets_of_closures sets ->
+      Code_id.Set.union_list
+        (List.map Code_and_set_of_closures.code_being_defined sets)
 
   let everything_being_defined t =
     let code =
@@ -103,45 +139,9 @@ module Bound_symbols = struct
   let free_names t =
     match t with
     | Singleton sym -> Name_occurrences.singleton_symbol sym Name_mode.normal
-    | Code_and_set_of_closures { code_ids; closure_symbols; } ->
-      let from_code_ids =
-        Code_id.Set.fold (fun code_id from_code_ids ->
-            Name_occurrences.add_code_id from_code_ids code_id Name_mode.normal)
-          code_ids
-          Name_occurrences.empty
-      in
-      Closure_id.Map.fold (fun _closure_id closure_sym bound_names ->
-          Name_occurrences.add_symbol bound_names closure_sym Name_mode.normal)
-        closure_symbols
-        from_code_ids
-
-  let disjoint_union t1 t2 =
-    match t1, t2 with
-    | Code_and_set_of_closures {
-        code_ids = code_ids1;
-        closure_symbols = closure_symbols1;
-      },
-      Code_and_set_of_closures {
-        code_ids = code_ids2;
-        closure_symbols = closure_symbols2;
-      } ->
-      let code_ids = Code_id.Set.inter code_ids1 code_ids2 in
-      if not (Code_id.Set.is_empty code_ids) then begin
-        Misc.fatal_errorf "Code IDs not disjoint in@ %a@ and@ %a"
-          print t1
-          print t2
-      end;
-      Code_and_set_of_closures {
-        code_ids = Code_id.Set.union code_ids1 code_ids2;
-        closure_symbols =
-          Closure_id.Map.disjoint_union closure_symbols1 closure_symbols2;
-      }
-    | Code_and_set_of_closures _, Singleton _
-    | Singleton _, Code_and_set_of_closures _
-    | Singleton _, Singleton _ ->
-      Misc.fatal_errorf "Cannot [disjoint_union] the following:@ %a@ and@ %a"
-        print t1
-        print t2
+    | Sets_of_closures sets ->
+      Name_occurrences.union_list
+        (List.map Code_and_set_of_closures.free_names sets)
 end
 
 type t = {
@@ -166,62 +166,66 @@ type flattened_for_printing_descr =
   | Other of Symbol.t * Static_const.t
 
 type flattened_for_printing = {
-  second_or_more_binding_within_rec : bool;
+  second_or_later_binding_within_rec : bool;
+  second_or_later_set_of_closures : bool;
   descr : flattened_for_printing_descr;
 }
 
 let flatten_for_printing { bound_symbols; defining_expr; _ } =
   match bound_symbols with
   | Singleton symbol ->
-    [{ second_or_more_binding_within_rec = false;
+    [{ second_or_later_binding_within_rec = false;
       descr = Other (symbol, defining_expr);
     }]
-  | Code_and_set_of_closures { code_ids = _; closure_symbols; } ->
-    let code, set_of_closures =
-      match defining_expr with
-      | Code_and_set_of_closures { code; set_of_closures; } ->
-        code, set_of_closures
-      | _ ->
-        Misc.fatal_errorf "Bad form of static constant:@ %a"
-          Static_const.print defining_expr
-    in
-    let flattened,_ =
-      Code_id.Map.fold (fun code_id code (flattened', first) ->
-          let flattened =
-            { second_or_more_binding_within_rec = not first;
-              descr = Code (code_id, code);
-            }
+  | Sets_of_closures sets ->
+    let flattened, _ =
+      List.fold_left
+        (fun (flattened_acc, second_or_later_set_of_closures)
+             { code_ids = _; closure_symbols; } ->
+          let code, set_of_closures =
+            match defining_expr with
+            | Code_and_set_of_closures { code; set_of_closures; } ->
+              code, set_of_closures
+            | _ ->
+              Misc.fatal_errorf "Bad form of static constant:@ %a"
+                Static_const.print defining_expr
           in
-          flattened :: flattened', false)
-        code
-        ([], true)
+          let flattened,_ =
+            Code_id.Map.fold (fun code_id code (flattened', first) ->
+                let flattened =
+                  { second_or_later_binding_within_rec = not first;
+                    second_or_later_set_of_closures;
+                    descr = Code (code_id, code);
+                  }
+                in
+                flattened :: flattened', false)
+              code
+              ([], true)
+          in
+          let flattened' =
+            match set_of_closures with
+            | None -> []
+            | Some set_of_closures ->
+              let second_or_later_binding_within_rec =
+                not (Code_id.Map.is_empty code)
+              in
+              let second_or_later_set_of_closures =
+                second_or_later_set_of_closures
+                  && not (Code_id.Map.is_empty code)
+              in
+              [{ second_or_later_binding_within_rec;
+                 second_or_later_set_of_closures;
+                 descr = Set_of_closures (closure_symbols, set_of_closures);
+              }]
+          in
+          let flattened_acc =
+            (List.rev flattened) @ (List.rev flattened') @ flattened_acc
+          in
+          flattened_acc, true)
+        ([], false)
+        sets
     in
-    let flattened' =
-      match set_of_closures with
-      | None -> []
-      | Some set_of_closures ->
-        [{ second_or_more_binding_within_rec = not (Code_id.Map.is_empty code);
-           descr = Set_of_closures (closure_symbols, set_of_closures);
-        }]
-(*
-        Closure_id.Map.fold
-          (fun closure_id closure_symbol (flattened', first) ->
-            let function_decl =
-              Function_declarations.find
-                (Set_of_closures.function_decls set_of_closures)
-                closure_id
-            in
-            let flattened =
-              { second_or_more_binding_within_rec = not first;
-                descr = Closure (closure_symbol, function_decl);
-              }
-            in
-            flattened :: flattened', false)
-          closure_symbols
-          ([], Code_id.Map.is_empty code)
-*)
-    in
-    (List.rev flattened) @ (List.rev flattened')
+    flattened
 
 let print_closure_binding ppf (closure_id, sym) =
   Format.fprintf ppf "@[%a @<0>%s\u{21a4}@<0>%s %a@]"
@@ -251,11 +255,16 @@ let print_flattened_descr_rhs ppf descr =
   | Set_of_closures (_, set) -> Set_of_closures.print ppf set
   | Other (_, static_const) -> Static_const.print ppf static_const
 
-let print_flattened ppf { second_or_more_binding_within_rec; descr; } =
+let print_flattened ppf
+      { second_or_later_binding_within_rec;
+        second_or_later_set_of_closures;
+        descr;
+      } =
   fprintf ppf "@[<hov 1>";
-  if second_or_more_binding_within_rec then begin
-    fprintf ppf "@<0>%sand @<0>%s"
+  if second_or_later_binding_within_rec then begin
+    fprintf ppf "@<0>%sand%s @<0>%s"
       (Flambda_colours.elide ())
+      (if second_or_later_set_of_closures then " [another set]" else "")
       (Flambda_colours.normal ())
   end;
   fprintf ppf
@@ -309,7 +318,7 @@ let free_names { bound_symbols; defining_expr; body; } =
   let from_defining_expr =
     match bound_symbols with
     | Singleton _ -> Static_const.free_names defining_expr
-    | Code_and_set_of_closures _ ->
+    | Sets_of_closures _ ->
       Name_occurrences.diff (Static_const.free_names defining_expr)
         from_bound_symbols
   in
@@ -354,9 +363,11 @@ let pieces_of_code ?newer_versions_of ?set_of_closures code =
       Option.value (Option.map fst set_of_closures)
         ~default:Closure_id.Map.empty
     in
-    Code_and_set_of_closures {
-      code_ids = Code_id.Map.keys code;
-      closure_symbols;
-    }
+    Sets_of_closures [
+      Code_and_set_of_closures {
+        code_ids = Code_id.Map.keys code;
+        closure_symbols;
+      }
+    ]
   in
   bound_symbols, static_const

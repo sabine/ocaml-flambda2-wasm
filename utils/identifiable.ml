@@ -33,6 +33,7 @@ module type Set = sig
   val to_string : t -> string
   val of_list : elt list -> t
   val map : (elt -> elt) -> t -> t
+  val union_list : t list -> t
 
   module Set : Set.S with type elt = t
 end
@@ -246,6 +247,11 @@ module Make_set (T : Thing) = struct
 
   include T0
   module Set = Set.Make (T0)
+
+  let rec union_list ts =
+    match ts with
+    | [] -> empty
+    | t::ts -> union t (union_list ts)
 end
 
 module Make_tbl (T : Thing) (Map : Map with module T := T) = struct
