@@ -29,13 +29,18 @@ type result = {
   bindings_outermost_last : (Bound_symbols.t * Static_const.t) list;
 }
 
-let sort lifted_constants =
+let sort dacc lifted_constants =
   (* The various lifted constants may exhibit recursion between themselves
      (specifically between closures and/or code).  We use SCC to obtain a
      topological sort of groups that must be coalesced into single
      code-and-set-of-closures definitions. *)
   let lifted_constants_dep_graph =
     List.fold_left (fun dep_graph (bound_symbols, defining_expr) ->
+        (*
+        Format.eprintf "Input: %a = %a\n%!"
+          Bound_symbols.print bound_symbols
+          Static_const.print defining_expr;
+        *)
         Code_id_or_symbol.Set.fold
           (fun (being_defined : Code_id_or_symbol.t) dep_graph ->
             let free_names =
@@ -110,6 +115,30 @@ let sort lifted_constants =
                 end
             in
             let free_syms = Name_occurrences.symbols free_names in
+            (* Beware: when coming from [Reify_continuation_params] the
+               sets of closures may have dependencies on variables that are
+               now equal to symbols in the environment.  (They haven't been
+               changed to symbols yet as the simplifier hasn't been run on
+               the definitions.)  Some of these symbols may be the ones
+               involved in the current SCC calculation.  As such, we must
+               explicitly add these dependencies. *)
+            let free_syms =
+              Variable.Set.fold (fun var free_syms ->
+                  let typing_env = DE.typing_env (DA.denv dacc) in
+                  let canonical =
+                    TE.get_canonical_simple typing_env
+                      ~min_name_mode:NM.normal
+                      (Simple.var var)
+                  in
+                  match canonical with
+                  | Bottom | Ok None -> free_syms
+                  | Ok (Some canonical) ->
+                    match Simple.descr canonical with
+                    | Name (Var _) | Const _ -> free_syms
+                    | Name (Symbol sym) -> Symbol.Set.add sym free_syms)
+                (Name_occurrences.variables free_names)
+                free_syms
+            in
             let free_code_ids =
               Code_id.Set.union (Name_occurrences.code_ids free_names)
                 (Name_occurrences.newer_version_of_code_ids free_names)
@@ -133,11 +162,11 @@ let sort lifted_constants =
       Code_id_or_symbol.Map.empty
       lifted_constants
   in
-(*
+  (*
   Format.eprintf "SCC graph is:@ %a\n%!"
     (Code_id_or_symbol.Map.print Code_id_or_symbol.Set.print)
     lifted_constants_dep_graph;
-*)
+  *)
   let connected_components =
     SCC_lifted_constants.connected_components_sorted_from_roots_to_leaf
       lifted_constants_dep_graph
@@ -235,6 +264,9 @@ let sort lifted_constants =
               let bound_symbols : Bound_symbols.t = Singleton sym in
               bound_symbols, defining_expr
             | Closure_symbol (closure_id, set_of_closures) ->
+              (* CR mshinwell: This probably doesn't actually happen at
+                 the moment since we add dependencies from each closure
+                 symbol to all others (including itself) in the same set. *)
               let bound_symbols : Bound_symbols.t =
                 Code_and_set_of_closures {
                   code_ids = Code_id.Set.empty;
@@ -322,5 +354,11 @@ let sort lifted_constants =
      result, we rely on the following property:
        Let the list L be a topological sort of a directed graph G.
        Then the reverse of L is a topological sort of the transpose of G.
+  *)
+  (*
+  Format.eprintf "Result, outermost first:@ %a\n%!"
+    (Format.pp_print_list ~pp_sep:Format.pp_print_space
+      Bound_symbols.print)
+    (List.rev (List.map fst bindings_outermost_last));
   *)
   { bindings_outermost_last; }

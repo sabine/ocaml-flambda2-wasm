@@ -125,7 +125,10 @@ Format.eprintf "All bindings:@ %a\n%!"
   all_lifted_constants;
 *)
   let sorted_lifted_constants =
-    Sort_lifted_constants.sort all_lifted_constants
+    (* CR mshinwell: [Sort_lifted_constants] should never need dacc here.
+       We should maybe change the interface to make it optional and cause
+       an error if it tries to use it. *)
+    Sort_lifted_constants.sort dacc all_lifted_constants
   in
   let expr =
     List.fold_left (fun body (bound_symbols, defining_expr) ->

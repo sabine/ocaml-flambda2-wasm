@@ -22,4 +22,4 @@ type result = private {
   bindings_outermost_last : (Bound_symbols.t * Static_const.t) list;
 }
 
-val sort : (Bound_symbols.t * Static_const.t) list -> result
+val sort : DA.t -> (Bound_symbols.t * Static_const.t) list -> result
