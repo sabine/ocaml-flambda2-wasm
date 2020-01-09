@@ -54,83 +54,6 @@ let simplify_or_variable dacc type_for_const
        to the various cases below. *)
     or_variable, DE.find_variable denv var
 
-let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
-      ~closure_elements ~closure_element_types =
-  let closure_bound_names =
-    Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
-  in
-  let dacc =
-    DA.map_denv dacc ~f:(fun denv ->
-      Closure_id.Map.fold (fun _closure_id symbol denv ->
-          DE.define_symbol_if_undefined denv symbol K.value)
-        closure_symbols
-        denv)
-  in
-  let { Simplify_named.
-        set_of_closures;
-        closure_types_by_bound_name;
-        newer_versions_of;
-        code;
-        dacc;
-      } =
-    Simplify_named.simplify_set_of_closures0 dacc set_of_closures
-      ~closure_bound_names ~closure_elements ~closure_element_types
-  in
-  (* CR mshinwell: See comment in simplify_non_lifted_set_of_closures about
-     the following *)
-  let dacc =
-    DA.map_r dacc ~f:(fun r ->
-      R.new_lifted_constant r
-        (Lifted_constant.create_pieces_of_code (DA.denv dacc)
-          code ~newer_versions_of))
-  in
-  let dacc =
-    DA.map_denv dacc ~f:(fun denv ->
-      DE.add_lifted_constants denv
-        ~lifted:(R.get_lifted_constants (DA.r dacc)))
-  in
-  let code =
-    Code_id.Map.mapi (fun code_id params_and_body : Static_const.code ->
-        { params_and_body = Present params_and_body;
-          newer_version_of = Code_id.Map.find_opt code_id newer_versions_of;
-        })
-      code
-  in
-  let static_const : Static_const.t =
-    Code_and_set_of_closures {
-      code;
-      set_of_closures = Some set_of_closures;
-    }
-  in
-  let bound_symbols : Let_symbol.Bound_symbols.t =
-    Code_and_set_of_closures {
-      code_ids = Code_id.Map.keys code;
-      closure_symbols;
-    }
-  in
-  let static_structure_types =
-    Name_in_binding_pos.Map.fold
-      (fun name closure_type static_structure_types ->
-        let symbol = Name_in_binding_pos.must_be_symbol name in
-        Symbol.Map.add symbol closure_type static_structure_types)
-      closure_types_by_bound_name
-      Symbol.Map.empty
-  in
-  set_of_closures, dacc, static_structure_types, bound_symbols, static_const
-
-let simplify_set_of_closures dacc set_of_closures
-      ~closure_symbols =
-  let { Simplify_named.
-        can_lift = _;
-        closure_elements;
-        closure_element_types;
-      } =
-    Simplify_named.type_closure_elements_and_make_lifting_decision dacc
-      ~min_name_mode:Name_mode.normal set_of_closures
-  in
-  simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
-    ~closure_elements ~closure_element_types
-
 let simplify_static_const_of_kind_value dacc
       (static_const : Static_const.t) ~result_sym
       : Static_const.t * DA.t =
@@ -204,42 +127,138 @@ let simplify_static_const_of_kind_value dacc
     let ty = T.this_immutable_string str in
     let dacc = bind_result_sym ty in
     Immutable_string str, dacc
-  | Code_and_set_of_closures _ ->
-    Misc.fatal_errorf "[Code_and_set_of_closures] cannot be bound by a \
+  | Sets_of_closures _ ->
+    Misc.fatal_errorf "[Sets_of_closures] cannot be bound by a \
         [Singleton] binding:@ %a"
       SC.print static_const
 
-let simplify_static_const_of_kind_fabricated dacc code_ids bound_symbols
-      (static_const : Static_const.t) ~closure_symbols
-      : Bound_symbols.t * SC.t * DA.t =
-  match static_const with
-  | Code_and_set_of_closures { code; set_of_closures; } ->
-    let code_ids' = Code_id.Map.keys code in
-    if not (Code_id.Set.equal code_ids code_ids') then begin
-      Misc.fatal_errorf "Mismatch on declared code IDs (%a and %a):@ %a"
-        Code_id.Set.print code_ids
-        Code_id.Set.print code_ids'
-        Static_const.print static_const
-    end;
-    let dacc =
-      Code_id.Map.fold
-        (fun code_id
-             ({ params_and_body; newer_version_of; } : Static_const.code)
-             dacc ->
-          (* CR mshinwell: Add check to ensure there are no
-             unbound names in the code, since we're not simplifying on the
-             way down. *)
-          let define_code denv =
-            match params_and_body with
-            | Deleted -> denv
-            | Present params_and_body ->
-              DE.define_code denv ?newer_version_of ~code_id ~params_and_body
-          in
-          let dacc = DA.map_denv dacc ~f:define_code in
+let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
+      ~closure_elements ~closure_element_types =
+  let closure_bound_names =
+    Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
+  in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Closure_id.Map.fold (fun _closure_id symbol denv ->
+          DE.define_symbol_if_undefined denv symbol K.value)
+        closure_symbols
+        denv)
+  in
+  let { Simplify_named.
+        set_of_closures;
+        closure_types_by_bound_name;
+        newer_versions_of;
+        code;
+        dacc;
+      } =
+    Simplify_named.simplify_set_of_closures0 dacc set_of_closures
+      ~closure_bound_names ~closure_elements ~closure_element_types
+  in
+  (* CR mshinwell: See comment in simplify_non_lifted_set_of_closures about
+     the following *)
+  let dacc =
+    DA.map_r dacc ~f:(fun r ->
+      R.new_lifted_constant r
+        (Lifted_constant.create_pieces_of_code (DA.denv dacc)
+          code ~newer_versions_of))
+  in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      DE.add_lifted_constants denv
+        ~lifted:(R.get_lifted_constants (DA.r dacc)))
+  in
+  let code =
+    Code_id.Map.mapi (fun code_id params_and_body : Static_const.code ->
+        { params_and_body = Present params_and_body;
+          newer_version_of = Code_id.Map.find_opt code_id newer_versions_of;
+        })
+      code
+  in
+  let static_const : Static_const.t =
+    Code_and_set_of_closures {
+      code;
+      set_of_closures = Some set_of_closures;
+    }
+  in
+  let bound_symbols : Let_symbol.Bound_symbols.t =
+    Code_and_set_of_closures {
+      code_ids = Code_id.Map.keys code;
+      closure_symbols;
+    }
+  in
+  let static_structure_types =
+    Name_in_binding_pos.Map.fold
+      (fun name closure_type static_structure_types ->
+        let symbol = Name_in_binding_pos.must_be_symbol name in
+        Symbol.Map.add symbol closure_type static_structure_types)
+      closure_types_by_bound_name
+      Symbol.Map.empty
+  in
+  set_of_closures, dacc, static_structure_types, bound_symbols, static_const
+
+let simplify_sets_of_closures dacc sets_of_closures
+      ~closure_symbols =
+  let closure_elements, closure_element_types =
+  let { Simplify_named.
+        can_lift = _;
+        closure_elements;
+        closure_element_types;
+      } =
+    Simplify_named.type_closure_elements_and_make_lifting_decision dacc
+      ~min_name_mode:Name_mode.normal set_of_closures
+  in
+  simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
+    ~closure_elements ~closure_element_types
+
+let simplify_set_of_closures dacc orig_bound_symbols orig_static_const
+      (bound_symbols : Bound_symbols.Code_and_set_of_closures.t list)
+      (sets : Static_const.code_and_set_of_closures list) =
+  if List.compare_lengths bound_symbols sets <> 0 then begin
+    Misc.fatal_errorf "Differing number of bound symbols and static constant \
+        set-of-closures definitions for@ %a@ =@ %a"
+      Bound_symbols.print orig_bound_symbols
+      Static_const.print orig_static_const
+  end;
+  let dacc =
+    List.fold_left2
+      (fun dacc
+           ({ code_ids; closure_symbols; }
+             : Bound_symbols.Code_and_set_of_closures.t)
+           ({ code; set_of_closures; }
+             : Static_const.code_and_set_of_closures) ->
+        (* CR mshinwell: Check closure IDs between [closure_symbols] and
+           [set_of_closures] too. *)
+        let code_ids' = Code_id.Map.keys code in
+        if not (Code_id.Set.equal code_ids code_ids') then begin
+          Misc.fatal_errorf "Mismatch on declared code IDs (%a and %a):@ %a"
+            Code_id.Set.print code_ids
+            Code_id.Set.print code_ids'
+            Static_const.print static_const
+        end;
+        Code_id.Map.fold
+          (fun code_id
+               ({ params_and_body; newer_version_of; } : Static_const.code)
+               dacc ->
+            (* CR mshinwell: Add check to ensure there are no
+               unbound names in the code, since we're not simplifying on the
+               way down. *)
+            let define_code denv =
+              match params_and_body with
+              | Deleted -> denv
+              | Present params_and_body ->
+                DE.define_code denv ?newer_version_of ~code_id
+                  ~params_and_body
+            in
+            let dacc = DA.map_denv dacc ~f:define_code in
+            dacc)
+          code
           dacc)
-        code
-        dacc
-    in
+      dacc
+      bound_symbols sets
+  in
+
+  (* Do we need a result_dacc-like thing here? *)
+
     begin match set_of_closures with
     | None ->
       bound_symbols,
@@ -266,6 +285,14 @@ let simplify_static_const dacc (bound_symbols : Bound_symbols.t)
       simplify_static_const_of_kind_value dacc static_const ~result_sym
     in
     bound_symbols, static_const, dacc
-  | Code_and_set_of_closures { code_ids; closure_symbols; } ->
-    simplify_static_const_of_kind_fabricated dacc code_ids bound_symbols
-      static_const ~closure_symbols
+  | Sets_of_closures bound_symbols' ->
+    match static_const with
+    | Sets_of_closures sets ->
+      simplify_sets_of_closures dacc bound_symbols static_const
+        bound_symbols' sets
+    | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+    | Boxed_nativeint _ | Immutable_float_array _ | Mutable_string _
+    | Immutable_string _ ->
+      Misc.fatal_errorf "Only [Sets_of_closures] can be bound by a \
+          [Sets_of_closures] binding:@ %a"
+        SC.print static_const

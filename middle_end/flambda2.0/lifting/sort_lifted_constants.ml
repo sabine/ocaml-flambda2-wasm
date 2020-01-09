@@ -25,9 +25,6 @@ type result = {
   bindings_outermost_last : (Bound_symbols.t * Static_const.t) list;
 }
 
-(* CR mshinwell: This whole file was hastily written and should be tidied /
-   made more efficient. *)
-
 let build_dep_graph lifted_constants =
   let all_symbols_being_defined =
     Symbol.Set.union_list
