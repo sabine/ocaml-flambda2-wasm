@@ -20,11 +20,11 @@
 
 val simplify_set_of_closures0
     : Downwards_acc.t
-   -> Flambda.Set_of_closures.t
+   -> Flambda.Set_of_closures.t list
    -> closure_symbols:Symbol.t Closure_id.Map.t
    -> closure_elements:Simple.t Var_within_closure.Map.t
    -> closure_element_types:Flambda_type.t Var_within_closure.Map.t
-   -> Flambda.Set_of_closures.t
+   -> Flambda.Set_of_closures.t list
         * Downwards_acc.t
         * Flambda_type.t Symbol.Map.t
         * Flambda.Let_symbol_expr.Bound_symbols.t

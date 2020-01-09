@@ -21,10 +21,6 @@ open! Simplify_import
 module SCC_lifted_constants =
   Strongly_connected_components.Make (Code_id_or_symbol)
 
-type non_closure_or_closure_symbol =
-  | Non_closure_symbol of Static_const.t
-  | Closure_symbol of Closure_id.t * Set_of_closures.t
-
 type result = {
   bindings_outermost_last : (Bound_symbols.t * Static_const.t) list;
 }
@@ -33,14 +29,23 @@ type result = {
    made more efficient. *)
 
 let build_dep_graph lifted_constants =
-  List.fold_left (fun dep_graph (bound_symbols, defining_expr) ->
+  let all_symbols_being_defined =
+    Symbol.Set.union_list
+      (List.map (fun (bound_symbols, _) ->
+          Bound_symbols.being_defined bound_symbols)
+        lifted_constants)
+  in
+  List.fold_left
+    (fun (dep_graph, code_id_or_symbol_to_const)
+         (bound_symbols, defining_expr) ->
       (*
       Format.eprintf "Input: %a = %a\n%!"
         Bound_symbols.print bound_symbols
         Static_const.print defining_expr;
       *)
       Code_id_or_symbol.Set.fold
-        (fun (being_defined : Code_id_or_symbol.t) dep_graph ->
+        (fun (being_defined : Code_id_or_symbol.t)
+             (dep_graph, code_id_or_symbol_to_const) ->
           let free_names =
             match being_defined with
             | Code_id code_id ->
@@ -125,8 +130,8 @@ let build_dep_graph lifted_constants =
              now equal to symbols in the environment.  (They haven't been
              changed to symbols yet as the simplifier hasn't been run on
              the definitions.)  Some of these symbols may be the ones
-             involved in the current SCC calculation.  As such, we must
-             explicitly add these dependencies. *)
+             involved in the current SCC calculation.  For this latter set,
+             we must explicitly add them as dependencies. *)
           let free_syms =
             Variable.Set.fold (fun var free_syms ->
                 let typing_env = DE.typing_env (DA.denv dacc) in
@@ -140,7 +145,11 @@ let build_dep_graph lifted_constants =
                 | Ok (Some canonical) ->
                   match Simple.descr canonical with
                   | Name (Var _) | Const _ -> free_syms
-                  | Name (Symbol sym) -> Symbol.Set.add sym free_syms)
+                  | Name (Symbol sym) ->
+                    if Symbol.Set.mem sym all_symbols_being_defined then
+                      Symbol.Set.add sym free_syms
+                    else
+                      free_syms)
               (Name_occurrences.variables free_names)
               free_syms
           in
@@ -161,88 +170,28 @@ let build_dep_graph lifted_constants =
               Code_id_or_symbol.Set.empty
           in
           let deps = Code_id_or_symbol.Set.union free_syms free_code_ids in
-          Code_id_or_symbol.Map.add being_defined deps dep_graph)
+          let dep_graph =
+            Code_id_or_symbol.Map.add being_defined deps dep_graph
+          in
+          let code_id_or_symbol_to_const =
+            Code_id_or_symbol.Map.add being_defined
+              (bound_symbols, defining_expr)
+              code_id_or_symbol_to_const
+          in
+          dep_graph, code_id_or_symbol_to_const)
         (Bound_symbols.everything_being_defined bound_symbols)
-        dep_graph)
-    Code_id_or_symbol.Map.empty
+        (dep_graph, code_id_or_symbol_to_const))
+    (Code_id_or_symbol.Map.empty, Code_id_or_symbol.Map.empty)
     lifted_constants
-
-let find_code lifted_constants code_id =
-  let result =
-    List.find_map (fun (_bound_symbols, (static_const : Static_const.t)) ->
-        match static_const with
-        | Code_and_set_of_closures { code; set_of_closures = _; } ->
-          Code_id.Map.find_opt code_id code
-        | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-        | Boxed_nativeint _ | Immutable_float_array _
-        | Mutable_string _ | Immutable_string _ -> None)
-      lifted_constants
-  in
-  match result with
-  | None ->
-    Misc.fatal_errorf "Definition for code ID %a not found"
-      Code_id.print code_id
-  | Some code -> code
-
-let find_non_closure_or_closure_symbol lifted_constants sym =
-  let result =
-    List.find_map
-      (fun ((bound_symbols : Bound_symbols.t),
-            (static_const : Static_const.t))
-           : non_closure_or_closure_symbol option ->
-        match bound_symbols with
-        | Singleton sym' ->
-          if Symbol.equal sym sym' then Some (Non_closure_symbol static_const)
-          else None
-        | Sets_of_closures sets ->
-          List.find_map
-            (fun ({ code_ids = _; closure_symbols; }
-                   : Bound_symbols.Code_and_set_of_closures.t) ->
-              let closure_symbols =
-                (* CR mshinwell: duplicated from above *)
-                closure_symbols
-                |> Closure_id.Map.bindings
-                |> List.map (fun (closure_id, sym) -> sym, closure_id)
-                |> Symbol.Map.of_list
-              in
-              match Symbol.Map.find sym closure_symbols with
-              | exception Not_found -> None
-              | closure_id ->
-                (* CR mshinwell: duplicated from above *)
-                match (static_const : Static_const.t) with
-                | Code_and_set_of_closures { code = _; set_of_closures; } ->
-                  begin match set_of_closures with
-                  | None ->
-                    Misc.fatal_errorf "No set of closures given for@ %a@ in \
-                        binding of:@ %a@ to:@ %a"
-                      Symbol.print sym
-                      Bound_symbols.print bound_symbols
-                      Static_const.print static_const
-                  | Some set_of_closures ->
-                    (* CR mshinwell: Make sure the closure ID exists in the
-                       set of closures *)
-                    Some (Closure_symbol (closure_id, set_of_closures))
-                  end
-                | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-                | Boxed_nativeint _ | Immutable_float_array _
-                | Mutable_string _ | Immutable_string _ ->
-                  Misc.fatal_errorf "Bad defining expression@ %a@ for@ %a"
-                    Static_const.print static_const
-                    Bound_symbols.print bound_symbols)
-            sets
-      lifted_constants
-  in
-  match result with
-  | None ->
-    Misc.fatal_errorf "Definition for symbol %a not found" Symbol.print sym
-  | Some result -> result
 
 let sort dacc lifted_constants =
   (* The various lifted constants may exhibit recursion between themselves
      (specifically between closures and/or code).  We use SCC to obtain a
      topological sort of groups that must be coalesced into single
      code-and-set-of-closures definitions. *)
-  let lifted_constants_dep_graph = build_dep_graph lifted_constants in
+  let lifted_constants_dep_graph, code_id_or_symbol_to_const =
+    build_dep_graph lifted_constants
+  in
   (*
   Format.eprintf "SCC graph is:@ %a\n%!"
     (Code_id_or_symbol.Map.print Code_id_or_symbol.Set.print)
@@ -256,108 +205,65 @@ let sort dacc lifted_constants =
     Array.fold_left (fun bindings (group : SCC_lifted_constants.component) ->
         let binding =
           match group with
-          | No_loop (Code_id code_id) ->
-            let code = find_code lifted_constants code_id in
-            let bound_symbols : Bound_symbols.t =
-              Code_and_set_of_closures {
-                code_ids = Code_id.Set.singleton code_id;
-                closure_symbols = Closure_id.Map.empty;
-              }
-            in
-            let defining_expr : Static_const.t =
-              Code_and_set_of_closures {
-                code = Code_id.Map.singleton code_id code;
-                set_of_closures = None;
-              }
-            in
-            bound_symbols, defining_expr
-          | No_loop (Symbol sym) ->
-            (* CR mshinwell: What happens if [sym] is one part of a set
-               of closures with more than one closure inside it? *)
-            begin match
-              find_non_closure_or_closure_symbol lifted_constants sym
-            with
-            | Non_closure_symbol defining_expr ->
-              let bound_symbols : Bound_symbols.t = Singleton sym in
-              bound_symbols, defining_expr
-            | Closure_symbol _ ->
-              (* Even sets of closures with only a single closure inside are
-                 marked with a dependency from that closure to itself, so
-                 this case should never happen.  We should get [Has_loop] with
-                 a single element list. *)
-              assert false
-            end
+          | No_loop code_id_or_symbol ->
+            Code_id_or_symbol.Map.find code_id_or_symbol
+              code_id_or_symbol_to_const
           | Has_loop members ->
-            let code_ids, closure_symbols, code, set_of_closures =
+            let sets_of_closures_bound_symbols, code_and_sets_of_closures =
               List.fold_left
-                (fun (code_ids, closure_symbols, code, set_of_closures)
-                     (member : Code_id_or_symbol.t) ->
-                  match member with
-                  | Code_id code_id ->
-                    let code_ids = Code_id.Set.add code_id code_ids in
-                    let code =
-                      Code_id.Map.add code_id (find_code code_id) code
+                (fun ((defining_expr_already_seen,
+                       sets_of_closures_bound_symbols_acc,
+                       code_and_sets_of_closures_acc) as acc)
+                     code_id_or_symbol ->
+                  if Code_id_or_symbol.Set.mem code_id_or_symbol
+                       defining_expr_already_seen
+                  then acc
+                  else
+                    let bound_symbols, defining_expr =
+                      Code_id_or_symbol.Map.find code_id_or_symbol
+                        code_id_or_symbol_to_const
                     in
-                    code_ids, closure_symbols, code, set_of_closures
-                  | Symbol symbol ->
-                    match find_non_closure_or_closure_symbol lifted_constants symbol with
-                    | Closure_symbol (closure_id, set) ->
-                      if Closure_id.Map.mem closure_id closure_symbols then
-                      begin
-                        Misc.fatal_errorf "Already have symbol %a for \
-                            closure ID %a, but now trying to add symbol %a.@ \
-                            SCC graph is:@ %a"
-                          Symbol.print symbol
-                          Closure_id.print closure_id
-                          Symbol.print
-                          (Closure_id.Map.find closure_id closure_symbols)
-                          (Code_id_or_symbol.Map.print
-                            Code_id_or_symbol.Set.print)
-                          lifted_constants_dep_graph
-                      end;
-                      let closure_symbols =
-                        Closure_id.Map.add closure_id symbol closure_symbols
-                      in
-                      let set_of_closures =
-                        match set_of_closures with
-                        | None -> Some set
-                        | Some set' ->
-                          if not (Set_of_closures.equal set set') then
-                            match Set_of_closures.disjoint_union set set' with
-                            | exception (Invalid_argument _) ->
-                              Misc.fatal_errorf "Sets of closures for SCC \
-                                  component@ {%a}@ are not disjoint:@ %a@ and@ \
-                                  %a"
-                                (Format.pp_print_list
-                                  ~pp_sep:Format.pp_print_space
-                                  Code_id_or_symbol.print)
-                                members
-                                Set_of_closures.print set
-                                Set_of_closures.print set'
-                            | set -> Some set
-                          else
-                            set_of_closures
-                      in
-                      code_ids, closure_symbols, code, set_of_closures
-                    | Non_closure_symbol _ ->
-                      Misc.fatal_errorf "Symbol %a was involved in recursion \
-                          that cannot be compiled"
-                        Symbol.print symbol)
-                (Code_id.Set.empty, Closure_id.Map.empty,
-                  Code_id.Map.empty, None)
+                    (* We may encounter the same defining expression more
+                       than once (e.g. a set of closures via a code ID and
+                       a symbol), but we don't want duplicates in the result
+                       list. *)
+                    let defining_expr_already_seen =
+                      Code_id_or_symbol.Set.union
+                        (Bound_symbols.everything_being_defined bound_symbols)
+                        defining_expr_already_seen
+                    in
+                    let sets_of_closures_bound_symbols =
+                      match bound_symbols with
+                      | Sets_of_closures sets -> sets
+                      | Singleton _ ->
+                        Misc.fatal_errorf "Code ID or symbol %a was involved \
+                            in (non-closure) recursion that cannot be compiled"
+                          Code_id_or_symbol.print code_id_or_symbol
+                    in
+                    let code_and_set_of_closures_list =
+                      match defining_expr with
+                      | Sets_of_closures code_and_set_of_closures list ->
+                        code_and_set_of_closures_list
+                      | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
+                      | Boxed_nativeint _ | Immutable_float_array _
+                      | Mutable_string _ | Immutable_string _ ->
+                        Misc.fatal_errorf "Bad defining expression for@ %a:@ %a"
+                          Bound_symbols.print bound_symbols
+                          Static_const.print defining_expr
+                    in
+                    defining_expr_already_seen,
+                      sets_of_closures_bound_symbols
+                        :: sets_of_closures_bound_symbols_acc,
+                      code_and_set_of_closures_list
+                        @ code_and_sets_of_closures_acc)
+                (Code_id_or_symbol.Set.empty, [], [])
                 members
             in
             let bound_symbols : Bound_symbols.t =
-              Code_and_set_of_closures {
-                code_ids;
-                closure_symbols;
-              }
+              Sets_of_closures sets_of_closures_bound_symbols
             in
             let defining_expr : Static_const.t =
-              Code_and_set_of_closures {
-                code;
-                set_of_closures;
-              }
+              Sets_of_closures code_and_sets_of_closures
             in
             bound_symbols, defining_expr
         in

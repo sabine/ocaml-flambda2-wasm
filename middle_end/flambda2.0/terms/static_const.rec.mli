@@ -66,6 +66,9 @@ type code_and_set_of_closures = {
 type t =
   | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
   | Sets_of_closures of code_and_set_of_closures list
+    (** All code and sets of closures within the [code_and_set_of_closures list]
+        are allowed to be recursive across those sets (but not recursive with
+        any other code or set of closures). *)
   | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
   | Boxed_int32 of Int32.t or_variable
   | Boxed_int64 of Int64.t or_variable
