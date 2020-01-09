@@ -51,7 +51,9 @@ module Flambda2_backend = struct
       let comp_unit =
         match comp_unit with
         | Some comp_unit -> comp_unit
-        | None -> Compilation_unit.get_current_exn ()
+        | None ->
+          if Ident.is_predef id then Compilation_unit.predefined_exception ()
+          else Compilation_unit.get_current_exn ()
       in
       Symbol.unsafe_create
         comp_unit

@@ -962,6 +962,20 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
       body
       t.code
   in
+  (* We must make sure there is always an outer [Let_symbol] binding so that
+     lifted constants not in the scope of any other [Let_symbol] binding get
+     put into the term and not dropped.  Adding this extra binding, which
+     will actually be removed by the simplifier, avoids a special case. *)
+  begin match t.declared_symbols with
+  | _::_ -> ()
+  | [] ->
+    let (_sym : Symbol.t) =
+      register_const0 t
+        (Static_const.Block (Tag.Scannable.zero, Immutable, []))
+        "first_const"
+    in
+    ()
+  end;
   let body =
     List.fold_left (fun body (symbol, static_const) ->
         Let_symbol.create (Singleton symbol) static_const body

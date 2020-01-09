@@ -78,9 +78,11 @@ let simple_static env s =
   | Name n -> name_static env n
   | Const c -> `Data (const_static env c)
 
-let static_value _env v =
+let static_value env v =
   match (v : SC.Field_of_block.t) with
-  | Symbol s -> C.symbol_address (symbol s)
+  | Symbol s ->
+      Env.check_scope env (Code_id_or_symbol.Symbol s);
+      C.symbol_address (symbol s)
   | Dynamically_computed _ -> C.cint 1n
   | Tagged_immediate i ->
       C.cint (nativeint_of_targetint (tag_targetint (targetint_of_imm i)))
