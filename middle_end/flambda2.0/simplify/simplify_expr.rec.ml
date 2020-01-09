@@ -612,10 +612,10 @@ and simplify_direct_partial_application
         return kind: %a"
       Apply.print apply
   end;
-  let wrapper_var = Variable.create "partial" in
+  let wrapper_var = Variable.create "partial_app" in
   let compilation_unit = Compilation_unit.get_current_exn () in
   let wrapper_closure_id =
-    Closure_id.wrap compilation_unit (Variable.create "closure")
+    Closure_id.wrap compilation_unit (Variable.create "partial_app_closure")
   in
   let wrapper_taking_remaining_args, dacc =
     let return_continuation = Continuation.create () in

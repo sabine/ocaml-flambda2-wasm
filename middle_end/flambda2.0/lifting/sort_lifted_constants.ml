@@ -298,8 +298,19 @@ let sort dacc lifted_constants =
                   | Symbol symbol ->
                     match find_non_closure_or_closure_symbol symbol with
                     | Closure_symbol (closure_id, set) ->
-                      assert (not (Closure_id.Map.mem closure_id
-                        closure_symbols));
+                      if Closure_id.Map.mem closure_id closure_symbols then
+                      begin
+                        Misc.fatal_errorf "Already have symbol %a for \
+                            closure ID %a, but now trying to add symbol %a.@ \
+                            SCC graph is:@ %a"
+                          Symbol.print symbol
+                          Closure_id.print closure_id
+                          Symbol.print
+                          (Closure_id.Map.find closure_id closure_symbols)
+                          (Code_id_or_symbol.Map.print
+                            Code_id_or_symbol.Set.print)
+                          lifted_constants_dep_graph
+                      end;
                       let closure_symbols =
                         Closure_id.Map.add closure_id symbol closure_symbols
                       in
