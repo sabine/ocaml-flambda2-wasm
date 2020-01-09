@@ -43,3 +43,8 @@ include Identifiable.Make (struct
 
   let hash _ = Misc.fatal_error "Not yet implemented"
 end)
+
+let compilation_unit t =
+  match t with
+  | Code_id code_id -> Code_id.get_compilation_unit code_id
+  | Symbol sym -> Symbol.compilation_unit sym

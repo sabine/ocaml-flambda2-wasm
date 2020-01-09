@@ -19,3 +19,5 @@ type t =
   | Symbol of Symbol.t
 
 include Identifiable.S with type t := t
+
+val compilation_unit : t -> Compilation_unit.t

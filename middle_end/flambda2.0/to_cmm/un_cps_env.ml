@@ -411,7 +411,15 @@ let add_to_scope env names =
   }
 
 let check_scope env code_id_or_symbol =
-  if Code_id_or_symbol.Set.mem code_id_or_symbol env.names_in_scope then ()
+  let in_scope =
+    Code_id_or_symbol.Set.mem code_id_or_symbol env.names_in_scope
+  in
+  let in_another_unit =
+    not (Compilation_unit.equal
+      (Code_id_or_symbol.compilation_unit code_id_or_symbol)
+      (Compilation_unit.get_current_exn ()))
+  in
+  if in_scope || in_another_unit then ()
   else
     Misc.fatal_errorf "Use out of scope of %a@.Known names:@.%a@."
       Code_id_or_symbol.print code_id_or_symbol
