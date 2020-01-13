@@ -212,7 +212,7 @@ let simplify_sets_of_closures dacc sets_of_closures
 
 let simplify_set_of_closures dacc orig_bound_symbols orig_static_const
       (bound_symbols : Bound_symbols.Code_and_set_of_closures.t list)
-      (sets : Static_const.code_and_set_of_closures list) =
+      (code_and_sets_of_closures : Static_const.code_and_set_of_closures list) =
   if List.compare_lengths bound_symbols sets <> 0 then begin
     Misc.fatal_errorf "Differing number of bound symbols and static constant \
         set-of-closures definitions for@ %a@ =@ %a"
@@ -254,10 +254,19 @@ let simplify_set_of_closures dacc orig_bound_symbols orig_static_const
           code
           dacc)
       dacc
-      bound_symbols sets
+      bound_symbols code_and_sets_of_closures
+  in
+  let set_of_closures =
+    List.filter_map (fun { code = _; set_of_closures; } -> set_of_closures)
+      code_and_sets_of_closures
+  in
+  (* One call here per set *)
+  let _set_of_closures, dacc, ... =
+    simplify_set_of_closures dacc set_of_closures ~closure_symbols
   in
 
-  (* Do we need a result_dacc-like thing here? *)
+(* Can use the same dacc for each simplify.  We need to put in all code IDs
+   as above first.  Also all closure symbols. *)
 
     begin match set_of_closures with
     | None ->
@@ -267,15 +276,10 @@ let simplify_set_of_closures dacc orig_bound_symbols orig_static_const
     | Some set_of_closures ->
       let _set_of_closures, dacc, _static_structure_types,
           bound_symbols, static_const =
-        simplify_set_of_closures dacc set_of_closures ~closure_symbols
       in
       bound_symbols, static_const, dacc
     end
-  | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _ | Boxed_nativeint _
-  | Immutable_float_array _ | Mutable_string _ | Immutable_string _ ->
-    Misc.fatal_errorf "Only [Code_and_set_of_closures] can be bound by a \
-        [Code_and_set_of_closures] binding:@ %a"
-      SC.print static_const
+
 
 let simplify_static_const dacc (bound_symbols : Bound_symbols.t)
       (static_const : SC.t) : Bound_symbols.t * SC.t * DA.t =

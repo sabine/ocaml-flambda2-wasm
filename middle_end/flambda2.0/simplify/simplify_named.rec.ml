@@ -74,7 +74,8 @@ let function_decl_type ~denv_outside_function:denv function_decl ?code_id
 
 let compute_closure_types_inside_function ~denv_outside_function
      ~all_function_decls_in_set ~closure_bound_names
-     ~closure_element_types_inside_function ~old_to_new_code_ids =
+     ~closure_element_types_inside_function ~old_to_new_code_ids
+     ~all_function_decls_in_other_sets ~all_closure_bound_names_in_other_sets =
   let closure_bound_names_inside =
     Closure_id.Map.map Name_in_binding_pos.rename closure_bound_names
   in
@@ -107,7 +108,8 @@ let compute_closure_types_inside_function ~denv_outside_function
 
 let bind_closure_types_inside_function ~denv_outside_function
       ~denv_inside_function:denv ~all_function_decls_in_set ~closure_bound_names
-      ~closure_element_types_inside_function ~old_to_new_code_ids =
+      ~closure_element_types_inside_function ~old_to_new_code_ids
+      ~all_function_decls_in_other_sets ~all_closure_bound_names_in_other_sets =
   let closure_bound_names_inside, closure_types_inside_function =
     compute_closure_types_inside_function ~denv_outside_function
       ~all_function_decls_in_set ~closure_bound_names
@@ -159,7 +161,8 @@ let bind_existing_code_to_new_code_ids denv ~old_to_new_code_ids =
 
 let denv_inside_function ~denv_outside_function ~denv_after_enter_closure
       ~params ~my_closure closure_id ~all_function_decls_in_set
-      ~closure_bound_names ~closure_element_types ~old_to_new_code_ids =
+      ~closure_bound_names ~closure_element_types ~old_to_new_code_ids
+      ~all_function_decls_in_other_sets ~all_closure_bound_names_in_other_sets =
   let env_outside_function = DE.typing_env denv_outside_function in
   let denv =
     DE.increment_continuation_scope_level_twice denv_after_enter_closure
@@ -173,10 +176,12 @@ let denv_inside_function ~denv_outside_function ~denv_after_enter_closure
     |> DE.with_typing_env denv
     |> bind_existing_code_to_new_code_ids ~old_to_new_code_ids
   in
+  (* XXX Does [old_to_new_code_ids] need to include ones from other sets? *)
   let closure_bound_names_inside, denv =
     bind_closure_types_inside_function ~denv_outside_function
       ~denv_inside_function ~all_function_decls_in_set ~closure_bound_names
       ~closure_element_types_inside_function ~old_to_new_code_ids
+      ~all_function_decls_in_other_sets ~all_closure_bound_names_in_other_sets
   in
   let denv = DE.add_parameters_with_unknown_types denv params in
   match Closure_id.Map.find closure_id closure_bound_names_inside with
