@@ -133,7 +133,8 @@ let simplify_static_const_of_kind_value dacc
       SC.print static_const
 
 let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
-      ~closure_elements ~closure_element_types =
+      ~closure_elements ~closure_element_types ~all_function_decls_in_other_sets
+      ~all_closure_bound_names_in_other_sets =
   let closure_bound_names =
     Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
   in
@@ -151,8 +152,8 @@ let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
         code;
         dacc;
       } =
-    Simplify_named.simplify_set_of_closures0 dacc set_of_closures
-      ~closure_bound_names ~closure_elements ~closure_element_types
+    Simplify_named.simplify_set_of_closures0 context set_of_closures
+      ~closure_bound_names
   in
   (* CR mshinwell: See comment in simplify_non_lifted_set_of_closures about
      the following *)
@@ -195,20 +196,6 @@ let simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
       Symbol.Map.empty
   in
   set_of_closures, dacc, static_structure_types, bound_symbols, static_const
-
-let simplify_sets_of_closures dacc sets_of_closures
-      ~closure_symbols =
-  let closure_elements, closure_element_types =
-  let { Simplify_named.
-        can_lift = _;
-        closure_elements;
-        closure_element_types;
-      } =
-    Simplify_named.type_closure_elements_and_make_lifting_decision dacc
-      ~min_name_mode:Name_mode.normal set_of_closures
-  in
-  simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
-    ~closure_elements ~closure_element_types
 
 let simplify_set_of_closures dacc orig_bound_symbols orig_static_const
       (bound_symbols : Bound_symbols.Code_and_set_of_closures.t list)
@@ -260,9 +247,33 @@ let simplify_set_of_closures dacc orig_bound_symbols orig_static_const
     List.filter_map (fun { code = _; set_of_closures; } -> set_of_closures)
       code_and_sets_of_closures
   in
+  (* Need to get all closure symbols + closure elements *)
   (* One call here per set *)
+  let closure_elements_and_types =
+    List.map
+      (fun ({ code = _; set_of_closures; }
+            : Static_const.code_and_set_of_closures) ->
+        Option.map (fun set_of_closures ->
+            let { Simplify_named.
+                  can_lift;
+                  closure_elements;
+                  closure_element_types;
+                } =
+              Simplify_named.type_closure_elements_for_previously_lifted_set
+                  dacc ~min_name_mode:Name_mode.normal set_of_closures
+            in
+            assert (can_lift);
+            closure_elements, closure_element_types)
+          set_of_closures)
+      code_and_sets_of_closures
+  in
+
+
   let _set_of_closures, dacc, ... =
-    simplify_set_of_closures dacc set_of_closures ~closure_symbols
+    let closure_elements, closure_element_types =
+    assert (match can_lift with Can_lift -> true | Cannot_lift -> false);
+    simplify_set_of_closures0 dacc set_of_closures ~closure_symbols
+      ~closure_elements ~closure_element_types
   in
 
 (* Can use the same dacc for each simplify.  We need to put in all code IDs

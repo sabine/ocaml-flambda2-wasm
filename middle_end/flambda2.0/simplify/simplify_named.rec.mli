@@ -45,20 +45,17 @@ val simplify_set_of_closures0
   -> closure_bound_names:Name_in_binding_pos.t Closure_id.Map.t
   -> closure_elements:Simple.t Var_within_closure.Map.t
   -> closure_element_types:Flambda_type.t Var_within_closure.Map.t
+  -> old_to_new_code_ids_all_sets:Code_id.t Code_id.Map.t
   -> simplify_set_of_closures0_result
 
-type can_lift = private
-  | Can_lift
-  | Cannot_lift
-
-type type_closure_elements_and_make_lifting_decision_result = private {
-  can_lift : can_lift;
+type lifting_decision_result = private {
+  can_lift : bool;
   closure_elements : Simple.t Var_within_closure.Map.t;
   closure_element_types : Flambda_type.t Var_within_closure.Map.t;
 }
 
-val type_closure_elements_and_make_lifting_decision
+val type_closure_elements_for_previously_lifted_set
    : Downwards_acc.t
   -> min_name_mode:Name_mode.t
   -> Flambda.Set_of_closures.t
-  -> type_closure_elements_and_make_lifting_decision_result
+  -> lifting_decision_result
