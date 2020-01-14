@@ -42,10 +42,7 @@ type simplify_set_of_closures0_result = private {
 val simplify_set_of_closures0
    : Downwards_acc.t
   -> Flambda.Set_of_closures.t
-  -> closure_bound_names:Name_in_binding_pos.t Closure_id.Map.t
-  -> closure_elements:Simple.t Var_within_closure.Map.t
   -> closure_element_types:Flambda_type.t Var_within_closure.Map.t
-  -> old_to_new_code_ids_all_sets:Code_id.t Code_id.Map.t
   -> simplify_set_of_closures0_result
 
 type lifting_decision_result = private {

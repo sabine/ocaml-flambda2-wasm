@@ -30,7 +30,10 @@ module Context_for_multiple_sets_of_closures : sig
     -> all_sets_of_closures:Set_of_closures.t list
     -> t
 
-  val dacc_inside_functions : t -> DA.t
+  val introduce
+     : t
+    -> closure_element_types:T.t Var_within_closure.Map.t
+    -> DA.t
 
   val closure_bound_names_inside_functions
      : t
@@ -206,8 +209,8 @@ end = struct
       denv
 
   let create ~dacc_prior_to_sets ~all_sets_of_closures =
-    let closure_elements, closure_element_types =
-      compute_closure_element_types_prior_to_sets ~all_sets_of_closures
+    let old_to_new_code_ids =
+      compute_old_to_new_code_ids_all_sets ~all_function_decls_all_sets
     in
     let closure_bound_names_inside_functions, denv_inside_functions =
       let denv_outside_function = DA.denv dacc_prior_to_sets in
@@ -238,6 +241,9 @@ end = struct
     { dacc_inside_functions;
       closure_bound_names_inside_functions;
     }
+
+  let introduce t ~closure_element_types =
+
 end
 
 let dacc_inside_function context ~params ~my_closure closure_id =
@@ -269,7 +275,8 @@ type simplify_function_result = {
   r : R.t;
 }
 
-let simplify_function context r closure_id function_decl =
+let simplify_function context r closure_id function_decl
+      ~closure_element_types =
   let name = Format.asprintf "%a" Closure_id.print closure_id in
   Profile.record_call ~accumulate:true name (fun () ->
     let denv_after_enter_closure = DE.enter_closure (DA.denv dacc) in
@@ -280,10 +287,9 @@ let simplify_function context r closure_id function_decl =
         ~f:(fun ~return_continuation exn_continuation params ~body
                 ~my_closure ->
           let dacc =
-            DA.with_r
-              (dacc_inside_function context ~params ~my_closure closure_id)
-              r
+            Context_for_multiple_sets.introduce context ~closure_element_types
           in
+          let dacc = DA.with_r dacc r in
           match
             Simplify_toplevel.simplify_toplevel dacc body
               ~return_continuation
@@ -352,7 +358,8 @@ type simplify_set_of_closures0_result = {
   dacc : Downwards_acc.t;
 }
 
-let simplify_set_of_closures0 context set_of_closures ~closure_bound_names =
+let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
+      ~closure_element_types =
   let function_decls = Set_of_closures.function_decls set_of_closures in
   let all_function_decls_in_set = Function_declarations.funs function_decls in
   let all_function_decls_in_set, code, fun_types, r =
@@ -361,6 +368,7 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names =
            (result_function_decls_in_set, code, fun_types, r) ->
         let { function_decl; new_code_id; params_and_body; function_type; r; } =
           simplify_function context r closure_id function_decl
+            ~closure_element_types
         in
         let result_function_decls_in_set =
           Closure_id.Map.add closure_id function_decl
