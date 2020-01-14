@@ -320,6 +320,8 @@ let simplify_function context r closure_id function_decl =
     let old_code_id = code_id in
     let new_code_id = Code_id.Map.find old_code_id old_to_new_code_ids in
     let function_decl = FD.update_code_id function_decl new_code_id in
+    (* XXX It seems like this should be done at the end, when we augment
+       the [dacc_prior_to_sets] with [r] and the new definitions. *)
     let function_type =
       let denv_outside_function =
         DA.denv dacc
