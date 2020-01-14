@@ -103,7 +103,7 @@ end = struct
 
   let compute_closure_types_inside_functions ~denv_prior_to_sets
        ~all_function_decls_all_sets ~closure_bound_names_all_sets
-       ~closure_element_types_inside_function_all_sets
+       ~closure_element_types_inside_functions_all_sets
        ~old_to_new_code_ids_all_sets =
     let closure_bound_names_all_sets_inside =
       (* CR mshinwell: Think about the necessity for this renaming again *)
@@ -132,7 +132,10 @@ end = struct
         all_function_decls_all_sets
     in
     let closure_types_inside_functions =
-      List.map (fun all_function_decls_in_set ->
+      List.map2
+        (fun all_function_decls_in_set
+             (closure_types_via_aliases,
+              closure_element_types_inside_function) ->
           Closure_id.Map.mapi (fun closure_id _function_decl ->
               T.exactly_this_closure closure_id
                 ~all_function_decls_in_set
@@ -140,6 +143,8 @@ end = struct
                 ~all_closure_vars_in_set:closure_element_types_inside_function)
             all_function_decls_in_set)
         all_function_decls_all_sets
+        (List.combine closure_types_via_aliases_all_sets
+          closure_element_types_inside_functions_all_sets)
     in
     closure_bound_names_all_sets_inside, closure_types_inside_functions
 
@@ -262,26 +267,29 @@ end = struct
     }
 end
 
-let dacc_inside_function context ~params ~my_closure closure_id =
-  DA.map_denv (Context_for_multiple_sets.dacc_inside_functions context)
-    ~f:(fun denv ->
-      let dacc = DE.add_parameters_with_unknown_types denv params in
-      let closure_bound_names_inside =
-        Context_for_multiple_sets.closure_bound_names_inside_functions context
-      in
-      match Closure_id.Map.find closure_id closure_bound_names_inside with
-      | exception Not_found ->
-        Misc.fatal_errorf "No closure name for closure ID %a.@ \
-            closure_bound_names = %a.@ closure_bound_names_inside = %a."
-          Closure_id.print closure_id
-          (Closure_id.Map.print Name_in_binding_pos.print) closure_bound_names
-          (Closure_id.Map.print Name_in_binding_pos.print)
-          closure_bound_names_inside
-      | name ->
-        let name = Name_in_binding_pos.name name in
-        DE.add_variable denv
-          (Var_in_binding_pos.create my_closure NM.normal)
-          (T.alias_type_of K.value (Simple.name name)))
+let dacc_inside_function context r ~params ~my_closure closure_id =
+  let dacc =
+    DA.map_denv (Context_for_multiple_sets.dacc_inside_functions context)
+      ~f:(fun denv ->
+        let dacc = DE.add_parameters_with_unknown_types denv params in
+        let closure_bound_names_inside =
+          Context_for_multiple_sets.closure_bound_names_inside_functions context
+        in
+        match Closure_id.Map.find closure_id closure_bound_names_inside with
+        | exception Not_found ->
+          Misc.fatal_errorf "No closure name for closure ID %a.@ \
+              closure_bound_names = %a.@ closure_bound_names_inside = %a."
+            Closure_id.print closure_id
+            (Closure_id.Map.print Name_in_binding_pos.print) closure_bound_names
+            (Closure_id.Map.print Name_in_binding_pos.print)
+            closure_bound_names_inside
+        | name ->
+          let name = Name_in_binding_pos.name name in
+          DE.add_variable denv
+            (Var_in_binding_pos.create my_closure NM.normal)
+            (T.alias_type_of K.value (Simple.name name)))
+  in
+  DA.with_r dacc r
 
 type simplify_function_result = {
   function_decl : FD.t;
@@ -291,8 +299,7 @@ type simplify_function_result = {
   r : R.t;
 }
 
-let simplify_function context r closure_id function_decl
-      ~closure_element_types =
+let simplify_function context r closure_id function_decl =
   let name = Format.asprintf "%a" Closure_id.print closure_id in
   Profile.record_call ~accumulate:true name (fun () ->
     let code_id = FD.code_id function_decl in
@@ -302,9 +309,8 @@ let simplify_function context r closure_id function_decl
         ~f:(fun ~return_continuation exn_continuation params ~body
                 ~my_closure ->
           let dacc =
-            Context_for_multiple_sets.introduce context ~closure_element_types
+            dacc_inside_function context r ~params ~my_closure closure_id
           in
-          let dacc = DA.with_r dacc r in
           match
             Simplify_toplevel.simplify_toplevel dacc body
               ~return_continuation
@@ -373,8 +379,7 @@ type simplify_set_of_closures0_result = {
   dacc : Downwards_acc.t;
 }
 
-let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
-      ~closure_element_types =
+let simplify_set_of_closures0 context set_of_closures ~closure_bound_names =
   let function_decls = Set_of_closures.function_decls set_of_closures in
   let all_function_decls_in_set = Function_declarations.funs function_decls in
   let all_function_decls_in_set, code, fun_types, r =
@@ -383,7 +388,6 @@ let simplify_set_of_closures0 context set_of_closures ~closure_bound_names
            (result_function_decls_in_set, code, fun_types, r) ->
         let { function_decl; new_code_id; params_and_body; function_type; r; } =
           simplify_function context r closure_id function_decl
-            ~closure_element_types
         in
         let result_function_decls_in_set =
           Closure_id.Map.add closure_id function_decl
