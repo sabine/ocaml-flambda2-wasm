@@ -69,3 +69,5 @@ val continuation_uses_env : t -> Continuation_uses_env.t
 val code_age_relation : t -> Code_age_relation.t
 
 val with_code_age_relation : t -> Code_age_relation.t -> t
+
+val typing_env : t -> Flambda_type.Typing_env.t

@@ -30,18 +30,15 @@ module Context_for_multiple_sets_of_closures : sig
     -> all_sets_of_closures:Set_of_closures.t list
     -> t
 
-  val introduce
-     : t
-    -> closure_element_types:T.t Var_within_closure.Map.t
-    -> DA.t
+  val dacc_inside_functions : t -> DA.t
 
   val closure_bound_names_inside_functions
      : t
     -> Name_in_binding_pos.t Closure_id.Map.t list
 end = struct
   type t = {
-    dacc_inside_function : DA.t;
-    closure_bound_names_inside_function
+    dacc_inside_functions : DA.t;
+    closure_bound_names_inside_functions_all_sets
       : Name_in_binding_pos.t Closure_id.Map.t list;
   }
 
@@ -50,10 +47,10 @@ end = struct
   let closure_bound_names_inside_functions =
     t.closure_bound_names_inside_functions
 
-  let compute_closure_element_types_inside_function ~env_outside_function
+  let compute_closure_element_types_inside_function ~env_prior_to_sets
         ~env_inside_function ~closure_element_types =
     Var_within_closure.Map.fold
-      (fun clos_var type_outside_function
+      (fun clos_var type_prior_to_sets
            (env_inside_function, types_inside_function) ->
         let var = Variable.create "clos_var" in
         let env_inside_function =
@@ -63,8 +60,8 @@ end = struct
             K.value
         in
         let env_extension =
-          T.make_suitable_for_environment type_outside_function
-            env_outside_function
+          T.make_suitable_for_environment type_prior_to_sets
+            env_prior_to_sets
             ~suitable_for:env_inside_function
             ~bind_to:(Name.var var)
         in
@@ -80,11 +77,10 @@ end = struct
       closure_element_types
       (env_inside_function, Var_within_closure.Map.empty)
 
-  let function_decl_type ~denv_outside_function:denv function_decl ?code_id
-        rec_info =
+  let function_decl_type ~denv_prior_to_sets function_decl ?code_id rec_info =
     let decision =
-      Inlining_decision.make_decision_for_function_declaration denv
-        function_decl
+      Inlining_decision.make_decision_for_function_declaration
+        denv_prior_to_sets function_decl
     in
     let code_id = Option.value code_id ~default:(FD.code_id function_decl) in
     if Inlining_decision.Function_declaration_decision.can_inline decision then
@@ -105,7 +101,7 @@ end = struct
         ~result_arity:(FD.result_arity function_decl)
         ~recursive:(FD.recursive function_decl)
 
-  let compute_closure_types_inside_functions ~denv_outside_function
+  let compute_closure_types_inside_functions ~denv_prior_to_sets
        ~all_function_decls_all_sets ~closure_bound_names_all_sets
        ~closure_element_types_inside_function_all_sets
        ~old_to_new_code_ids_all_sets =
@@ -127,22 +123,71 @@ end = struct
           (* CR mshinwell: [Rec_info] may be wrong. *)
           Closure_id.Map.map (fun function_decl ->
               let new_code_id =
-                Code_id.Map.find (FD.code_id function_decl) old_to_new_code_ids
+                Code_id.Map.find (FD.code_id function_decl)
+                  old_to_new_code_ids_all_sets
               in
-              function_decl_type ~denv_outside_function function_decl
+              function_decl_type ~denv_prior_to_sets function_decl
                 ~code_id:new_code_id (Rec_info.create ~depth:1 ~unroll_to:None))
             all_function_decls_in_set)
         all_function_decls_all_sets
     in
-    let closure_types_inside_function =
-      Closure_id.Map.mapi (fun closure_id _function_decl ->
-          T.exactly_this_closure closure_id
-            ~all_function_decls_in_set
-            ~all_closures_in_set:closure_types_via_aliases
-            ~all_closure_vars_in_set:closure_element_types_inside_function)
-        all_function_decls_in_set
+    let closure_types_inside_functions =
+      List.map (fun all_function_decls_in_set ->
+          Closure_id.Map.mapi (fun closure_id _function_decl ->
+              T.exactly_this_closure closure_id
+                ~all_function_decls_in_set
+                ~all_closures_in_set:closure_types_via_aliases
+                ~all_closure_vars_in_set:closure_element_types_inside_function)
+            all_function_decls_in_set)
+        all_function_decls_all_sets
     in
-    closure_bound_names_inside, closure_types_inside_function
+    closure_bound_names_all_sets_inside, closure_types_inside_functions
+
+  let bind_closure_types_inside_functions denv_inside_functions
+        ~closure_bound_names_inside_functions_all_sets
+        ~closure_types_inside_functions_all_sets =
+    let denv_inside_functions =
+      List.fold_left (fun denv closure_bound_names_inside ->
+          Closure_id.Map.fold (fun _closure_id bound_name denv ->
+              let name = Name_in_binding_pos.name bound_name in
+              let irrelevant = not (Name_in_binding_pos.is_symbol bound_name) in
+              let bound_name =
+                Name_in_binding_pos.create name
+                  (if irrelevant then NM.in_types else NM.normal)
+              in
+              (* The name may be bound already when reifying the types of
+                 continuation parameters at toplevel. *)
+              (* CR mshinwell: update out of date comment.  Do we still need
+                 [define_name_if_undefined] here? *)
+              DE.define_name_if_undefined denv bound_name K.value)
+            closure_bound_names_inside
+            denv)
+        closure_bound_names_inside_functions_all_sets
+        denv_inside_functions
+    in
+    List.fold_left2
+      (fun denv closure_bound_names_inside_functions_one_set
+            closure_types_inside_functions_one_set ->
+        Closure_id.Map.fold (fun closure_id closure_type denv ->
+          match
+            Closure_id.Map.find closure_id
+              closure_bound_names_inside_functions_one_set
+          with
+          | exception Not_found ->
+            Misc.fatal_errorf "No closure name for closure ID %a.@ \
+                closure_bound_names_inside_functions_one_set = %a."
+              Closure_id.print closure_id
+              (Closure_id.Map.print Name_in_binding_pos.print)
+              closure_bound_names_inside_functions_one_set
+          | bound_name ->
+            DE.add_equation_on_name denv
+              (Name_in_binding_pos.name bound_name)
+              closure_type)
+        closure_types_inside_functions_one_set
+        denv)
+      denv_inside_functions
+      closure_bound_names_inside_functions_all_sets
+      closure_types_inside_functions_all_sets
 
   let compute_old_to_new_code_ids_all_sets ~all_function_decls_all_sets =
     List.fold_left
@@ -156,50 +201,6 @@ end = struct
       Code_id.Map.empty
       all_function_decls_all_sets
 
-  let bind_closure_types_inside_function ~denv_outside_function
-        ~denv_inside_function:denv ~all_function_decls_in_set ~closure_bound_names
-        ~closure_element_types_inside_function ~old_to_new_code_ids_all_sets
-        ~all_function_decls_in_other_sets ~all_closure_bound_names_in_other_sets =
-    let closure_bound_names_inside, closure_types_inside_function =
-      compute_closure_types_inside_function ~denv_outside_function
-        ~all_function_decls_in_set ~closure_bound_names
-        ~closure_element_types_inside_function ~old_to_new_code_ids
-    in
-    let denv =
-      Closure_id.Map.fold (fun _closure_id bound_name denv ->
-          let name = Name_in_binding_pos.name bound_name in
-          let irrelevant = not (Name_in_binding_pos.is_symbol bound_name) in
-          let bound_name =
-            Name_in_binding_pos.create name
-              (if irrelevant then NM.in_types else NM.normal)
-          in
-          (* The name may be bound already when reifying the types of
-             continuation parameters at toplevel. *)
-          (* CR mshinwell: update out of date comment.  Do we still need
-             [define_name_if_undefined] here? *)
-          DE.define_name_if_undefined denv bound_name K.value)
-        closure_bound_names_inside
-        denv
-    in
-    let denv =
-      Closure_id.Map.fold (fun closure_id closure_type denv ->
-          match Closure_id.Map.find closure_id closure_bound_names_inside with
-          | exception Not_found ->
-            Misc.fatal_errorf "No closure name for closure ID %a.@ \
-                closure_bound_names = %a.@ closure_bound_names_inside = %a."
-              Closure_id.print closure_id
-              (Closure_id.Map.print Name_in_binding_pos.print) closure_bound_names
-              (Closure_id.Map.print Name_in_binding_pos.print)
-              closure_bound_names_inside
-          | bound_name ->
-            DE.add_equation_on_name denv
-              (Name_in_binding_pos.name bound_name)
-              closure_type)
-        closure_types_inside_function
-        denv
-    in
-    closure_bound_names_inside, denv
-
   let bind_existing_code_to_new_code_ids denv ~old_to_new_code_ids_all_sets =
     Code_id.Map.fold (fun old_code_id new_code_id denv ->
         let params_and_body = DE.find_code denv old_code_id in
@@ -208,42 +209,57 @@ end = struct
       old_to_new_code_ids_all_sets
       denv
 
-  let create ~dacc_prior_to_sets ~all_sets_of_closures =
+  let create ~dacc_prior_to_sets ~all_sets_of_closures
+        ~closure_element_types_all_sets =
     let old_to_new_code_ids =
       compute_old_to_new_code_ids_all_sets ~all_function_decls_all_sets
     in
-    let closure_bound_names_inside_functions, denv_inside_functions =
-      let denv_outside_function = DA.denv dacc_prior_to_sets in
-      let env_outside_function = DE.typing_env denv_outside_function in
-      let denv_after_enter_closure =
-        ...
-      in
-      let denv =
-        DE.increment_continuation_scope_level_twice denv_after_enter_closure
-      in
-      let env_inside_function, closure_element_types_inside_function =
-        compute_closure_element_types_inside_function ~env_outside_function
-          ~env_inside_function:(DE.typing_env denv) ~closure_element_types
-      in
-      let denv_inside_function =
-        env_inside_function
-        |> DE.with_typing_env denv
-        |> bind_existing_code_to_new_code_ids ~old_to_new_code_ids
-      in
-      bind_closure_types_inside_function ~denv_outside_function
-        ~denv_inside_function ~all_function_decls_in_set ~closure_bound_names
-        ~closure_element_types_inside_function ~old_to_new_code_ids_all_sets
-        ~all_function_decls_in_other_sets ~all_closure_bound_names_in_other_sets
+    let closure_bound_names_inside_functions_all_sets,
+        closure_types_inside_functions_all_sets =
+      compute_closure_types_inside_functions ~denv_prior_to_sets
+        ~all_function_decls_all_sets ~closure_bound_names_all_sets
+        ~closure_element_types_inside_function_all_sets
+        ~old_to_new_code_ids_all_sets
+    in
+    let env_prior_to_sets = DA.typing_env dacc_prior_to_sets in
+    let denv_inside_functions =
+      dacc_prior_to_sets
+      |> DA.denv
+      |> DE.enter_closure
+      |> DE.increment_continuation_scope_level_twice
+    in
+    let env_inside_functions,
+        closure_element_types_all_sets_inside_functions_rev =
+      List.fold_left 
+        (fun (env_inside_functions,
+              closure_element_types_all_sets_inside_functions_rev)
+             closure_element_types ->
+          let env_inside_functions, closure_element_types_inside_function =
+            compute_closure_element_types_inside_function ~env_prior_to_sets
+              ~env_inside_function:env_inside_function ~closure_element_types
+          in
+          env_inside_functions,
+            closure_element_types_inside_function
+              :: closure_element_types_all_sets_inside_functions_rev)
+        (DE.typing_env denv_inside_functions, [])
+        closure_element_types_all_sets
+    in
+    let closure_element_types_all_sets_inside_functions =
+      List.rev closure_element_types_all_sets_inside_functions_rev
     in
     let dacc_inside_functions =
-      DA.with_denv dacc_prior_to_sets denv_inside_functions
+      env_inside_functions
+      |> DE.with_typing_env denv
+      |> bind_existing_code_to_new_code_ids ~old_to_new_code_ids_all_sets
+      |> bind_closure_types_inside_functions
+           ~closure_bound_names_inside_functions_all_sets
+           ~closure_types_inside_functions_all_sets
+      |> DA.with_denv dacc_prior_to_sets
     in
     { dacc_inside_functions;
-      closure_bound_names_inside_functions;
+      closure_bound_names_inside_functions_all_sets;
+      closure_types_inside_functions_all_sets;
     }
-
-  let introduce t ~closure_element_types =
-
 end
 
 let dacc_inside_function context ~params ~my_closure closure_id =
@@ -279,7 +295,6 @@ let simplify_function context r closure_id function_decl
       ~closure_element_types =
   let name = Format.asprintf "%a" Closure_id.print closure_id in
   Profile.record_call ~accumulate:true name (fun () ->
-    let denv_after_enter_closure = DE.enter_closure (DA.denv dacc) in
     let code_id = FD.code_id function_decl in
     let params_and_body = DE.find_code (DA.denv dacc) code_id in
     let params_and_body, r =
@@ -329,7 +344,7 @@ let simplify_function context r closure_id function_decl
     (* XXX It seems like this should be done at the end, when we augment
        the [dacc_prior_to_sets] with [r] and the new definitions. *)
     let function_type =
-      let denv_outside_function =
+      let denv_prior_to_sets =
         DA.denv dacc
         |> DE.define_code ~code_id:new_code_id ~newer_version_of:old_code_id
           ~params_and_body
@@ -337,11 +352,11 @@ let simplify_function context r closure_id function_decl
       in
       (* Only holds in the symbols case
       Closure_id.Map.iter (fun _ name ->
-          DE.check_name_is_bound denv_outside_function
+          DE.check_name_is_bound denv_prior_to_sets
             (Name_in_binding_pos.to_name name))
         closure_bound_names;
       *)
-      function_decl_type ~denv_outside_function function_decl Rec_info.initial
+      function_decl_type ~denv_prior_to_sets function_decl Rec_info.initial
     in
     { function_decl;
       new_code_id;
