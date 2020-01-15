@@ -168,13 +168,13 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
     | Singleton _ ->
       Let_symbol.create bound_symbols static_const body
       |> Expr.create_let_symbol
-    | Sets_of_closures sets ->
+    | Sets_of_closures _ ->
       (* Turn pieces of code that are only referenced in [newer_version_of]
          fields into [Deleted]. *)
       let code_ids_to_make_deleted =
         let code_ids_only_used_in_newer_version_of =
           Code_id.Set.inter (Name_occurrences.code_ids bound_names)
-            (Name_occurrences.union
+            (Code_id.Set.union
               (Name_occurrences.only_newer_version_of_code_ids
                 (Static_const.free_names static_const))
               (Name_occurrences.only_newer_version_of_code_ids
@@ -191,7 +191,10 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
         List.map (fun code_and_set_of_closures ->
             Static_const.Code_and_set_of_closures.map_code
               code_and_set_of_closures
-              ~f:(fun _code : Static_const.Code.t -> Deleted))
+              ~f:(fun code_id code ->
+                if Code_id.Set.mem code_id code_ids_to_make_deleted
+                then Static_const.Code.make_deleted code
+                else code))
           (Static_const.must_be_sets_of_closures static_const)
       in
       Let_symbol.create bound_symbols (Sets_of_closures sets) body

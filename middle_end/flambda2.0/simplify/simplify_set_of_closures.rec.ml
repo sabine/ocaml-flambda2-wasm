@@ -34,7 +34,7 @@ module Context_for_multiple_sets_of_closures : sig
 
   val dacc_inside_functions : t -> DA.t
 
-  val closure_bound_names_inside_functions
+  val closure_bound_names_inside_functions_all_sets
      : t
     -> Name_in_binding_pos.t Closure_id.Map.t list
 end = struct
@@ -46,8 +46,8 @@ end = struct
 
   let dacc_inside_functions t = t.dacc_inside_functions
 
-  let closure_bound_names_inside_functions =
-    t.closure_bound_names_inside_functions
+  let closure_bound_names_inside_functions_all_sets t =
+    t.closure_bound_names_inside_functions_all_sets
 
   let compute_closure_element_types_inside_function ~env_prior_to_sets
         ~env_inside_function ~closure_element_types =
@@ -119,7 +119,7 @@ end = struct
       List.map (fun closure_bound_names ->
           Closure_id.Map.map (fun name ->
               T.alias_type_of K.value (Name_in_binding_pos.to_simple name))
-            closure_bound_names_inside)
+            closure_bound_names_all_sets_inside)
         closure_bound_names_all_sets
     in
     let all_function_decls_all_sets =

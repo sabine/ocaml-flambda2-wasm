@@ -523,6 +523,8 @@ end and Static_const : sig
     val print : Format.formatter -> t -> unit
 
     val free_names : t -> Name_occurrences.t
+
+    val make_deleted : t -> t
   end
 
   (** The possibly-recursive declaration of pieces of code and any associated
@@ -534,7 +536,7 @@ end and Static_const : sig
       set_of_closures : Set_of_closures.t option;
     }
 
-    val map_code : t -> f:(Code.t -> Code.t) -> t
+    val map_code : t -> f:(Code_id.t -> Code.t -> Code.t) -> t
   end
 
   (** The static structure of a symbol, possibly with holes, ready to be filled

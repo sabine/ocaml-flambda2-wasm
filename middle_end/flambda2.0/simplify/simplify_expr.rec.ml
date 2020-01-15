@@ -1528,6 +1528,9 @@ and simplify_expr
   | Apply_cont apply_cont -> simplify_apply_cont dacc apply_cont k
   | Switch switch -> simplify_switch dacc switch k
   | Invalid _ ->
+    (* CR mshinwell: Make sure that a program can be simplified to just
+       [Invalid].  [Un_cps] should translate any [Invalid] that it sees as if
+       it were [Halt_and_catch_fire]. *)
     let user_data, uacc =
       (* CR mshinwell: Factor out into [Simplify_common] *)
       k (DA.continuation_uses_env dacc) (DA.code_age_relation dacc) (DA.r dacc)

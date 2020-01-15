@@ -156,6 +156,11 @@ module Code = struct
       { params_and_body = params_and_body';
         newer_version_of;
       }
+
+  let make_deleted t =
+    { params_and_body = Deleted;
+      newer_version_of = t.newer_version_of;
+    }
 end
 
 module Code_and_set_of_closures = struct
@@ -241,7 +246,7 @@ module Code_and_set_of_closures = struct
       }
 
   let map_code t ~f =
-    { code = Code_id.Map.map_sharing f t.code;
+    { code = Code_id.Map.mapi f t.code;
       set_of_closures = t.set_of_closures;
     }
 end
