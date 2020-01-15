@@ -14,24 +14,28 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Simplification of statically-allocated constants bound to symbols. *)
+(** Simplification of recursive groups of sets of closures. *)
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
-val simplify_set_of_closures0
-    : Downwards_acc.t
-   -> Flambda.Set_of_closures.t list
-   -> closure_symbols:Symbol.t Closure_id.Map.t
-   -> closure_elements:Simple.t Var_within_closure.Map.t
-   -> closure_element_types:Flambda_type.t Var_within_closure.Map.t
-   -> Flambda.Set_of_closures.t list
-        * Downwards_acc.t
-        * Flambda_type.t Symbol.Map.t
-        * Flambda.Let_symbol_expr.Bound_symbols.t
-        * Static_const.t
-
-val simplify_static_const
+(** Simplify a single, non-lifted set of closures, as may occur on the
+    right-hand side of a [Let] binding. *)
+val simplify_non_lifted_set_of_closures
    : Downwards_acc.t
-  -> Flambda.Let_symbol_expr.Bound_symbols.t
-  -> Static_const.t
-  -> Flambda.Let_symbol_expr.Bound_symbols.t * Static_const.t * Downwards_acc.t
+  -> bound_vars:Bindable_let_bound.t
+  -> Flambda.Set_of_closures.t
+  -> (Bindable_let_bound.t * Reachable.t) list * Downwards_acc.t
+
+(** Simplify a group of possibly-recursive sets of closures, as may occur on
+    the right-hand side of a [Let_symbol] binding.
+
+    [orig_bound_symbols] and [orig_static_const] are only used for diagnostic
+    messages.
+*)
+val simplify_lifted_sets_of_closures
+   : Downwards_acc.t
+  -> orig_bound_symbols:Let_symbol_expr.Bound_symbols.t
+  -> orig_static_const:Static_const.t
+  -> Bound_symbols.Code_and_set_of_closures.t list
+  -> Static_const.code_and_set_of_closures list
+  -> ...
