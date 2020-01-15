@@ -136,8 +136,7 @@ let sort dacc lifted_constants =
                   then acc
                   else
                     let bound_symbols, defining_expr =
-                      CIS.Map.find code_id_or_symbol
-                        code_id_or_symbol_to_const
+                      CIS.Map.find code_id_or_symbol code_id_or_symbol_to_const
                     in
                     (* We may encounter the same defining expression more
                        than once (e.g. a set of closures via a code ID and

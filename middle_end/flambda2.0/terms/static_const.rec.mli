@@ -58,6 +58,8 @@ module Code_and_set_of_closures : sig
     (* CR mshinwell: Check the free names of the set of closures *)
     set_of_closures : Set_of_closures.t option;
   }
+
+  val map_code : t -> f:(Code.t -> Code.t) -> t
 end
 
 (** The static structure of a symbol, possibly with holes, ready to be filled

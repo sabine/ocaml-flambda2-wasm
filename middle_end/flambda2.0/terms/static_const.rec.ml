@@ -239,6 +239,11 @@ module Code_and_set_of_closures = struct
       { code = code';
         set_of_closures = set_of_closures';
       }
+
+  let map_code t ~f =
+    { code = Code_id.Map.map_sharing f t.code;
+      set_of_closures = t.set_of_closures;
+    }
 end
 
 type t =
