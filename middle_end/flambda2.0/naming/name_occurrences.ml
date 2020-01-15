@@ -558,6 +558,9 @@ let continuations t = For_continuations.keys t.continuations
 let code_ids t = For_code_ids.keys t.code_ids
 let newer_version_of_code_ids t = For_code_ids.keys t.newer_version_of_code_ids
 
+let code_ids_and_newer_version_of_code_ids t =
+  Code_id.Set.union (code_ids t) (newer_version_of_code_ids t)
+
 let names t =
   Name.Set.union (Name.set_of_var_set (variables t))
     (Name.set_of_symbol_set (symbols t))

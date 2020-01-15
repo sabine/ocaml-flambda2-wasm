@@ -48,3 +48,15 @@ let compilation_unit t =
   match t with
   | Code_id code_id -> Code_id.get_compilation_unit code_id
   | Symbol sym -> Symbol.compilation_unit sym
+
+let set_of_code_id_set code_ids =
+  Code_id.Set.fold (fun code_id free_code_ids ->
+      Set.add (Code_id code_id) free_code_ids)
+    code_ids
+    Set.empty
+
+let set_of_symbol_set symbols =
+  Symbol.Set.fold (fun sym free_syms ->
+      Set.add (Symbol sym) free_syms)
+    symbols
+    Set.empty

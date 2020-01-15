@@ -563,9 +563,6 @@ end and Static_const : sig
 
   val can_share : t -> bool
 
-
-  val find_code : t -> Code_id.t -> Code.t
-
   val must_be_sets_of_closures : t -> Code_and_set_of_closures.t list
 end
 

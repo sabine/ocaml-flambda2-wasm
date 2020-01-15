@@ -491,41 +491,6 @@ let can_share t =
   | Block (_, Mutable, _)
   | Mutable_string _ -> false
 
-let find_code t code_id =
-  match t with
-  | Sets_of_closures sets ->
-    let found =
-      List.concat_map
-        (fun ({ code; set_of_closures = _; } : Code_and_set_of_closures.t) ->
-          Code_id.Map.filter_map code ~f:(fun code_id' code ->
-            if Code_id.equal code_id code_id' then Some code
-            else None)
-          |> Code_id.Map.bindings)
-        sets
-    in
-    begin match found with
-    | [] ->
-      Misc.fatal_errorf "Code ID %a not defined in@ %a"
-        Code_id.print code_id
-        print t
-    | [code_id', code] ->
-      assert (Code_id.equal code_id code_id');
-      code
-    | _::_ ->
-      Misc.fatal_errorf "Code ID %a defined more than once in@ %a"
-        Code_id.print code_id
-        print t
-    end
-  | Block _
-  | Boxed_float _
-  | Boxed_int32 _
-  | Boxed_int64 _
-  | Boxed_nativeint _
-  | Immutable_float_array _
-  | Immutable_string _
-  | Mutable_string _ ->
-    Misc.fatal_errorf "Code can never occur in:@ %a" print t
-
 let must_be_sets_of_closures t =
   match t with
   | Sets_of_closures sets -> sets
