@@ -665,9 +665,8 @@ let simplify_non_lifted_set_of_closures dacc
     simplify_non_lifted_set_of_closures0 context ~bound_vars ~closure_bound_vars
       set_of_closures ~closure_elements ~closure_element_types
 
-let simplify_lifted_set_of_closures0 dacc set_of_closures ~closure_symbols
-      ~closure_elements ~closure_element_types ~all_function_decls_in_other_sets
-      ~all_closure_bound_names_in_other_sets =
+let simplify_lifted_set_of_closures0 dacc context ~closure_symbols
+      set_of_closures =
   let closure_bound_names =
     Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
   in
@@ -678,15 +677,13 @@ let simplify_lifted_set_of_closures0 dacc set_of_closures ~closure_symbols
         closure_symbols
         denv)
   in
-  let { Simplify_named.
-        set_of_closures;
+  let { set_of_closures;
         closure_types_by_bound_name;
         newer_versions_of;
         code;
         dacc;
       } =
-    Simplify_named.simplify_set_of_closures0 context set_of_closures
-      ~closure_bound_names
+    simplify_set_of_closures0 context set_of_closures ~closure_bound_names
   in
   (* CR mshinwell: See comment in simplify_non_lifted_set_of_closures about
      the following *)
@@ -708,30 +705,22 @@ let simplify_lifted_set_of_closures0 dacc set_of_closures ~closure_symbols
         })
       code
   in
-  let static_const : Static_const.t =
-    Code_and_set_of_closures {
-      code;
-      set_of_closures = Some set_of_closures;
-    }
-  in
-  let bound_symbols : Let_symbol.Bound_symbols.t =
+  let bound_symbols_component : Bound_symbols.Code_and_set_of_closures.t =
     Code_and_set_of_closures {
       code_ids = Code_id.Map.keys code;
       closure_symbols;
     }
   in
-  let static_structure_types =
-    Name_in_binding_pos.Map.fold
-      (fun name closure_type static_structure_types ->
-        let symbol = Name_in_binding_pos.must_be_symbol name in
-        Symbol.Map.add symbol closure_type static_structure_types)
-      closure_types_by_bound_name
-      Symbol.Map.empty
+  let code_and_set_of_closures : Static_const.code_and_set_of_closures =
+    Code_and_set_of_closures {
+      code;
+      set_of_closures = Some set_of_closures;
+    }
   in
-  set_of_closures, dacc, static_structure_types, bound_symbols, static_const
+  bound_symbols_component, code_and_set_of_closures, dacc
 
 let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
-      (bound_symbols : Bound_symbols.Code_and_set_of_closures.t list)
+      (bound_symbols_components : Bound_symbols.Code_and_set_of_closures.t list)
       (code_and_sets_of_closures : Static_const.code_and_set_of_closures list) =
   if List.compare_lengths bound_symbols sets <> 0 then begin
     Misc.fatal_errorf "Differing number of bound symbols and static constant \
@@ -740,6 +729,9 @@ let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
       Static_const.print orig_static_const
   end;
   let dacc =
+    (* Unlike in the cases above that start from [Let]-bindings, in this case
+       the code may be in the same definition as the closure(s), so we must
+       also add such code to the environment.  (See [Static_const].) *)
     List.fold_left2
       (fun dacc
            ({ code_ids; closure_symbols; }
@@ -774,7 +766,7 @@ let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
           code
           dacc)
       dacc
-      bound_symbols code_and_sets_of_closures
+      bound_symbols_components code_and_sets_of_closures
   in
   let sets_of_closures =
     List.filter_map (fun { code = _; set_of_closures; } -> set_of_closures)
@@ -791,9 +783,9 @@ let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
                   closure_element_types;
                 } =
               Simplify_named.type_closure_elements_for_previously_lifted_set
-                  dacc ~min_name_mode:Name_mode.normal set_of_closures
+                dacc ~min_name_mode:Name_mode.normal set_of_closures
             in
-            assert (can_lift);
+            assert can_lift;
             closure_elements, closure_element_types)
           set_of_closures)
       code_and_sets_of_closures
@@ -804,30 +796,33 @@ let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
       sets_of_closures
       ~closure_element_types_all_sets:(List.map snd closure_elements_and_types)
   in
-  let simplify_results =
-    List.map2
-      (fun ({ code_ids; closure_symbols; }
+  let bound_symbols_components_rev, code_and_sets_of_closures_rev, dacc =
+    List.fold_left2
+      (fun (bound_symbols_components_rev, code_and_sets_of_closures_rev, dacc)
+           (({ code_ids; closure_symbols; } as bound_symbol_component)
              : Bound_symbols.Code_and_set_of_closures.t)
-           ({ code; set_of_closures; }
+           (({ code; set_of_closures; } as code_and_set_of_closures)
              : Static_const.code_and_set_of_closures) ->
-        Option.map (fun set_of_closures ->
-            let closure_bound_names =
-              Closure_id.Map.map Name_in_binding_pos.symbol closure_symbols
-            in
-            Simplify_set_of_closures.simplify_set_of_closures0 context
-              set_of_closures ~closure_bound_names)
-          set_of_closures)
-      bound_symbols code_and_sets_of_closures
+        let bound_symbol_component, code_and_set_of_closures, dacc =
+          match set_of_closures with
+          | None ->
+            (* We don't currently simplify code on the way down.  [Un_cps] will
+               however check the code to ensure there are no unbound names. *)
+            bound_symbol_component, code_and_set_of_closures, dacc
+          | Some set_of_closures ->
+            simplify_lifted_set_of_closures0 dacc context ~closure_symbols
+              set_of_closures
+        in
+        bound_symbol_component :: bound_symbols_components_rev,
+          code_and_set_of_closures :: code_and_sets_of_closures_rev,
+          dacc)
+      ([], [], dacc)
+      bound_symbols_components code_and_sets_of_closures
   in
-
-    begin match set_of_closures with
-    | None ->
-      bound_symbols,
-        Code_and_set_of_closures { code; set_of_closures = None; },
-        dacc
-    | Some set_of_closures ->
-      let _set_of_closures, dacc, _static_structure_types,
-          bound_symbols, static_const =
-      in
-      bound_symbols, static_const, dacc
-    end
+  let bound_symbols : Bound_symbols.t =
+    Sets_of_closures (List.rev bound_symbols_components_rev)
+  in
+  let static_const : Static_const.t =
+    Sets_of_closures (List.rev code_and_sets_of_closures_rev)
+  in
+  bound_symbols, static_const, dacc

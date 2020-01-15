@@ -51,7 +51,7 @@ module rec Expr : sig
     (** Bind code and/or data symbol(s).  This form of expression is only
         allowed in certain "toplevel" contexts.  The bound symbols are not
         treated up to alpha conversion; each such bound symbol must be
-        unique. *)
+        unique across the whole program being compiled. *)
     | Let_cont of Let_cont_expr.t
     (** Define one or more continuations. *)
     | Apply of Apply.t
@@ -480,7 +480,8 @@ end and Function_params_and_body : sig
       -> 'a)
     -> 'a
 end and Static_const : sig
-  (** Language terms that represent statically-allocated values. *)
+  (** Language terms that represent statically-allocated values, bound to
+      symbols. *)
 
   module Field_of_block : sig
     (** Inhabitants (of kind [Value]) of fields of statically-allocated

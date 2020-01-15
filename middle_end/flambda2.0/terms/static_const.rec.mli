@@ -55,6 +55,7 @@ val print_code : Format.formatter -> code -> unit
 
 (** The possibly-recursive declaration of pieces of code and any associated set
     of closures. *)
+(* CR mshinwell: Put in own module, then it will match [Bound_symbols] *)
 type code_and_set_of_closures = {
   code : code Code_id.Map.t;
   (* CR mshinwell: Check the free names of the set of closures *)

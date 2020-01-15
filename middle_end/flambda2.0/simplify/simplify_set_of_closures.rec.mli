@@ -27,15 +27,11 @@ val simplify_non_lifted_set_of_closures
   -> (Bindable_let_bound.t * Reachable.t) list * Downwards_acc.t
 
 (** Simplify a group of possibly-recursive sets of closures, as may occur on
-    the right-hand side of a [Let_symbol] binding.
-
-    [orig_bound_symbols] and [orig_static_const] are only used for diagnostic
-    messages.
-*)
+    the right-hand side of a [Let_symbol] binding. *)
 val simplify_lifted_sets_of_closures
    : Downwards_acc.t
   -> orig_bound_symbols:Let_symbol_expr.Bound_symbols.t
   -> orig_static_const:Static_const.t
   -> Bound_symbols.Code_and_set_of_closures.t list
   -> Static_const.code_and_set_of_closures list
-  -> ...
+  -> Bound_symbols.t * Static_const.t * Downwards_acc.t
