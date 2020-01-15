@@ -91,14 +91,9 @@ let static_value env v =
       C.cint (nativeint_of_targetint (tag_targetint (targetint_of_imm i)))
 
 let or_variable f default v cont =
-  match (v : _ SC.or_variable) with
+  match (v : _ Or_variable.t) with
   | Const c -> f c cont
   | Var _ -> f default cont
-
-let map_or_variable f default v =
-  match (v : _ SC.or_variable) with
-  | Const c -> f c
-  | Var _ -> default
 
 let make_update env kind symb var i prev_update =
   let e = Env.get_variable env var in
@@ -123,7 +118,7 @@ let rec static_block_updates symb env acc i = function
 let rec static_float_array_updates symb env acc i = function
   | [] -> acc
   | sv :: r ->
-      begin match (sv : _ SC.or_variable) with
+      begin match (sv : _ Or_variable.t) with
       | Const _ ->
           static_float_array_updates symb env acc (i + 1) r
       | Var var ->
@@ -135,7 +130,7 @@ let static_boxed_number kind env s default emit transl v r =
   let name = symbol s in
   let aux x cont = emit (name, Cmmgen_state.Global) (transl x) cont in
   let updates =
-    match (v : _ SC.or_variable) with
+    match (v : _ Or_variable.t) with
     | Const _ -> None
     | Var v ->
         make_update env kind (C.symbol name) v 0 None
@@ -332,7 +327,10 @@ let static_const0 env r ~params_and_body (bound_symbols : Bound_symbols.t)
       env, r, updates
   | Singleton s, Immutable_float_array fields ->
       let name = symbol s in
-      let aux = map_or_variable Numbers.Float_by_bit_pattern.to_float 0. in
+      let aux =
+        Or_variable.value_map ~default:0.
+          ~f:Numbers.Float_by_bit_pattern.to_float
+      in
       let static_fields = List.map aux fields in
       let float_array =
         C.emit_float_array_constant (name, Cmmgen_state.Global) static_fields

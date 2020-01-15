@@ -14,26 +14,38 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Simplification of recursive groups of sets of closures. *)
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+type 'a t =
+  | Const of 'a
+  | Var of Variable.t
 
-open! Simplify_import
+let print print_const ppf t =
+  match t with
+  | Const cst -> print_const ppf cst
+  | Var var -> Variable.print ppf var
 
-(** Simplify a single, non-lifted set of closures, as may occur on the
-    right-hand side of a [Let] binding. *)
-val simplify_non_lifted_set_of_closures
-   : Downwards_acc.t
-  -> bound_vars:Bindable_let_bound.t
-  -> Set_of_closures.t
-  -> (Bindable_let_bound.t * Reachable.t) list * Downwards_acc.t
+let compare compare_const t1 t2 =
+  match t1, t2 with
+  | Const cst1, Const cst2 -> compare_const cst1 cst2
+  | Const _, Var _ -> -1
+  | Var _, Const _ -> 1
+  | Var var1, Var var2 -> Variable.compare var1 var2
 
-(** Simplify a group of possibly-recursive sets of closures, as may occur on
-    the right-hand side of a [Let_symbol] binding. *)
-val simplify_lifted_sets_of_closures
-   : Downwards_acc.t
-  -> orig_bound_symbols:Bound_symbols.t
-  -> orig_static_const:Static_const.t
-  -> Bound_symbols.Code_and_set_of_closures.t list
-  -> Static_const.Code_and_set_of_closures.t list
-  -> Bound_symbols.t * Static_const.t * Downwards_acc.t
+let free_names t =
+  match t with
+  | Const _ -> Name_occurrences.empty
+  | Var var -> Name_occurrences.singleton_variable var Name_mode.normal
+
+let apply_name_permutation t perm =
+  match t with
+  | Const _ -> t
+  | Var var ->
+    let var' = Name_permutation.apply_variable perm var in
+    if var == var' then t
+    else Var var'
+
+let value_map t ~default ~f =
+  match t with
+  | Const cst -> f cst
+  | Var _ -> default

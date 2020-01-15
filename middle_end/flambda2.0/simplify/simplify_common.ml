@@ -157,8 +157,13 @@ let bind_let_bound ~bindings ~body =
     body
     (List.rev bindings)
 
-let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
+let create_let_symbol _code_age_relation (bound_symbols : Bound_symbols.t)
       (static_const : Static_const.t) body =
+  (* CR mshinwell: Reinstate deletion and get it right this time *)
+  Let_symbol.create bound_symbols static_const body
+  |> Expr.create_let_symbol
+
+(*
   let free_names_after = Expr.free_names body in
   let symbols_after = Name_occurrences.symbols free_names_after in
   match bound_symbols with
@@ -168,6 +173,8 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
       |> Expr.create_let_symbol
     else
       body
+  | Set_of_closures sets ->
+
   | Code_and_set_of_closures { code_ids; closure_symbols; } ->
     let code, set_of_closures =
       (* CR mshinwell: Move to [Static_const.must_be_code] or something *)
@@ -191,8 +198,8 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
           | Deleted -> true
           | Present _ ->
             (* CR mshinwell: The binding can be completely removed (rather
-                than going to, or staying as, [Deleted]) if no subsequent
-                [newer_version_of] references it. *)
+               than going to, or staying as, [Deleted]) if no subsequent
+               [newer_version_of] references it. *)
             let code_unused =
               not (Name_occurrences.mem_code_id free_names_after code_id)
             in
@@ -241,3 +248,4 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
     else
       Let_symbol.create bound_symbols static_const body
       |> Expr.create_let_symbol
+*)

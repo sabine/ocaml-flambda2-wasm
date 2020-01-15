@@ -14,26 +14,18 @@
 (*                                                                        *)
 (**************************************************************************)
 
-(** Simplification of recursive groups of sets of closures. *)
+[@@@ocaml.warning "+a-30-40-41-42"]
 
-[@@@ocaml.warning "+a-4-30-40-41-42"]
+type 'a t =
+  | Const of 'a
+  | Var of Variable.t
 
-open! Simplify_import
+val print : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a t -> unit
 
-(** Simplify a single, non-lifted set of closures, as may occur on the
-    right-hand side of a [Let] binding. *)
-val simplify_non_lifted_set_of_closures
-   : Downwards_acc.t
-  -> bound_vars:Bindable_let_bound.t
-  -> Set_of_closures.t
-  -> (Bindable_let_bound.t * Reachable.t) list * Downwards_acc.t
+val compare : ('a -> 'a -> int) -> 'a t -> 'a t -> int
 
-(** Simplify a group of possibly-recursive sets of closures, as may occur on
-    the right-hand side of a [Let_symbol] binding. *)
-val simplify_lifted_sets_of_closures
-   : Downwards_acc.t
-  -> orig_bound_symbols:Bound_symbols.t
-  -> orig_static_const:Static_const.t
-  -> Bound_symbols.Code_and_set_of_closures.t list
-  -> Static_const.Code_and_set_of_closures.t list
-  -> Bound_symbols.t * Static_const.t * Downwards_acc.t
+val value_map : 'a t -> default:'b -> f:('a -> 'b) -> 'b
+
+val free_names : _ t -> Name_occurrences.t
+
+val apply_name_permutation : 'a t -> Name_permutation.t -> 'a t

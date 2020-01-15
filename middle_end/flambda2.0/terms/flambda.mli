@@ -494,8 +494,7 @@ end and Static_const : sig
       symbols. *)
 
   module Field_of_block : sig
-    (** Inhabitants (of kind [Value]) of fields of statically-allocated
-        blocks. *)
+    (** Inhabitants (of kind [Value]) of fields of statically-allocated blocks. *)
     type t =
       | Symbol of Symbol.t
         (** The address of the given symbol. *)
@@ -508,57 +507,56 @@ end and Static_const : sig
     include Identifiable.S with type t := t
   end
 
-  type 'a or_variable =
-    | Const of 'a
-    | Var of Variable.t
-
-  (** The mutability status of a block field. *)
-  type mutable_or_immutable = Mutable | Immutable
-
   (** A piece of code, comprising of the parameters and body of a function,
       together with a field indicating whether the piece of code is a newer
       version of one that existed previously (and may still exist), for
       example after a round of simplification. *)
-  type code = {
-    params_and_body : Function_params_and_body.t or_deleted;
-    newer_version_of : Code_id.t option;
-  }
-  and 'a or_deleted =
-    | Present of 'a
-    | Deleted
+  module Code : sig
+    type t = {
+      params_and_body : Function_params_and_body.t or_deleted;
+      newer_version_of : Code_id.t option;
+    }
+    and 'a or_deleted =
+      | Present of 'a
+      | Deleted
+
+    val print : Format.formatter -> t -> unit
+  end
 
   (** The possibly-recursive declaration of pieces of code and any associated
       set of closures. *)
-  type code_and_set_of_closures = {
-    code : code Code_id.Map.t;
-    (* CR mshinwell: Check the free names of the set of closures *)
-    set_of_closures : Set_of_closures.t option;
-  }
+  module Code_and_set_of_closures : sig
+    type t = {
+      code : Code.t Code_id.Map.t;
+      (* CR mshinwell: Check the free names of the set of closures *)
+      set_of_closures : Set_of_closures.t option;
+    }
+  end
 
   (** The static structure of a symbol, possibly with holes, ready to be filled
       with values computed at runtime. *)
   type t =
-    | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
-    | Sets_of_closures of code_and_set_of_closures list
-    | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
-    | Boxed_int32 of Int32.t or_variable
-    | Boxed_int64 of Int64.t or_variable
-    | Boxed_nativeint of Targetint.t or_variable
-    | Immutable_float_array of Numbers.Float_by_bit_pattern.t or_variable list
+    | Block of Tag.Scannable.t * Mutable_or_immutable.t
+        * (Field_of_block.t list)
+    | Sets_of_closures of Code_and_set_of_closures.t list
+      (** All code and sets of closures within the list are allowed to be
+          recursive across those sets (but not recursive with any other code or
+          set of closures). *)
+    | Boxed_float of Numbers.Float_by_bit_pattern.t Or_variable.t
+    | Boxed_int32 of Int32.t Or_variable.t
+    | Boxed_int64 of Int64.t Or_variable.t
+    | Boxed_nativeint of Targetint.t Or_variable.t
+    | Immutable_float_array of Numbers.Float_by_bit_pattern.t Or_variable.t list
     | Mutable_string of { initial_value : string; }
     | Immutable_string of string
 
   include Identifiable.S with type t := t
   include Contains_names.S with type t := t
 
-  (** Return all pieces of code defined by the given term. *)
   val get_pieces_of_code
      : t
     -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 
-  (** Returns [true] iff the given term does not contain any variables,
-      which means that the corresponding value can be statically allocated,
-      without any need to patch it afterwards. *)
   val is_fully_static : t -> bool
 
   val can_share : t -> bool

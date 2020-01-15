@@ -90,37 +90,6 @@ module Field_of_block = struct
 *)
 end
 
-module Or_variable = struct
-  type 'a t =
-    | Const of 'a
-    | Var of Variable.t
-
-  let print print_const ppf t =
-    match t with
-    | Const cst -> print_const ppf cst
-    | Var var -> Variable.print ppf var
-
-  let compare compare_const t1 t2 =
-    match t1, t2 with
-    | Const cst1, Const cst2 -> compare_const cst1 cst2
-    | Const _, Var _ -> -1
-    | Var _, Const _ -> 1
-    | Var var1, Var var2 -> Variable.compare var1 var2
-
-  let free_names t =
-    match t with
-    | Const _ -> Name_occurrences.empty
-    | Var var -> Name_occurrences.singleton_variable var Name_mode.normal
-
-  let apply_name_permutation t perm =
-    match t with
-    | Const _ -> t
-    | Var var ->
-      let var' = Name_permutation.apply_variable perm var in
-      if var == var' then t
-      else Var var'
-end
-
 module Code = struct
   type t = {
     params_and_body : Function_params_and_body.t or_deleted;

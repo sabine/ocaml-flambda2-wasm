@@ -210,7 +210,7 @@ let rec declare_const t (const : Lambda.structured_constant)
       (Immutable_float_array
          (List.map (fun s ->
            let f = Numbers.Float_by_bit_pattern.create (float_of_string s) in
-           Static_const.Const f) c))
+           Or_variable.Const f) c))
       "float_array"
   | Const_block (tag, consts) ->
     let const : Static_const.t  =
@@ -947,7 +947,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
           }]
         in
         let static_const : Static_const.t =
-          let code : Static_const.code =
+          let code : Static_const.Code.t =
             { params_and_body = Present params_and_body;
               newer_version_of = None;
             }

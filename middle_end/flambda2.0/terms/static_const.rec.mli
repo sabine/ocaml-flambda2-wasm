@@ -32,12 +32,6 @@ module Field_of_block : sig
   include Identifiable.S with type t := t
 end
 
-module Or_variable : sig
-  type 'a t =
-    | Const of 'a
-    | Var of Variable.t
-end
-
 (** A piece of code, comprising of the parameters and body of a function,
     together with a field indicating whether the piece of code is a newer
     version of one that existed previously (and may still exist), for
@@ -69,9 +63,9 @@ end
 type t =
   | Block of Tag.Scannable.t * Mutable_or_immutable.t * (Field_of_block.t list)
   | Sets_of_closures of Code_and_set_of_closures.t list
-    (** All code and sets of closures within the [code_and_set_of_closures list]
-        are allowed to be recursive across those sets (but not recursive with
-        any other code or set of closures). *)
+    (** All code and sets of closures within the list are allowed to be
+        recursive across those sets (but not recursive with any other code or
+        set of closures). *)
   | Boxed_float of Numbers.Float_by_bit_pattern.t Or_variable.t
   | Boxed_int32 of Int32.t Or_variable.t
   | Boxed_int64 of Int64.t Or_variable.t
