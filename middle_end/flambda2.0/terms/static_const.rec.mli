@@ -58,7 +58,7 @@ end
     of closures. *)
 module Code_and_set_of_closures : sig
   type t = {
-    code : code Code_id.Map.t;
+    code : Code.t Code_id.Map.t;
     (* CR mshinwell: Check the free names of the set of closures *)
     set_of_closures : Set_of_closures.t option;
   }

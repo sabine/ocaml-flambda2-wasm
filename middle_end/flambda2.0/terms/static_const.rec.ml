@@ -166,6 +166,27 @@ module Code = struct
         Function_params_and_body.free_names params_and_body
     in
     Name_occurrences.union from_newer_version_of from_params_and_body
+
+  let apply_name_permutation ({ params_and_body; newer_version_of; } as t)
+        perm =
+    let params_and_body' =
+      match params_and_body with
+      | Deleted -> Deleted
+      | Present params_and_body_inner ->
+        let params_and_body_inner' =
+          Function_params_and_body.apply_name_permutation
+            params_and_body_inner perm
+        in
+        if params_and_body_inner == params_and_body_inner' then 
+          params_and_body
+        else
+          Present params_and_body_inner'
+    in
+    if params_and_body == params_and_body' then t
+    else
+      { params_and_body = params_and_body';
+        newer_version_of;
+      }
 end
 
 module Code_and_set_of_closures = struct
@@ -173,6 +194,82 @@ module Code_and_set_of_closures = struct
     code : Code.t Code_id.Map.t;
     set_of_closures : Set_of_closures.t option;
   }
+
+  let print_with_cache ~cache ppf { code; set_of_closures; } =
+    if Option.is_none set_of_closures then
+      match Code_id.Map.get_singleton code with
+      | None ->
+        fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+            @[<hov 1>%a@]\
+            ))@]"
+          (Flambda_colours.static_part ())
+          (Flambda_colours.normal ())
+          (Code_id.Map.print (Code.print_with_cache ~cache)) code
+      | Some (_code_id, code) ->
+        fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
+            @[<hov 1>%a@]\
+            ))@]"
+          (Flambda_colours.static_part ())
+          (Flambda_colours.normal ())
+          (Code.print_with_cache ~cache) code
+    else
+      fprintf ppf "@[<hov 1>(@<0>%sSets_of_closures@<0>%s@ (\
+          @[<hov 1>(code@ (%a))@]@ \
+          @[<hov 1>(set_of_closures@ (%a))@]\
+          ))@]"
+        (Flambda_colours.static_part ())
+        (Flambda_colours.normal ())
+        (Code_id.Map.print (Code.print_with_cache ~cache)) code
+        (Misc.Stdlib.Option.print
+          (Set_of_closures.print_with_cache ~cache))
+          set_of_closures
+
+  let compare { code = code1; set_of_closures = set1; } 
+        { code = code2; set_of_closures = set2; } =
+    let c =
+      Code_id.Set.compare (Code_id.Map.keys code1)
+        (Code_id.Map.keys code2)
+    in
+    if c <> 0 then c
+    else Option.compare Set_of_closures.compare set1 set2
+
+  let free_names { code; set_of_closures; } =
+    let from_set_of_closures =
+      match set_of_closures with
+      | None -> Name_occurrences.empty
+      | Some set -> Set_of_closures.free_names set
+    in
+    Code_id.Map.fold (fun code_id code free_names ->
+        Name_occurrences.union_list [
+          (Name_occurrences.add_code_id Name_occurrences.empty
+            code_id Name_mode.normal);
+          Code.free_names code;
+          free_names;
+        ])
+      code
+      from_set_of_closures
+
+  let apply_name_permutation ({ code; set_of_closures; } as t) perm =
+    let code' =
+      Code_id.Map.map_sharing
+        (fun code -> Code.apply_name_permutation code perm)
+        code
+    in
+    let set_of_closures' =
+      match set_of_closures with
+      | None -> None
+      | Some set ->
+        let set' =
+          Set_of_closures.apply_name_permutation set perm
+        in
+        if set == set' then set_of_closures
+        else Some set'
+    in
+    if code == code' && set_of_closures == set_of_closures' then t
+    else
+      { code = code';
+        set_of_closures = set_of_closures';
+      }
 end
 
 type t =
@@ -190,13 +287,9 @@ include Identifiable.Make (struct
   type nonrec t = t
 
   let print_with_cache ~cache ppf t =
-    let print_float_array_field ppf = function
-      | Const f -> fprintf ppf "%a" Numbers.Float_by_bit_pattern.print f
-      | Var v -> Variable.print ppf v
-    in
     match t with
     | Block (tag, mut, fields) ->
-      fprintf ppf "@[<hov 1>(@<0>%s%sblock@<0>%s (tag %a) (%a))@]"
+      fprintf ppf "@[<hov 1>(@<0>%s%sblock@<0>%s@ (tag %a)@ (%a))@]"
         (Flambda_colours.static_part ())
         (match mut with Immutable -> "Immutable_" | Mutable -> "Mutable_")
         (Flambda_colours.normal ())
@@ -204,54 +297,25 @@ include Identifiable.Make (struct
         (Format.pp_print_list ~pp_sep:Format.pp_print_space
           Field_of_block.print) fields
     | Sets_of_closures sets ->
-      let print_code_and_set_of_closures ppf { code; set_of_closures; } =
-        if Option.is_none set_of_closures then
-          match Code_id.Map.get_singleton code with
-          | None ->
-            fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
-                @[<hov 1>%a@]\
-                ))@]"
-              (Flambda_colours.static_part ())
-              (Flambda_colours.normal ())
-              (Code_id.Map.print (print_code_with_cache ~cache)) code
-          | Some (_code_id, code) ->
-            fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
-                @[<hov 1>%a@]\
-                ))@]"
-              (Flambda_colours.static_part ())
-              (Flambda_colours.normal ())
-              (print_code_with_cache ~cache) code
-        else
-          fprintf ppf "@[<hov 1>(@<0>%sSets_of_closures@<0>%s@ (\
-              @[<hov 1>(code@ (%a))@]@ \
-              @[<hov 1>(set_of_closures@ (%a))@]\
-              ))@]"
-            (Flambda_colours.static_part ())
-            (Flambda_colours.normal ())
-            (Code_id.Map.print (print_code_with_cache ~cache)) code
-            (Misc.Stdlib.Option.print
-              (Set_of_closures.print_with_cache ~cache))
-              set_of_closures
-      in
       Format.pp_print_list ~pp_sep:Format.pp_print_space
-        print_code_and_set_of_closures ppf sets
+        (Code_and_set_of_closures.print_with_cache ~cache) ppf sets
     | Boxed_float or_var ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s@ %a)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         (Or_variable.print Numbers.Float_by_bit_pattern.print) or_var
     | Boxed_int32 or_var ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %ld)@]"
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s@ %a)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         (Or_variable.print Numbers.Int32.print) or_var
     | Boxed_int64 or_var ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %Ld)@]"
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s@ %a)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         (Or_variable.print Numbers.Int64.print) or_var
     | Boxed_nativeint or_var ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
+      fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s@ %a)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         (Or_variable.print Targetint.print) or_var
@@ -260,8 +324,8 @@ include Identifiable.Make (struct
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         (Format.pp_print_list
-           ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
-           print_float_array_field)
+          ~pp_sep:(fun ppf () -> Format.pp_print_string ppf "@; ")
+          (Or_variable.print Numbers.Float_by_bit_pattern.print))
         fields
     | Mutable_string { initial_value = s; } ->
       fprintf ppf "@[<hov 1>(@<0>%sMutable_string@<0>%s@ \"%s\")@]"
@@ -287,16 +351,7 @@ include Identifiable.Make (struct
         if c <> 0 then c
         else Misc.Stdlib.List.compare Field_of_block.compare fields1 fields2
     | Sets_of_closures sets1, Sets_of_closures sets2 ->
-      Misc.Stdlib.List.compare
-        (fun { code = code1; set_of_closures = set1; } 
-             { code = code2; set_of_closures = set2; } ->
-          let c =
-            Code_id.Set.compare (Code_id.Map.keys code1)
-              (Code_id.Map.keys code2)
-          in
-          if c <> 0 then c
-          else Option.compare Set_of_closures.compare set1 set2)
-        sets1 sets2
+      Misc.Stdlib.List.compare Code_and_set_of_closures.compare sets1 sets2
     | Boxed_float or_var1, Boxed_float or_var2 ->
       Or_variable.compare Numbers.Float_by_bit_pattern.compare or_var1 or_var2
     | Boxed_int32 or_var1, Boxed_int32 or_var2 ->
@@ -306,12 +361,8 @@ include Identifiable.Make (struct
     | Boxed_nativeint or_var1, Boxed_nativeint or_var2 ->
       Or_variable.compare Targetint.compare or_var1 or_var2
     | Immutable_float_array fields1, Immutable_float_array fields2 ->
-      Misc.Stdlib.List.compare (fun field1 field2 ->
-          match field1, field2 with
-          | Var var1, Var var2 -> Variable.compare var1 var2
-          | Const f1, Const f2 -> Numbers.Float_by_bit_pattern.compare f1 f2
-          | Const _, Var _ -> -1
-          | Var _, Const _ -> 1)
+      Misc.Stdlib.List.compare
+        (Or_variable.compare Numbers.Float_by_bit_pattern.compare)
         fields1 fields2
     | Mutable_string { initial_value = s1; },
       Mutable_string { initial_value = s2; }
@@ -343,10 +394,13 @@ end)
 let get_pieces_of_code t =
   match t with
   | Sets_of_closures sets ->
-    List.fold_left (fun result { code; set_of_closures = _; } ->
+    List.fold_left
+      (fun result
+           ({ code; set_of_closures = _; } : Code_and_set_of_closures.t) ->
         let code =
           Code_id.Map.filter_map code
-            ~f:(fun _code_id { params_and_body; newer_version_of; } ->
+            ~f:(fun _code_id
+                    ({ params_and_body; newer_version_of; } : Code.t) ->
               match params_and_body with
               | Present params_and_body ->
                 Some (params_and_body, newer_version_of)
@@ -372,43 +426,11 @@ let free_names t =
       (Name_occurrences.empty)
       fields
   | Sets_of_closures sets ->
-    let free_names_list =
-      List.map (fun { code; set_of_closures; } ->
-          let from_set_of_closures =
-            match set_of_closures with
-            | None -> Name_occurrences.empty
-            | Some set -> Set_of_closures.free_names set
-          in
-          Code_id.Map.fold
-            (fun code_id { params_and_body; newer_version_of; } free_names ->
-              let from_newer_version_of =
-                match newer_version_of with
-                | None -> Name_occurrences.empty
-                | Some older ->
-                  Name_occurrences.add_newer_version_of_code_id
-                    Name_occurrences.empty older Name_mode.normal
-              in
-              let from_params_and_body =
-                match params_and_body with
-                | Deleted -> Name_occurrences.empty
-                | Present params_and_body ->
-                  Function_params_and_body.free_names params_and_body
-              in
-              Name_occurrences.union_list [
-                (Name_occurrences.add_code_id Name_occurrences.empty
-                  code_id Name_mode.normal);
-                from_params_and_body;
-                from_newer_version_of;
-                free_names;
-              ])
-            code
-            from_set_of_closures)
-        sets
-    in
+    let free_names_list = List.map Code_and_set_of_closures.free_names sets in
     Name_occurrences.union_list free_names_list
-  | Boxed_float or_var
-  | Boxed_int32 or_var
-  | Boxed_int64 or_var
+  | Boxed_float or_var -> Or_variable.free_names or_var
+  | Boxed_int32 or_var -> Or_variable.free_names or_var
+  | Boxed_int64 or_var -> Or_variable.free_names or_var
   | Boxed_nativeint or_var -> Or_variable.free_names or_var
   | Mutable_string { initial_value = _; }
   | Immutable_string _ -> Name_occurrences.empty
@@ -440,48 +462,9 @@ let apply_name_permutation t perm =
       else Block (tag, mut, fields)
     | Sets_of_closures sets ->
       let sets' =
-        List.map
-          (fun ({ code; set_of_closures; } as code_and_set_of_closures) ->
-            let code' =
-              Code_id.Map.map_sharing
-                (fun ({ params_and_body; newer_version_of; } as code) ->
-                  let params_and_body' =
-                    match params_and_body with
-                    | Deleted -> Deleted
-                    | Present params_and_body_inner ->
-                      let params_and_body_inner' =
-                        Function_params_and_body.apply_name_permutation
-                          params_and_body_inner perm
-                      in
-                      if params_and_body_inner == params_and_body_inner' then 
-                        params_and_body
-                      else
-                        Present params_and_body_inner'
-                  in
-                  if params_and_body == params_and_body' then code
-                  else
-                    { params_and_body = params_and_body';
-                      newer_version_of;
-                    })
-                code
-            in
-            let set_of_closures' =
-              match set_of_closures with
-              | None -> None
-              | Some set ->
-                let set' =
-                  Set_of_closures.apply_name_permutation set perm
-                in
-                if set == set' then set_of_closures
-                else Some set'
-            in
-            if code == code' && set_of_closures == set_of_closures' then
-              code_and_set_of_closures
-            else
-              { code = code';
-                set_of_closures = set_of_closures';
-              })
-        sets
+        List.map (fun set ->
+            Code_and_set_of_closures.apply_name_permutation set perm)
+          sets
       in
       if List.for_all2 (fun set1 set2 -> set1 == set2) sets sets' then t
       else Sets_of_closures sets'
@@ -539,15 +522,37 @@ let can_share t =
   | Block (_, Mutable, _)
   | Mutable_string _ -> false
 
-let find_
+let find_code t code_id =
   match t with
-  | Block (_, Immutable, _)
-  | Sets_of_closures _
+  | Sets_of_closures sets ->
+    let found =
+      List.concat_map
+        (fun ({ code; set_of_closures = _; } : Code_and_set_of_closures.t) ->
+          Code_id.Map.filter_map code ~f:(fun code_id' code ->
+            if Code_id.equal code_id code_id' then Some code
+            else None)
+          |> Code_id.Map.bindings)
+        sets
+    in
+    begin match found with
+    | [] ->
+      Misc.fatal_errorf "Code ID %a not defined in@ %a"
+        Code_id.print code_id
+        print t
+    | [code_id', code] ->
+      assert (Code_id.equal code_id code_id');
+      code
+    | _::_ ->
+      Misc.fatal_errorf "Code ID %a defined more than once in@ %a"
+        Code_id.print code_id
+        print t
+    end
+  | Block _
   | Boxed_float _
   | Boxed_int32 _
   | Boxed_int64 _
   | Boxed_nativeint _
   | Immutable_float_array _
-  | Immutable_string _ -> true
-  | Block (_, Mutable, _)
-  | Mutable_string _ -> false
+  | Immutable_string _
+  | Mutable_string _ ->
+    Misc.fatal_errorf "Code can never occur in:@ %a" print t

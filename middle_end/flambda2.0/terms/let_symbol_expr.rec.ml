@@ -161,7 +161,7 @@ let defining_expr t = t.defining_expr
 let body t = t.body
 
 type flattened_for_printing_descr =
-  | Code of Code_id.t * Static_const.code
+  | Code of Code_id.t * Static_const.Code.t
   | Set_of_closures of Symbol.t Closure_id.Map.t * Set_of_closures.t
   | Other of Symbol.t * Static_const.t
 
@@ -193,7 +193,7 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
              ({ code_ids = _; closure_symbols; }
                 : Bound_symbols.Code_and_set_of_closures.t)
              ({ code; set_of_closures; }
-                : Static_const.code_and_set_of_closures) ->
+                : Static_const.Code_and_set_of_closures.t) ->
           let flattened,_ =
             Code_id.Map.fold (fun code_id code (flattened', first) ->
                 let flattened =
@@ -255,7 +255,7 @@ let print_flattened_descr_lhs ppf descr =
 (* CR mshinwell: Use [print_with_cache]? *)
 let print_flattened_descr_rhs ppf descr =
   match descr with
-  | Code (_, code) -> Static_const.print_code ppf code
+  | Code (_, code) -> Static_const.Code.print ppf code
   | Set_of_closures (_, set) -> Set_of_closures.print ppf set
   | Other (_, static_const) -> Static_const.print ppf static_const
 
@@ -346,7 +346,7 @@ let pieces_of_code ?newer_versions_of ?set_of_closures code =
     Option.value newer_versions_of ~default:Code_id.Map.empty
   in
   let code =
-    Code_id.Map.mapi (fun id params_and_body : Static_const.code ->
+    Code_id.Map.mapi (fun id params_and_body : Static_const.Code.t ->
         let newer_version_of =
           Code_id.Map.find_opt id newer_versions_of
         in
