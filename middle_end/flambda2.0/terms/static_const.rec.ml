@@ -525,3 +525,15 @@ let find_code t code_id =
   | Immutable_string _
   | Mutable_string _ ->
     Misc.fatal_errorf "Code can never occur in:@ %a" print t
+
+let must_be_sets_of_closures t =
+  match t with
+  | Sets_of_closures sets -> sets
+  | Block _
+  | Boxed_float _
+  | Boxed_int32 _
+  | Boxed_int64 _
+  | Boxed_nativeint _
+  | Immutable_float_array _
+  | Immutable_string _
+  | Mutable_string _ -> Misc.fatal_errorf "Not set(s) of closures:@ %a" print t

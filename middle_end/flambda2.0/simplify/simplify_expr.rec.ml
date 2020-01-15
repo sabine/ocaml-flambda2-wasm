@@ -103,7 +103,7 @@ and simplify_let_symbol
     | Singleton symbol ->
       DA.map_r dacc ~f:(fun r ->
         R.consider_constant_for_sharing r symbol defining_expr)
-    | Code_and_set_of_closures _ -> dacc
+    | Sets_of_closures _ -> dacc
   in
   let body, user_data, uacc = simplify_expr dacc body k in
   let lifted_constants = R.get_lifted_constants (UA.r uacc) in

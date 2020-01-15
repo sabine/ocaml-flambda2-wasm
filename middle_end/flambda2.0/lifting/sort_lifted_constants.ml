@@ -36,7 +36,7 @@ let build_dep_graph lifted_constants =
     (fun (dep_graph, code_id_or_symbol_to_const)
          (bound_symbols, defining_expr) ->
       (*
-      Format.eprintf "Input: %a = %a\n%!"
+      Format.eprintf "Input for one set: %a = %a\n%!"
         Bound_symbols.print bound_symbols
         Static_const.print defining_expr;
       *)
@@ -46,38 +46,26 @@ let build_dep_graph lifted_constants =
           let free_names =
             match being_defined with
             | Code_id code_id ->
-              begin match (defining_expr : Static_const.t) with
-              | Sets_of_closures sets ->
-
-              | Code_and_set_of_closures { code; set_of_closures = _; } ->
-                assert (Code_id.Map.mem code_id code);
-                let code = Code_id.Map.find code_id code in
-                let free_names_params_and_body =
-                  match code.params_and_body with
-                  | Deleted -> Name_occurrences.empty
-                  | Present params_and_body ->
-                    Function_params_and_body.free_names params_and_body
-                in
-                let free_names_newer_version_of =
-                  match code.newer_version_of with
-                  | None -> Name_occurrences.empty
-                  | Some newer_version_of ->
-                    Name_occurrences.add_newer_version_of_code_id
-                      Name_occurrences.empty newer_version_of NM.normal
-                in
-                Name_occurrences.union free_names_params_and_body
-                  free_names_newer_version_of
-              | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-              | Boxed_nativeint _ | Immutable_float_array _ | Mutable_string _
-              | Immutable_string _ ->
-                Misc.fatal_errorf "Bad defining expression@ %a@ for@ %a"
-                  Static_const.print defining_expr
-                  Bound_symbols.print bound_symbols
-              end
+              Static_const.find_code defining_expr
+              |> Static_const.Code.free_names
             | Symbol symbol ->
               begin match (bound_symbols : Bound_symbols.t) with
               | Singleton _ -> Static_const.free_names defining_expr
               | Sets_of_closures sets ->
+                let code_and_sets_of_closures =
+                  Static_const.must_be_sets_of_closures defining_expr
+                in
+                let ... =
+                  List.concat_map
+                    (fun ({ code_ids; closure_symbols; }
+                            : Bound_symbols.Code_and_set_of_closures.t)
+                         ({ code; set_of_closures; }
+                            : Static_const.Code_and_set_of_closures.t) ->
+                      
+                    )
+                    (List.combine sets code_and_sets_of_closures)
+                in
+
                 List.fold_left
                   (fun free_names
                        ({ code_ids = _; closure_symbols; }

@@ -521,6 +521,8 @@ end and Static_const : sig
       | Deleted
 
     val print : Format.formatter -> t -> unit
+
+    val free_names : t -> Name_occurrences.t
   end
 
   (** The possibly-recursive declaration of pieces of code and any associated
@@ -560,6 +562,11 @@ end and Static_const : sig
   val is_fully_static : t -> bool
 
   val can_share : t -> bool
+
+
+  val find_code : t -> Code_id.t -> Code.t
+
+  val must_be_sets_of_closures : t -> Code_and_set_of_closures.t list
 end
 
 module Function_declaration = Function_declaration
