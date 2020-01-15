@@ -78,6 +78,8 @@ module type Downwards_env = sig
 
   val find_variable : t -> Variable.t -> Flambda_type.t
 
+  val mem_variable : t -> Variable.t -> bool
+
   val add_symbol : t -> Symbol.t -> Flambda_type.t -> t
 
   val define_symbol : t -> Symbol.t -> Flambda_kind.t -> t

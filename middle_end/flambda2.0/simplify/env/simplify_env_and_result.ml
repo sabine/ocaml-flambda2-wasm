@@ -207,6 +207,8 @@ end = struct
 
   let find_variable t var = find_name t (Name.var var)
 
+  let mem_variable t var = TE.mem t.typing_env (Name.var var)
+
   let define_symbol t sym kind =
     let typing_env =
       let sym =
