@@ -134,7 +134,7 @@ type code_and_set_of_closures = {
 
 type t =
   | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
-  | Code_and_set_of_closures of code_and_set_of_closures list
+  | Sets_of_closures of code_and_set_of_closures list
   | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
   | Boxed_int32 of Int32.t or_variable
   | Boxed_int64 of Int64.t or_variable
@@ -160,7 +160,7 @@ include Identifiable.Make (struct
         Tag.Scannable.print tag
         (Format.pp_print_list ~pp_sep:Format.pp_print_space
           Field_of_block.print) fields
-    | Code_and_set_of_closures sets ->
+    | Sets_of_closures sets ->
       let print_code_and_set_of_closures ppf { code; set_of_closures; } =
         if Option.is_none set_of_closures then
           match Code_id.Map.get_singleton code with
@@ -179,7 +179,7 @@ include Identifiable.Make (struct
               (Flambda_colours.normal ())
               (print_code_with_cache ~cache) code
         else
-          fprintf ppf "@[<hov 1>(@<0>%sCode_and_set_of_closures@<0>%s@ (\
+          fprintf ppf "@[<hov 1>(@<0>%sSets_of_closures@<0>%s@ (\
               @[<hov 1>(code@ (%a))@]@ \
               @[<hov 1>(set_of_closures@ (%a))@]\
               ))@]"
@@ -308,8 +308,8 @@ include Identifiable.Make (struct
     | Immutable_string s1, Immutable_string s2 -> String.compare s1 s2
     | Block _, _ -> -1
     | _, Block _ -> 1
-    | Code_and_set_of_closures _, _ -> -1
-    | _, Code_and_set_of_closures _ -> 1
+    | Sets_of_closures _, _ -> -1
+    | _, Sets_of_closures _ -> 1
     | Boxed_float _, _ -> -1
     | _, Boxed_float _ -> 1
     | Boxed_int32 _, _ -> -1
@@ -395,7 +395,7 @@ let free_names t =
             from_set_of_closures)
         sets
     in
-    Name_occurrences.union_list sets
+    Name_occurrences.union_list free_names_list
   | Boxed_float (Var v)
   | Boxed_int32 (Var v)
   | Boxed_int64 (Var v)
@@ -473,7 +473,8 @@ let apply_name_permutation t perm =
       else Block (tag, mut, fields)
     | Sets_of_closures sets ->
       let sets' =
-        List.map (fun { code; set_of_closures; } ->
+        List.map
+          (fun ({ code; set_of_closures; } as code_and_set_of_closures) ->
             let code' =
               Code_id.Map.map_sharing
                 (fun ({ params_and_body; newer_version_of; } as code) ->
@@ -507,10 +508,10 @@ let apply_name_permutation t perm =
                 if set == set' then set_of_closures
                 else Some set'
             in
-            if code == code' && set_of_closures == set_of_closures' then t
+            if code == code' && set_of_closures == set_of_closures' then
+              code_and_set_of_closures
             else
-              Code_and_set_of_closures {
-                code = code';
+              { code = code';
                 set_of_closures = set_of_closures';
               })
         sets

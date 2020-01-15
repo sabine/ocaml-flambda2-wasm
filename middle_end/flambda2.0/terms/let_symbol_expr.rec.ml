@@ -175,21 +175,25 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
   match bound_symbols with
   | Singleton symbol ->
     [{ second_or_later_binding_within_rec = false;
-      descr = Other (symbol, defining_expr);
+       second_or_later_set_of_closures = false;
+       descr = Other (symbol, defining_expr);
     }]
-  | Sets_of_closures sets ->
+  | Sets_of_closures bound_symbol_components ->
+    let code_and_sets_of_closures =
+      match defining_expr with
+      | Sets_of_closures code_and_sets_of_closures ->
+        code_and_sets_of_closures
+      | _ ->
+        Misc.fatal_errorf "Bad form of static constant:@ %a"
+          Static_const.print defining_expr
+    in
     let flattened, _ =
-      List.fold_left
+      List.fold_left2
         (fun (flattened_acc, second_or_later_set_of_closures)
-             { code_ids = _; closure_symbols; } ->
-          let code, set_of_closures =
-            match defining_expr with
-            | Code_and_set_of_closures { code; set_of_closures; } ->
-              code, set_of_closures
-            | _ ->
-              Misc.fatal_errorf "Bad form of static constant:@ %a"
-                Static_const.print defining_expr
-          in
+             ({ code_ids = _; closure_symbols; }
+                : Bound_symbols.Code_and_set_of_closures.t)
+             ({ code; set_of_closures; }
+                : Static_const.code_and_set_of_closures) ->
           let flattened,_ =
             Code_id.Map.fold (fun code_id code (flattened', first) ->
                 let flattened =
@@ -223,7 +227,7 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
           in
           flattened_acc, true)
         ([], false)
-        sets
+        bound_symbol_components code_and_sets_of_closures
     in
     flattened
 
@@ -353,21 +357,19 @@ let pieces_of_code ?newer_versions_of ?set_of_closures code =
   in
   let static_const : Static_const.t =
     let set_of_closures = Option.map snd set_of_closures in
-    Code_and_set_of_closures {
+    Sets_of_closures [{
       code;
       set_of_closures;
-    }
+    }]
   in
   let bound_symbols : Bound_symbols.t =
     let closure_symbols =
       Option.value (Option.map fst set_of_closures)
         ~default:Closure_id.Map.empty
     in
-    Sets_of_closures [
-      Code_and_set_of_closures {
-        code_ids = Code_id.Map.keys code;
-        closure_symbols;
-      }
-    ]
+    Sets_of_closures [{
+      code_ids = Code_id.Map.keys code;
+      closure_symbols;
+    }]
   in
   bound_symbols, static_const

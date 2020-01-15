@@ -245,8 +245,6 @@ end and Let_symbol_expr : sig
 
     val everything_being_defined : t -> Code_id_or_symbol.Set.t
 
-    val disjoint_union : t -> t -> t
-
     include Expr_std.S with type t := t
   end
 
@@ -562,8 +560,6 @@ end and Static_const : sig
       which means that the corresponding value can be statically allocated,
       without any need to patch it afterwards. *)
   val is_fully_static : t -> bool
-
-  val disjoint_union : t -> t -> t
 
   val can_share : t -> bool
 end

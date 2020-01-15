@@ -66,7 +66,7 @@ type code_and_set_of_closures = {
     with values computed at runtime. *)
 type t =
   | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
-  | Sets_of_closures of code_and_set_of_closures list
+ | Sets_of_closures of code_and_set_of_closures list
     (** All code and sets of closures within the [code_and_set_of_closures list]
         are allowed to be recursive across those sets (but not recursive with
         any other code or set of closures). *)
@@ -86,7 +86,5 @@ val get_pieces_of_code
   -> (Function_params_and_body.t * (Code_id.t option)) Code_id.Map.t
 
 val is_fully_static : t -> bool
-
-val disjoint_union : t -> t -> t
 
 val can_share : t -> bool
