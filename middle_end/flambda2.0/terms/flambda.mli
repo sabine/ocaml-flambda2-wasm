@@ -214,16 +214,28 @@ end and Let_expr : sig
     -> 'a
 end and Let_symbol_expr : sig
   module Bound_symbols : sig
+    module Code_and_set_of_closures : sig
+      type t = {
+        code_ids : Code_id.Set.t;
+        closure_symbols : Symbol.t Closure_id.Map.t;
+      }
+
+      val print : Format.formatter -> t -> unit
+    end
+
     type t =
-      | Singleton : Symbol.t -> t
+      | Singleton of Symbol.t
         (** A binding of a single symbol of kind [Value]. *)
-      | Code_and_set_of_closures of {
-          code_ids : Code_id.Set.t;
-          closure_symbols : Symbol.t Closure_id.Map.t;
-        }
-        (** A recursive binding of possibly multiple symbols to the individual
-            closures within a set of closures; and/or bindings of code to
-            code IDs. *)
+      | Sets_of_closures of Code_and_set_of_closures.t list
+        (** A recursive binding of possibly multiple sets of closures with
+            associated code. All code IDs and symbols named in the
+            [Code_and_set_of_closures.t list] are in scope for _all_ associated
+            [Static_const.code_and_set_of_closures list] values on the
+            right-hand side of the corresponding [Let_symbol] expression.
+            Despite the recursive nature of the binding, the elements in the
+            [Code_and_set_of_closures.t list] must correspond elementwise to the
+            elements in the corresponding [Static_const.code_and_set_of_closures
+            list]. *)
 
     val being_defined : t -> Symbol.Set.t
 

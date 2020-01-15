@@ -239,7 +239,7 @@ let sort dacc lifted_constants =
                     in
                     let code_and_set_of_closures_list =
                       match defining_expr with
-                      | Sets_of_closures code_and_set_of_closures list ->
+                      | Sets_of_closures code_and_set_of_closures_list ->
                         code_and_set_of_closures_list
                       | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
                       | Boxed_nativeint _ | Immutable_float_array _

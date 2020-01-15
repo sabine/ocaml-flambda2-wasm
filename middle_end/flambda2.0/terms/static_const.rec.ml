@@ -265,7 +265,7 @@ include Identifiable.Make (struct
         else Misc.Stdlib.List.compare Field_of_block.compare fields1 fields2
     | Sets_of_closures sets1, Sets_of_closures sets2 ->
       Misc.Stdlib.List.compare
-        (fun { code = code1; set_of_closures = set1; },
+        (fun { code = code1; set_of_closures = set1; } 
              { code = code2; set_of_closures = set2; } ->
           let c =
             Code_id.Set.compare (Code_id.Map.keys code1)
