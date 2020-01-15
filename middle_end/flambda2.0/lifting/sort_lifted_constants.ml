@@ -47,6 +47,8 @@ let build_dep_graph lifted_constants =
             match being_defined with
             | Code_id code_id ->
               begin match (defining_expr : Static_const.t) with
+              | Sets_of_closures sets ->
+
               | Code_and_set_of_closures { code; set_of_closures = _; } ->
                 assert (Code_id.Map.mem code_id code);
                 let code = Code_id.Map.find code_id code in

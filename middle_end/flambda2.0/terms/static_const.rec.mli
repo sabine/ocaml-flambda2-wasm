@@ -32,49 +32,51 @@ module Field_of_block : sig
   include Identifiable.S with type t := t
 end
 
-type 'a or_variable =
-  | Const of 'a
-  | Var of Variable.t
-
-(** The mutability status of a block field. *)
-type mutable_or_immutable = Mutable | Immutable
+module Or_variable : sig
+  type 'a t =
+    | Const of 'a
+    | Var of Variable.t
+end
 
 (** A piece of code, comprising of the parameters and body of a function,
     together with a field indicating whether the piece of code is a newer
     version of one that existed previously (and may still exist), for
     example after a round of simplification. *)
-type code = {
-  params_and_body : Function_params_and_body.t or_deleted;
-  newer_version_of : Code_id.t option;
-}
-and 'a or_deleted =
-  | Present of 'a
-  | Deleted
+module Code : sig
+  type t = {
+    params_and_body : Function_params_and_body.t or_deleted;
+    newer_version_of : Code_id.t option;
+  }
+  and 'a or_deleted =
+    | Present of 'a
+    | Deleted
 
-val print_code : Format.formatter -> code -> unit
+  val print : Format.formatter -> t -> unit
+end
 
 (** The possibly-recursive declaration of pieces of code and any associated set
     of closures. *)
-(* CR mshinwell: Put in own module, then it will match [Bound_symbols] *)
-type code_and_set_of_closures = {
-  code : code Code_id.Map.t;
-  (* CR mshinwell: Check the free names of the set of closures *)
-  set_of_closures : Set_of_closures.t option;
-}
+module Code_and_set_of_closures : sig
+  type t = {
+    code : code Code_id.Map.t;
+    (* CR mshinwell: Check the free names of the set of closures *)
+    set_of_closures : Set_of_closures.t option;
+  }
+end
 
 (** The static structure of a symbol, possibly with holes, ready to be filled
     with values computed at runtime. *)
 type t =
-  | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
- | Sets_of_closures of code_and_set_of_closures list
+  | Block of Tag.Scannable.t * Mutable_or_immutable.t * (Field_of_block.t list)
+  | Sets_of_closures of Code_and_set_of_closures.t list
     (** All code and sets of closures within the [code_and_set_of_closures list]
         are allowed to be recursive across those sets (but not recursive with
         any other code or set of closures). *)
-  | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
-  | Boxed_int32 of Int32.t or_variable
-  | Boxed_int64 of Int64.t or_variable
-  | Boxed_nativeint of Targetint.t or_variable
-  | Immutable_float_array of Numbers.Float_by_bit_pattern.t or_variable list
+  | Boxed_float of Numbers.Float_by_bit_pattern.t Or_variable.t
+  | Boxed_int32 of Int32.t Or_variable.t
+  | Boxed_int64 of Int64.t Or_variable.t
+  | Boxed_nativeint of Targetint.t Or_variable.t
+  | Immutable_float_array of Numbers.Float_by_bit_pattern.t Or_variable.t list
   | Mutable_string of { initial_value : string; }
   | Immutable_string of string
 

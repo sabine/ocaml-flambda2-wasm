@@ -90,56 +90,99 @@ module Field_of_block = struct
 *)
 end
 
-type 'a or_variable =
-  | Const of 'a
-  | Var of Variable.t
+module Or_variable = struct
+  type 'a t =
+    | Const of 'a
+    | Var of Variable.t
 
-(* CR mshinwell: Move to its own module *)
-type mutable_or_immutable = Mutable | Immutable
-let compare_mutable_or_immutable mut1 mut2 = Stdlib.compare mut1 mut2
+  let print print_const ppf t =
+    match t with
+    | Const cst -> print_const ppf cst
+    | Var var -> Variable.print ppf var
 
-type code = {
-  params_and_body : Function_params_and_body.t or_deleted;
-  newer_version_of : Code_id.t option;
-}
-and 'a or_deleted =
-  | Present of 'a
-  | Deleted
+  let compare compare_const t1 t2 =
+    match t1, t2 with
+    | Const cst1, Const cst2 -> compare_const cst1 cst2
+    | Const _, Var _ -> -1
+    | Var _, Const _ -> 1
+    | Var var1, Var var2 -> Variable.compare var1 var2
 
-let print_params_and_body_with_cache ~cache ppf params_and_body =
-  match params_and_body with
-  | Deleted -> Format.fprintf ppf "Deleted"
-  | Present params_and_body ->
-    Function_params_and_body.print_with_cache ~cache ppf
-      params_and_body
+  let free_names t =
+    match t with
+    | Const _ -> Name_occurrences.empty
+    | Var var -> Name_occurrences.singleton_variable var Name_mode.normal
 
-let print_code_with_cache ~cache ppf { params_and_body; newer_version_of; } =
-  Format.fprintf ppf "@[<hov 1>(\
-      @[<hov 1>@<0>%s(newer_version_of@ %a)@<0>%s@]@ \
-      %a\
-      )@]"
-    (if Option.is_none newer_version_of then Flambda_colours.elide ()
-     else Flambda_colours.normal ())
-    (Misc.Stdlib.Option.print_compact Code_id.print) newer_version_of
-    (Flambda_colours.normal ())
-    (print_params_and_body_with_cache ~cache) params_and_body
+  let apply_name_permutation t perm =
+    match t with
+    | Const _ -> t
+    | Var var ->
+      let var' = Name_permutation.apply_variable perm var in
+      if var == var' then t
+      else Var var'
+end
 
-let print_code ppf code =
-  print_code_with_cache ~cache:(Printing_cache.create ()) ppf code
+module Code = struct
+  type t = {
+    params_and_body : Function_params_and_body.t or_deleted;
+    newer_version_of : Code_id.t option;
+  }
+  and 'a or_deleted =
+    | Present of 'a
+    | Deleted
 
-type code_and_set_of_closures = {
-  code : code Code_id.Map.t;
-  set_of_closures : Set_of_closures.t option;
-}
+  let print_params_and_body_with_cache ~cache ppf params_and_body =
+    match params_and_body with
+    | Deleted -> Format.fprintf ppf "Deleted"
+    | Present params_and_body ->
+      Function_params_and_body.print_with_cache ~cache ppf
+        params_and_body
+
+  let print_with_cache ~cache ppf { params_and_body; newer_version_of; } =
+    Format.fprintf ppf "@[<hov 1>(\
+        @[<hov 1>@<0>%s(newer_version_of@ %a)@<0>%s@]@ \
+        %a\
+        )@]"
+      (if Option.is_none newer_version_of then Flambda_colours.elide ()
+       else Flambda_colours.normal ())
+      (Misc.Stdlib.Option.print_compact Code_id.print) newer_version_of
+      (Flambda_colours.normal ())
+      (print_params_and_body_with_cache ~cache) params_and_body
+
+  let print ppf code =
+    print_with_cache ~cache:(Printing_cache.create ()) ppf code
+
+  let free_names { params_and_body; newer_version_of; } =
+    let from_newer_version_of =
+      match newer_version_of with
+      | None -> Name_occurrences.empty
+      | Some older ->
+        Name_occurrences.add_newer_version_of_code_id
+          Name_occurrences.empty older Name_mode.normal
+    in
+    let from_params_and_body =
+      match params_and_body with
+      | Deleted -> Name_occurrences.empty
+      | Present params_and_body ->
+        Function_params_and_body.free_names params_and_body
+    in
+    Name_occurrences.union from_newer_version_of from_params_and_body
+end
+
+module Code_and_set_of_closures = struct
+  type t = {
+    code : Code.t Code_id.Map.t;
+    set_of_closures : Set_of_closures.t option;
+  }
+end
 
 type t =
-  | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
-  | Sets_of_closures of code_and_set_of_closures list
-  | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
-  | Boxed_int32 of Int32.t or_variable
-  | Boxed_int64 of Int64.t or_variable
-  | Boxed_nativeint of Targetint.t or_variable
-  | Immutable_float_array of Numbers.Float_by_bit_pattern.t or_variable list
+  | Block of Tag.Scannable.t * Mutable_or_immutable.t * (Field_of_block.t list)
+  | Sets_of_closures of Code_and_set_of_closures.t list
+  | Boxed_float of Numbers.Float_by_bit_pattern.t Or_variable.t
+  | Boxed_int32 of Int32.t Or_variable.t
+  | Boxed_int64 of Int64.t Or_variable.t
+  | Boxed_nativeint of Targetint.t Or_variable.t
+  | Immutable_float_array of Numbers.Float_by_bit_pattern.t Or_variable.t list
   | Mutable_string of { initial_value : string; }
   | Immutable_string of string
 
@@ -192,46 +235,26 @@ include Identifiable.Make (struct
       in
       Format.pp_print_list ~pp_sep:Format.pp_print_space
         print_code_and_set_of_closures ppf sets
-    | Boxed_float (Const f) ->
+    | Boxed_float or_var ->
       fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
-        Numbers.Float_by_bit_pattern.print f
-    | Boxed_float (Var v) ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_float@<0>%s %a)@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        Variable.print v
-    | Boxed_int32 (Const n) ->
+        (Or_variable.print Numbers.Float_by_bit_pattern.print) or_var
+    | Boxed_int32 or_var ->
       fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %ld)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
-        n
-    | Boxed_int32 (Var v) ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int32@<0>%s %a)@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        Variable.print v
-    | Boxed_int64 (Const n) ->
+        (Or_variable.print Numbers.Int32.print) or_var
+    | Boxed_int64 or_var ->
       fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %Ld)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
-        n
-    | Boxed_int64 (Var v) ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_int64@<0>%s %a)@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        Variable.print v
-    | Boxed_nativeint (Const n) ->
+        (Or_variable.print Numbers.Int64.print) or_var
+    | Boxed_nativeint or_var ->
       fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
-        Targetint.print n
-    | Boxed_nativeint (Var v) ->
-      fprintf ppf "@[<hov 1>(@<0>%sBoxed_nativeint@<0>%s %a)@]"
-        (Flambda_colours.static_part ())
-        (Flambda_colours.normal ())
-        Variable.print v
+        (Or_variable.print Targetint.print) or_var
     | Immutable_float_array fields ->
       fprintf ppf "@[<hov 1>(@<0>%sImmutable_float_array@<0>%s@ @[[| %a |]@])@]"
         (Flambda_colours.static_part ())
@@ -260,7 +283,7 @@ include Identifiable.Make (struct
       let c = Tag.Scannable.compare tag1 tag2 in
       if c <> 0 then c
       else
-        let c = compare_mutable_or_immutable mut1 mut2 in
+        let c = Mutable_or_immutable.compare mut1 mut2 in
         if c <> 0 then c
         else Misc.Stdlib.List.compare Field_of_block.compare fields1 fields2
     | Sets_of_closures sets1, Sets_of_closures sets2 ->
@@ -274,27 +297,14 @@ include Identifiable.Make (struct
           if c <> 0 then c
           else Option.compare Set_of_closures.compare set1 set2)
         sets1 sets2
-    | Boxed_float (Const f1), Boxed_float (Const f2) ->
-      Numbers.Float_by_bit_pattern.compare f1 f2
-    (* CR mshinwell: Move [or_variable] into its own module and add
-       [compare] *)
-    | Boxed_float (Var v1), Boxed_float (Var v2) -> Variable.compare v1 v2
-    | Boxed_float (Const _), Boxed_float (Var _) -> -1
-    | Boxed_float (Var _), Boxed_float (Const _) -> 1
-    | Boxed_int32 (Const n1), Boxed_int32 (Const n2) -> Int32.compare n1 n2
-    | Boxed_int32 (Var v1), Boxed_int32 (Var v2) -> Variable.compare v1 v2
-    | Boxed_int32 (Const _), Boxed_int32 (Var _) -> -1
-    | Boxed_int32 (Var _), Boxed_int32 (Const _) -> 1
-    | Boxed_int64 (Const n1), Boxed_int64 (Const n2) -> Int64.compare n1 n2
-    | Boxed_int64 (Var v1), Boxed_int64 (Var v2) -> Variable.compare v1 v2
-    | Boxed_int64 (Const _), Boxed_int64 (Var _) -> -1
-    | Boxed_int64 (Var _), Boxed_int64 (Const _) -> 1
-    | Boxed_nativeint (Const n1), Boxed_nativeint (Const n2) ->
-      Targetint.compare n1 n2
-    | Boxed_nativeint (Var v1), Boxed_nativeint (Var v2) ->
-      Variable.compare v1 v2
-    | Boxed_nativeint (Const _), Boxed_nativeint (Var _) -> -1
-    | Boxed_nativeint (Var _), Boxed_nativeint (Const _) -> 1
+    | Boxed_float or_var1, Boxed_float or_var2 ->
+      Or_variable.compare Numbers.Float_by_bit_pattern.compare or_var1 or_var2
+    | Boxed_int32 or_var1, Boxed_int32 or_var2 ->
+      Or_variable.compare Numbers.Int32.compare or_var1 or_var2
+    | Boxed_int64 or_var1, Boxed_int64 or_var2 ->
+      Or_variable.compare Numbers.Int64.compare or_var1 or_var2
+    | Boxed_nativeint or_var1, Boxed_nativeint or_var2 ->
+      Or_variable.compare Targetint.compare or_var1 or_var2
     | Immutable_float_array fields1, Immutable_float_array fields2 ->
       Misc.Stdlib.List.compare (fun field1 field2 ->
           match field1, field2 with
@@ -396,63 +406,20 @@ let free_names t =
         sets
     in
     Name_occurrences.union_list free_names_list
-  | Boxed_float (Var v)
-  | Boxed_int32 (Var v)
-  | Boxed_int64 (Var v)
-  | Boxed_nativeint (Var v) ->
-    Name_occurrences.singleton_variable v Name_mode.normal
-  | Boxed_float (Const _)
-  | Boxed_int32 (Const _)
-  | Boxed_int64 (Const _)
-  | Boxed_nativeint (Const _)
+  | Boxed_float or_var
+  | Boxed_int32 or_var
+  | Boxed_int64 or_var
+  | Boxed_nativeint or_var -> Or_variable.free_names or_var
   | Mutable_string { initial_value = _; }
   | Immutable_string _ -> Name_occurrences.empty
   | Immutable_float_array fields ->
-    List.fold_left (fun fns (field : _ or_variable) ->
+    List.fold_left (fun fns (field : _ Or_variable.t) ->
         match field with
         | Var v ->
           Name_occurrences.add_variable fns v Name_mode.normal
         | Const _ -> fns)
       (Name_occurrences.empty)
       fields
-
-(*
-let _invariant env t =
-  try
-    let module E = Invariant_env in
-    match t with
-    | Block (_tag, _mut, fields) ->
-      List.iter (fun field -> Field_of_block.invariant env field) fields
-    | Set_of_closures set ->
-      Set_of_closures.invariant env set
-    | Boxed_float (Var v) ->
-      E.check_variable_is_bound_and_of_kind env v K.naked_float
-    | Boxed_int32 (Var v) ->
-      E.check_variable_is_bound_and_of_kind env v K.naked_int32
-    | Boxed_int64 (Var v) ->
-      E.check_variable_is_bound_and_of_kind env v K.naked_int64
-    | Boxed_nativeint (Var v) ->
-      E.check_variable_is_bound_and_of_kind env v K.naked_nativeint
-    | Mutable_string { initial_value = Var v; }
-    | Immutable_string (Var v) ->
-      E.check_variable_is_bound_and_of_kind env v K.value
-    | Boxed_float (Const _)
-    | Boxed_int32 (Const _)
-    | Boxed_int64 (Const _)
-    | Boxed_nativeint (Const _)
-    | Mutable_string { initial_value = Const _; }
-    | Immutable_string (Const _) -> ()
-    | Immutable_float_array fields ->
-      List.iter (fun (field : _ or_variable) ->
-          match field with
-          | Var v ->
-            E.check_variable_is_bound_and_of_kind env v
-              K.naked_float
-          | Const _ -> ())
-        fields
-  with Misc.Fatal_error ->
-    Misc.fatal_errorf "(during invariant checks) Context is:@ %a" print t
-*)
 
 let apply_name_permutation t perm =
   if Name_permutation.is_empty perm then t
@@ -518,33 +485,29 @@ let apply_name_permutation t perm =
       in
       if List.for_all2 (fun set1 set2 -> set1 == set2) sets sets' then t
       else Sets_of_closures sets'
-    | Boxed_float (Var v) ->
-      let v' = Name_permutation.apply_variable perm v in
-      if v == v' then t
-      else Boxed_float (Var v')
-    | Boxed_int32 (Var v) ->
-      let v' = Name_permutation.apply_variable perm v in
-      if v == v' then t
-      else Boxed_int32 (Var v')
-    | Boxed_int64 (Var v) ->
-      let v' = Name_permutation.apply_variable perm v in
-      if v == v' then t
-      else Boxed_int64 (Var v')
-    | Boxed_nativeint (Var v) ->
-      let v' = Name_permutation.apply_variable perm v in
-      if v == v' then t
-      else Boxed_nativeint (Var v')
-    | Boxed_float (Const _)
-    | Boxed_int32 (Const _)
-    | Boxed_int64 (Const _)
-    | Boxed_nativeint (Const _)
+    | Boxed_float or_var ->
+      let or_var' = Or_variable.apply_name_permutation or_var perm in
+      if or_var == or_var' then t
+      else Boxed_float or_var'
+    | Boxed_int32 or_var ->
+      let or_var' = Or_variable.apply_name_permutation or_var perm in
+      if or_var == or_var' then t
+      else Boxed_int32 or_var'
+    | Boxed_int64 or_var ->
+      let or_var' = Or_variable.apply_name_permutation or_var perm in
+      if or_var == or_var' then t
+      else Boxed_int64 or_var'
+    | Boxed_nativeint or_var ->
+      let or_var' = Or_variable.apply_name_permutation or_var perm in
+      if or_var == or_var' then t
+      else Boxed_nativeint or_var'
     | Mutable_string { initial_value = _; }
     | Immutable_string _ -> t
     | Immutable_float_array fields ->
       let changed = ref false in
       let fields =
-        List.map (fun (field : _ or_variable) ->
-            let field' : _ or_variable =
+        List.map (fun (field : _ Or_variable.t) ->
+            let field' : _ Or_variable.t =
               match field with
               | Var v -> Var (Name_permutation.apply_variable perm v)
               | Const _ -> field
@@ -564,6 +527,19 @@ let is_fully_static t =
   |> Variable.Set.is_empty
 
 let can_share t =
+  match t with
+  | Block (_, Immutable, _)
+  | Sets_of_closures _
+  | Boxed_float _
+  | Boxed_int32 _
+  | Boxed_int64 _
+  | Boxed_nativeint _
+  | Immutable_float_array _
+  | Immutable_string _ -> true
+  | Block (_, Mutable, _)
+  | Mutable_string _ -> false
+
+let find_
   match t with
   | Block (_, Immutable, _)
   | Sets_of_closures _

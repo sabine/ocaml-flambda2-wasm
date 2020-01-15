@@ -14,6 +14,9 @@
 
 [@@@ocaml.warning "+a-4-30-40-41-42"]
 
+[@@@ocaml.warning "-27"] (* FIXME remove this once closures changes done *)
+[@@@ocaml.warning "-32"] (* FIXME remove this once closures changes done *)
+
 open! Flambda.Import
 
 module C = struct
@@ -245,6 +248,7 @@ let static_const0 env r ~params_and_body (bound_symbols : Bound_symbols.t)
       let block = C.emit_block block_name header static_fields in
       let updates = static_block_updates (C.symbol name) env None 0 fields in
       env, R.add_data block r, updates
+(* FIXME
   | Code_and_set_of_closures { code_ids = _; closure_symbols; },
     Code_and_set_of_closures { code; set_of_closures; } ->
       (* We cannot both build the environment and compile the functions in
@@ -297,6 +301,7 @@ let static_const0 env r ~params_and_body (bound_symbols : Bound_symbols.t)
         in
         updated_env, R.add_data data r, updates
       end
+*)
   | Singleton s, Boxed_float v ->
       let default = Numbers.Float_by_bit_pattern.zero in
       let transl = Numbers.Float_by_bit_pattern.to_float in
@@ -339,6 +344,8 @@ let static_const0 env r ~params_and_body (bound_symbols : Bound_symbols.t)
       let name = symbol s in
       let data = C.emit_string_constant (name, Cmmgen_state.Global) str in
       env, R.update_data data r, None
+  | _, _ -> Misc.fatal_error "To be continued"
+(* FIXME
   | Singleton _, Code_and_set_of_closures _ ->
       Misc.fatal_errorf "[Code_and_set_of_closures] cannot be bound by a \
           [Singleton] binding:@ %a"
@@ -350,6 +357,7 @@ let static_const0 env r ~params_and_body (bound_symbols : Bound_symbols.t)
       Misc.fatal_errorf "Only [Code_and_set_of_closures] can be bound by a \
           [Code_and_set_of_closures] binding:@ %a"
         SC.print static_const
+*)
 
 let static_const env ~params_and_body (bound_symbols : Bound_symbols.t)
       (static_const : Static_const.t) =
