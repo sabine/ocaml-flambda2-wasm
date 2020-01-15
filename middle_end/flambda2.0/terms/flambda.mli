@@ -541,7 +541,7 @@ end and Static_const : sig
       with values computed at runtime. *)
   type t =
     | Block of Tag.Scannable.t * mutable_or_immutable * (Field_of_block.t list)
-    | Code_and_set_of_closures of code_and_set_of_closures
+    | Sets_of_closures of code_and_set_of_closures list
     | Boxed_float of Numbers.Float_by_bit_pattern.t or_variable
     | Boxed_int32 of Int32.t or_variable
     | Boxed_int64 of Int64.t or_variable

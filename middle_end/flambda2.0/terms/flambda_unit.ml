@@ -138,18 +138,29 @@ module Iter_sets_of_closures = struct
         (bound_symbols : Let_symbol.Bound_symbols.t)
         (static_const : Static_const.t) =
     match bound_symbols, static_const with
-    | Code_and_set_of_closures { code_ids = _; closure_symbols; },
-      Code_and_set_of_closures { code; set_of_closures = s; } ->
-        Option.iter (fun s -> f ~closure_symbols:(Some closure_symbols) s) s;
-        Code_id.Map.iter (fun _ { Static_const.params_and_body;
-                                  newer_version_of = _; } ->
-            match params_and_body with
-            | Deleted -> ()
-            | Present params_and_body ->
-                Function_params_and_body.pattern_match params_and_body
-                  ~f:(fun ~return_continuation:_ _ _ ~body ~my_closure:_ ->
-                      expr f body))
-          code
+    | Sets_of_closures bound_symbol_components,
+      Sets_of_closures code_and_sets_of_closures ->
+      (* CR mshinwell: Make this a proper error *)
+      assert (List.compare_lengths bound_symbol_components
+        code_and_sets_of_closures = 0);
+      List.iter2
+        (fun ({ code_ids = _; closure_symbols; }
+              : Let_symbol.Bound_symbols.Code_and_set_of_closures.t)
+             ({ code; set_of_closures; }
+              : Static_const.code_and_set_of_closures) ->
+            (* CR mshinwell: Use a longer name instead of "s" *)
+            Option.iter (fun s -> f ~closure_symbols:(Some closure_symbols) s)
+              set_of_closures;
+            Code_id.Map.iter (fun _ { Static_const.params_and_body;
+                                      newer_version_of = _; } ->
+                match params_and_body with
+                | Deleted -> ()
+                | Present params_and_body ->
+                    Function_params_and_body.pattern_match params_and_body
+                      ~f:(fun ~return_continuation:_ _ _ ~body ~my_closure:_ ->
+                          expr f body))
+              code)
+        bound_symbol_components code_and_sets_of_closures
     | _ ->
       (* CR mshinwell: Make exhaustive and cause errors on wrong cases.
          Then enable warning 4 *)

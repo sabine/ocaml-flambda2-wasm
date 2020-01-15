@@ -941,10 +941,10 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
   let body =
     List.fold_left (fun body (code_id, params_and_body) ->
         let bound_symbols : Let_symbol.Bound_symbols.t =
-          Code_and_set_of_closures {
+          Sets_of_closures [{
             code_ids = Code_id.Set.singleton code_id;
             closure_symbols = Closure_id.Map.empty;
-          }
+          }]
         in
         let static_const : Static_const.t =
           let code : Static_const.code =
@@ -952,10 +952,10 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
               newer_version_of = None;
             }
           in
-          Code_and_set_of_closures {
+          Sets_of_closures [{
             code = Code_id.Map.singleton code_id code;
             set_of_closures = None; 
-          }
+          }]
         in
         Let_symbol.create bound_symbols static_const body
         |> Flambda.Expr.create_let_symbol)
