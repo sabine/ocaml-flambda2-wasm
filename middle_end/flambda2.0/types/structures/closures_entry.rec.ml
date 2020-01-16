@@ -84,6 +84,7 @@ let widen t ~to_match =
 module Make_meet_or_join
   (E : Lattice_ops_intf.S
    with type meet_env := Meet_env.t
+   with type meet_or_join_env := Meet_or_join_env.t
    with type typing_env := Typing_env.t
    with type typing_env_extension := Typing_env_extension.t) =
 struct
@@ -126,7 +127,7 @@ struct
             match E.op () with
             | Join -> TEE.empty ()
             | Meet ->
-              TEE.n_way_meet env
+              TEE.n_way_meet (Meet_or_join_env.meet_env env)
                 (env_extension1 :: env_extension2 :: !env_extensions)
           in
           closures_entry, env_extension)
@@ -136,6 +137,7 @@ module Meet = Make_meet_or_join (Lattice_ops.For_meet)
 module Join = Make_meet_or_join (Lattice_ops.For_join)
 
 let meet env t1 t2 : _ Or_bottom.t =
+  let env = Meet_or_join_env.create_for_meet env in
   match Meet.meet_or_join env t1 t2 with
   | Bottom -> Bottom
   | Ok (t, env_extension) ->
@@ -143,7 +145,6 @@ let meet env t1 t2 : _ Or_bottom.t =
     else Ok (t, env_extension)
 
 let join env t1 t2 =
-  let env = Meet_env.create env in
   match Join.meet_or_join env t1 t2 with
   | Ok (t, env_extension) ->
     assert (TEE.is_empty env_extension);

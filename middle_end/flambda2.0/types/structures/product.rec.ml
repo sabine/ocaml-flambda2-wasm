@@ -89,7 +89,7 @@ module Make (Index : Identifiable.S) = struct
           match ty1_opt, ty2_opt with
           | None, None -> None
           | Some ty, None | None, Some ty -> Some ty
-          | Some ty1, Some ty2 -> Some (Type_grammar.join env ty1 ty2))
+          | Some ty1, Some ty2 -> Some (Type_grammar.join' env ty1 ty2))
         components_by_index1
         components_by_index2
     in

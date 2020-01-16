@@ -670,6 +670,10 @@ let expand_head' t env : t =
     Naked_nativeint (
       T_NN.expand_head' ~force_to_kind:force_to_kind_naked_nativeint ty env)
 
+(* CR mshinwell: There is a subtlety here: the presence of a name in
+   [suitable_for] doesn't mean that we should blindly return "=name".  The
+   type of the name in [suitable_for] might be (much) worse than the one
+   in the environment [t]. *)
 let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
   let free_vars = Name_occurrences.variables (free_names t) in
   if Variable.Set.is_empty free_vars then level, t
@@ -684,7 +688,8 @@ let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
            variables in the returned [Typing_env_level], and swap them with
            the variables that we wish to erase throughout the type. *)
         Variable.Set.fold (fun to_erase (result_level, perm, binding_time) ->
-            let kind = kind (TE.find env (Name.var to_erase)) in
+            let original_type = TE.find env (Name.var to_erase) in
+            let kind = kind original_type in
             let fresh_var = Variable.rename to_erase in
             let fresh_var_name = Name.var fresh_var in
             let result_level =
@@ -756,10 +761,11 @@ let rec make_suitable_for_environment0_core t env ~depth ~suitable_for level =
 module Make_meet_or_join
   (E : Lattice_ops_intf.S
    with type meet_env := Meet_env.t
+   with type meet_or_join_env := Meet_or_join_env.t
    with type typing_env := Typing_env.t
    with type typing_env_extension := Typing_env_extension.t) =
 struct
-  let meet_or_join env t1 t2 =
+  let meet_or_join (env : Meet_or_join_env.t) t1 t2 =
     match t1, t2 with
     | Value ty1, Value ty2 ->
       (* CR mshinwell: Try to lift out these functor applications (or ditch
@@ -834,19 +840,24 @@ end
 module Meet = Make_meet_or_join (Lattice_ops.For_meet)
 module Join = Make_meet_or_join (Lattice_ops.For_join)
 
-let meet' env t1 t2 = Meet.meet_or_join env t1 t2
+let meet' env t1 t2 =
+  let env = Meet_or_join_env.create_for_meet env in
+  Meet.meet_or_join env t1 t2
 
 let meet env t1 t2 : _ Or_bottom.t =
   let ty, env_extension = meet' env t1 t2 in
   if is_obviously_bottom ty then Bottom
   else Ok (ty, env_extension)
 
-let join env t1 t2 =
-  let env = Meet_env.create env in
-  let joined, env_extension = Join.meet_or_join env t1 t2 in
+let join' env left_ty right_ty =
+  let joined, env_extension = Join.meet_or_join env left_ty right_ty in
   if not (TEE.is_empty env_extension) then begin
     Misc.fatal_errorf "Non-empty environment extension produced from a \
         [join] operation:@ %a"
       TEE.print env_extension
   end;
   joined
+
+let join env ~left_env ~left_ty ~right_env ~right_ty =
+  let env = Meet_or_join_env.create_for_join env ~left_env ~right_env in
+  join' env left_ty right_ty

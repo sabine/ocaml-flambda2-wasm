@@ -147,10 +147,12 @@ let apply_name_permutation t _perm = t
 module Make_meet_or_join
   (E : Lattice_ops_intf.S
    with type meet_env := Meet_env.t
+   with type meet_or_join_env := Meet_or_join_env.t
    with type typing_env := Typing_env.t
    with type typing_env_extension := Typing_env_extension.t) =
 struct
-  let meet_or_join env (t1 : t) (t2 : t) : (t * TEE.t) Or_bottom.t =
+  let meet_or_join (env : Meet_or_join_env.t) (t1 : t) (t2 : t)
+        : (t * TEE.t) Or_bottom.t =
     match t1, t2 with
     (* CR mshinwell: Try to factor out "Or_unknown_or_bottom" handling from here
        and elsewhere *)
@@ -185,7 +187,7 @@ struct
         param_arity = param_arity2; result_arity = result_arity2;
         recursive = recursive2;
       }) ->
-      let typing_env = Meet_env.env env in
+      let typing_env = Meet_or_join_env.target_join_env env in
       let code_age_rel = TE.code_age_relation typing_env in
       let check_other_things_and_return code_id : (t * TEE.t) Or_bottom.t =
         assert (Flambda_arity.equal param_arity1 param_arity2);
@@ -238,7 +240,7 @@ struct
         recursive = recursive2;
         rec_info = _rec_info2;
       }) ->
-      let typing_env = Meet_env.env env in
+      let typing_env = Meet_or_join_env.target_join_env env in
       let code_age_rel = TE.code_age_relation typing_env in
       let check_other_things_and_return code_id : (t * TEE.t) Or_bottom.t =
         assert (Flambda_arity.equal param_arity1 param_arity2);
@@ -279,16 +281,18 @@ module Meet = Make_meet_or_join (Lattice_ops.For_meet)
 module Join = Make_meet_or_join (Lattice_ops.For_join)
 
 let meet env t1 t2 : _ Or_bottom.t =
+  let env = Meet_or_join_env.create_for_meet env in
   match Meet.meet_or_join env t1 t2 with
   | Bottom | Ok (Bottom, _) -> Bottom
   | Ok ((Ok _ | Unknown) as t, env_extension) -> Ok (t, env_extension)
 
 let join env t1 t2 : t =
-  let env = Meet_env.create env in
+Format.eprintf "Joining:@ %a@ and@ %a\n%!" print t1 print t2;
   match Join.meet_or_join env t1 t2 with
   | Bottom | Ok (Bottom, _) -> Bottom
   | Ok ((Ok _ | Unknown) as t, env_extension) ->
     assert (TEE.is_empty env_extension);
+Format.eprintf "Result:@ %a\n%!" print t;
     t
 
 let apply_rec_info (t : t) rec_info : t Or_bottom.t =

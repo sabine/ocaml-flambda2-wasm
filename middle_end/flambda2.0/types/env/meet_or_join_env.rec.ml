@@ -16,12 +16,34 @@
 
 [@@@ocaml.warning "+a-30-40-41-42"]
 
-type t = Targetint.Set.t
+type t = {
+  central_env : Meet_env.t;
+  left_join_env : Typing_env.t option;
+  right_join_env : Typing_env.t option;
+}
 
-include Type_head_intf.S
-  with type t := t
-  with type type_grammar := Type_grammar.t
-  with type typing_env := Typing_env.t
-  with type typing_env_extension := Typing_env_extension.t
-  with type meet_env := Meet_env.t
-  with type meet_or_join_env := Meet_or_join_env.t
+let create_for_meet meet_env =
+  { central_env = meet_env;
+    left_join_env = None;
+    right_join_env = None;
+  }
+
+let create_for_join central_env ~left_env ~right_env =
+  { central_env = Meet_env.create central_env;
+    left_join_env = Some left_env;
+    right_join_env = Some right_env;
+  }
+
+let meet_env t = t.central_env
+
+let target_join_env t = Meet_env.env t.central_env
+
+let left_join_env t =
+  match t.left_join_env with
+  | Some env -> env
+  | None -> target_join_env t
+
+let right_join_env t =
+  match t.right_join_env with
+  | Some env -> env
+  | None -> target_join_env t

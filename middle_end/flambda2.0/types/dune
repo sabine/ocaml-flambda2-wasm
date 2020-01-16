@@ -22,6 +22,7 @@
     structures/closures_entry.rec.ml
     structures/function_declaration_type.rec.ml
     env/meet_env.rec.ml
+    env/meet_or_join_env.rec.ml
     env/typing_env_extension.rec.ml
     env/typing_env_level.rec.ml
     env/typing_env.rec.ml
@@ -47,6 +48,7 @@
     structures/closures_entry.rec.mli
     structures/function_declaration_type.rec.mli
     env/meet_env.rec.mli
+    env/meet_or_join_env.rec.mli
     env/typing_env_extension.rec.mli
     env/typing_env_level.rec.mli
     env/typing_env.rec.mli

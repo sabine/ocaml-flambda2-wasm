@@ -914,6 +914,10 @@ and simplify_function_call_where_callee's_type_unavailable
   in
   expr, user_data, uacc
 
+(* CR mshinwell: I've seen at least one case where a call of kind
+   [Indirect_unknown_arity] has been generated with no warning, despite having
+   [@inlined always]. *)
+
 and simplify_function_call
   : 'a. DA.t -> Apply.t -> callee_ty:T.t -> Call_kind.Function_call.t
     -> arg_types:T.t list -> 'a k
@@ -955,12 +959,6 @@ and simplify_function_call
         | None -> rec_info
         | Some newer -> Rec_info.merge rec_info ~newer
       in
-(*
-Format.eprintf "For call to %a: callee's rec info is %a, rec info from type of function is %a\n%!"
-  Simple.print (Apply.callee apply)
-  (Misc.Stdlib.Option.print Rec_info.print) (Simple.rec_info (Apply.callee apply))
-  Rec_info.print function_decl_rec_info;
-*)
       let callee's_code_id_from_type = I.code_id inlinable in
       simplify_direct_function_call dacc apply ~callee's_code_id_from_type
         ~callee's_code_id_from_call_kind ~callee's_closure_id ~arg_types

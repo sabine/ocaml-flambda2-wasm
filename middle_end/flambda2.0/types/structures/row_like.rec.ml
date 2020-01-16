@@ -37,6 +37,7 @@ module Make
     with type flambda_type := Type_grammar.t
     with type typing_env := Typing_env.t
     with type meet_env := Meet_env.t
+    with type meet_or_join_env := Meet_or_join_env.t
     with type typing_env_extension := Typing_env_extension.t) =
 struct
   type t = {
@@ -102,12 +103,10 @@ struct
     (E : Lattice_ops_intf.S
       with type typing_env := Typing_env.t
       with type meet_env := Meet_env.t
+      with type meet_or_join_env := Meet_or_join_env.t
       with type typing_env_extension := Typing_env_extension.t) =
   struct
-    let meet_or_join env t1 t2 : _ Or_bottom.t =
-(*
-Format.eprintf "RL meet/join: %a@ and@ %a\n%!" print t1 print t2;
-*)
+    let meet_or_join (env : Meet_or_join_env.t) t1 t2 : _ Or_bottom.t =
       let ({ known = known1; at_least = at_least1; } : t) = t1 in
       let ({ known = known2; at_least = at_least2; } : t) = t2 in
       let env_extension = ref (TEE.empty ()) in
@@ -145,7 +144,9 @@ Format.eprintf "Existing env extension, case 1:@ %a\n%!"
 Format.eprintf "New env extension, case 1:@ %a\n%!"
   TEE.print env_extension';
 *)
-            env_extension := TEE.meet env !env_extension env_extension';
+            env_extension :=
+              TEE.meet (Meet_or_join_env.meet_env env)
+                !env_extension env_extension';
 (*
 Format.eprintf "Resulting env extension, case 1:@ %a\n%!"
   TEE.print !env_extension;
@@ -172,7 +173,9 @@ Format.eprintf "Existing env extension, case 2:@ %a\n%!"
 Format.eprintf "New env extension, case 2:@ %a\n%!"
   TEE.print env_extension';
 *)
-             env_extension := TEE.meet env !env_extension env_extension';
+            env_extension :=
+              TEE.meet (Meet_or_join_env.meet_env env)
+                !env_extension env_extension';
 (*
 Format.eprintf "Resulting env extension, case 2:@ %a\n%!"
   TEE.print !env_extension;
@@ -208,10 +211,11 @@ Format.eprintf "RL meet is returning bottom\n%!";
   module Meet = Row_like_meet_or_join (Lattice_ops.For_meet)
   module Join = Row_like_meet_or_join (Lattice_ops.For_join)
 
-  let meet env t1 t2 = Meet.meet_or_join env t1 t2
+  let meet env t1 t2 =
+    Meet.meet_or_join (Meet_or_join_env.create_for_meet env) t1 t2
 
   let join env t1 t2 =
-    match Join.meet_or_join (Meet_env.create env) t1 t2 with
+    match Join.meet_or_join env t1 t2 with
     | Ok (t, _env_extension) -> t
     | Bottom -> create_bottom ()
 

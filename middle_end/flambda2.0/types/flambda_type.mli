@@ -159,7 +159,13 @@ val meet_shape
   -> result_kind:Flambda_kind.t
   -> Typing_env_extension.t Or_bottom.t
 
-val join : Typing_env.t -> t -> t -> t
+val join
+   : Typing_env.t
+  -> left_env:Typing_env.t
+  -> left_ty:t
+  -> right_env:Typing_env.t
+  -> right_ty:t
+  -> t
 
 (* CR mshinwell: Substitute out this alias once it's finalised *)
 type 'a type_accessor = Typing_env.t -> 'a
