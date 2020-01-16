@@ -1115,18 +1115,20 @@ and fill_slot decls elts env acc offset slot =
       let decl = Closure_id.Map.find c decls in
       let dbg = Function_declaration.dbg decl in
       let arity = List.length (Function_declaration.params_arity decl) in
-      let name = Un_cps_closure.(closure_code (closure_name c)) in
+      let code_id = Function_declaration.code_id decl in
+      let code_symbol = Code_id.code_symbol code_id in
+      let code_name = Linkage_name.to_string (Symbol.linkage_name code_symbol) in
       (* We build here the **reverse** list of fields for the closure *)
       if arity = 1 || arity = 0 then begin
         let acc =
           C.int_const dbg arity ::
-          C.symbol ~dbg name ::
+          C.symbol ~dbg code_name ::
           acc
         in
         acc, offset + 2, env, Ece.pure
       end else begin
         let acc =
-          C.symbol ~dbg name ::
+          C.symbol ~dbg code_name ::
           C.int_const dbg arity ::
           C.symbol ~dbg (C.curry_function_sym arity) ::
           acc
