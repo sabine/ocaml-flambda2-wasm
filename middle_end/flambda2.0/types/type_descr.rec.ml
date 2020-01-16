@@ -275,9 +275,6 @@ module Make (Head : Type_head_intf.S
       | Unknown, _ -> Unknown
       | _, Unknown -> Unknown
       | Ok head1, Ok head2 ->
-Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
-  Head.print head1
-  Head.print head2;
         match Head_meet_or_join.meet_or_join env head1 head2 with
         | Ok (head, env_extension) ->
           assert (TEE.is_empty env_extension);
@@ -405,9 +402,6 @@ Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
         let canonical_simple2 =
           Option.map (fun (simple, _) -> simple) canonical_simple2
         in
-Format.eprintf "CS are: %a and %a\n%!"
-  (Misc.Stdlib.Option.print Simple.print) canonical_simple1
-  (Misc.Stdlib.Option.print Simple.print) canonical_simple2;
         let shared_aliases =
           let target_env = Meet_or_join_env.target_join_env join_env in
           Simple.Set.inter (all_aliases_of target_env canonical_simple1)
