@@ -15,7 +15,7 @@ and 'a t = unit -> 'a node
 let [@inline always] bar i map_foo = ();
   fun () ->
     let j = i + 3 in
-    ignore (Sys.opaque_identity j);
+    ignore (opaque j);
     (map_foo [@inlined never]) (fun x -> x) (fun () -> Nil) ()
 
 let rec map_foo f seq () = match seq() with
@@ -25,5 +25,5 @@ let rec map_foo f seq () = match seq() with
       if opaque false then bar 1 map_foo else bar 2 map_foo
     in
     let g_result = (g [@inlined always]) () in
-    ignore (Sys.opaque_identity g_result);
+    ignore (opaque g_result);
     Cons (f x, fun () -> Nil)

@@ -21,5 +21,5 @@ let rec map_foo f seq () = match seq() with
       if opaque false then bar map_foo else bar map_foo
     in
     let g_result = (g [@inlined always]) () in
-    ignore (Sys.opaque_identity g_result);
+    ignore (opaque g_result);
     Cons (f x, g)
