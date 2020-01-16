@@ -207,9 +207,8 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
               ([], true)
           in
           let flattened' =
-            match set_of_closures with
-            | None -> []
-            | Some set_of_closures ->
+            if Set_of_closures.is_empty set_of_closures then []
+            else
               let second_or_later_binding_within_rec =
                 not (Code_id.Map.is_empty code)
               in
@@ -355,18 +354,17 @@ let pieces_of_code ?newer_versions_of ?set_of_closures code =
         })
       code
   in
+  let closure_symbols, set_of_closures =
+    Option.value set_of_closures
+      ~default:(Closure_id.Map.empty, Set_of_closures.empty)
+  in
   let static_const : Static_const.t =
-    let set_of_closures = Option.map snd set_of_closures in
     Sets_of_closures [{
       code;
       set_of_closures;
     }]
   in
   let bound_symbols : Bound_symbols.t =
-    let closure_symbols =
-      Option.value (Option.map fst set_of_closures)
-        ~default:Closure_id.Map.empty
-    in
     Sets_of_closures [{
       code_ids = Code_id.Map.keys code;
       closure_symbols;

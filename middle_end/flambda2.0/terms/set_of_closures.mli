@@ -21,6 +21,10 @@ type t
 (** Printing, invariant checks, name manipulation, etc. *)
 include Expr_std.S with type t := t
 
+val empty : t
+
+val is_empty : t -> bool
+
 (** Create a set of closures given the code for its functions and the
     closure variables. *)
 val create

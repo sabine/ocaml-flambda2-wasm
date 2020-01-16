@@ -38,6 +38,10 @@ type t
 (** Printing, invariant checks, name manipulation, etc. *)
 include Expr_std.S with type t := t
 
+val empty : t
+
+val is_empty : t -> bool
+
 (** Create a set of function declarations given the individual
     declarations. *)
 val create : Function_declaration.t Closure_id.Map.t -> t

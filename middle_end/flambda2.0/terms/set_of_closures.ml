@@ -62,6 +62,15 @@ end)
 (* CR mshinwell: A sketch of code for the invariant check is on cps_types. *)
 let invariant _env _t = ()
 
+let empty =
+  { function_decls = Function_declarations.empty;
+    closure_elements = Var_within_closure.Map.empty;
+  }
+
+let is_empty { function_decls; closure_elements; } =
+  Function_declarations.is_empty function_decls
+    && Var_within_closure.Map.is_empty closure_elements
+
 let create function_decls ~closure_elements =
   (* CR mshinwell: Make sure invariant checks are applied here, e.g. that
      the set of closures is indeed closed. *)

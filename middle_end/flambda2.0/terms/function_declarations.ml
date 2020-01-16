@@ -22,6 +22,13 @@ type t = {
 
 let invariant _env _t = ()
 
+let empty =
+  { funs = Closure_id.Map.empty;
+  }
+
+let is_empty { funs; } =
+  Closure_id.Map.is_empty funs
+
 let create funs =
   { funs;
   }

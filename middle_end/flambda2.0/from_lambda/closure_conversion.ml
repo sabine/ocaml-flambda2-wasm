@@ -954,7 +954,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
           in
           Sets_of_closures [{
             code = Code_id.Map.singleton code_id code;
-            set_of_closures = None; 
+            set_of_closures = Set_of_closures.empty; 
           }]
         in
         Let_symbol.create bound_symbols static_const body

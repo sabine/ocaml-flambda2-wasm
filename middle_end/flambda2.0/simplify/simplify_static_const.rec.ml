@@ -45,7 +45,7 @@ let simplify_field_of_block dacc (field : Field_of_block.t) =
         field, ty
 
 let simplify_or_variable dacc type_for_const
-      (or_variable : _ Static_const.or_variable) =
+      (or_variable : _ Or_variable.t) =
   let denv = DA.denv dacc in
   match or_variable with
   | Const const -> or_variable, type_for_const const
@@ -141,13 +141,7 @@ let simplify_static_const dacc (bound_symbols : Bound_symbols.t)
     in
     bound_symbols, static_const, dacc
   | Sets_of_closures bound_symbols' ->
-    match static_const with
-    | Sets_of_closures sets ->
-      Simplify_set_of_closures.simplify_lifted_sets_of_closures dacc
-        bound_symbols static_const bound_symbols' sets
-    | Block _ | Boxed_float _ | Boxed_int32 _ | Boxed_int64 _
-    | Boxed_nativeint _ | Immutable_float_array _ | Mutable_string _
-    | Immutable_string _ ->
-      Misc.fatal_errorf "Only [Sets_of_closures] can be bound by a \
-          [Sets_of_closures] binding:@ %a"
-        SC.print static_const
+    let sets = SC.must_be_sets_of_closures static_const in
+    Simplify_set_of_closures.simplify_lifted_sets_of_closures dacc
+      ~orig_bound_symbols:bound_symbols ~orig_static_const:static_const
+      bound_symbols' sets

@@ -166,11 +166,11 @@ end
 module Code_and_set_of_closures = struct
   type t = {
     code : Code.t Code_id.Map.t;
-    set_of_closures : Set_of_closures.t option;
+    set_of_closures : Set_of_closures.t;
   }
 
   let print_with_cache ~cache ppf { code; set_of_closures; } =
-    if Option.is_none set_of_closures then
+    if Set_of_closures.is_empty set_of_closures then
       match Code_id.Map.get_singleton code with
       | None ->
         fprintf ppf "@[<hov 1>(@<0>%sCode@<0>%s@ (\
@@ -194,9 +194,7 @@ module Code_and_set_of_closures = struct
         (Flambda_colours.static_part ())
         (Flambda_colours.normal ())
         (Code_id.Map.print (Code.print_with_cache ~cache)) code
-        (Misc.Stdlib.Option.print
-          (Set_of_closures.print_with_cache ~cache))
-          set_of_closures
+        (Set_of_closures.print_with_cache ~cache) set_of_closures
 
   let compare { code = code1; set_of_closures = set1; } 
         { code = code2; set_of_closures = set2; } =
@@ -205,14 +203,9 @@ module Code_and_set_of_closures = struct
         (Code_id.Map.keys code2)
     in
     if c <> 0 then c
-    else Option.compare Set_of_closures.compare set1 set2
+    else Set_of_closures.compare set1 set2
 
   let free_names { code; set_of_closures; } =
-    let from_set_of_closures =
-      match set_of_closures with
-      | None -> Name_occurrences.empty
-      | Some set -> Set_of_closures.free_names set
-    in
     Code_id.Map.fold (fun code_id code free_names ->
         Name_occurrences.union_list [
           (Name_occurrences.add_code_id Name_occurrences.empty
@@ -221,7 +214,7 @@ module Code_and_set_of_closures = struct
           free_names;
         ])
       code
-      from_set_of_closures
+      (Set_of_closures.free_names set_of_closures)
 
   let apply_name_permutation ({ code; set_of_closures; } as t) perm =
     let code' =
@@ -230,14 +223,11 @@ module Code_and_set_of_closures = struct
         code
     in
     let set_of_closures' =
-      match set_of_closures with
-      | None -> None
-      | Some set ->
-        let set' =
-          Set_of_closures.apply_name_permutation set perm
-        in
-        if set == set' then set_of_closures
-        else Some set'
+      let set' =
+        Set_of_closures.apply_name_permutation set_of_closures perm
+      in
+      if set_of_closures == set' then set_of_closures
+      else set'
     in
     if code == code' && set_of_closures == set_of_closures' then t
     else

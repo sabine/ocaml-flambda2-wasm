@@ -148,9 +148,7 @@ module Iter_sets_of_closures = struct
               : Let_symbol.Bound_symbols.Code_and_set_of_closures.t)
              ({ code; set_of_closures; }
               : Static_const.Code_and_set_of_closures.t) ->
-            (* CR mshinwell: Use a longer name instead of "s" *)
-            Option.iter (fun s -> f ~closure_symbols:(Some closure_symbols) s)
-              set_of_closures;
+            f ~closure_symbols:(Some closure_symbols) set_of_closures;
             Code_id.Map.iter (fun _ { Static_const.Code. params_and_body;
                                       newer_version_of = _; } ->
                 match params_and_body with

@@ -58,7 +58,7 @@ module Code_and_set_of_closures : sig
   type t = {
     code : Code.t Code_id.Map.t;
     (* CR mshinwell: Check the free names of the set of closures *)
-    set_of_closures : Set_of_closures.t option;
+    set_of_closures : Set_of_closures.t;
   }
 
   val map_code : t -> f:(Code_id.t -> Code.t -> Code.t) -> t
