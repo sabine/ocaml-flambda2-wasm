@@ -167,8 +167,16 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
     Static_const.print static_const
     Name_occurrences.print free_names_after;
 *)
-  if not (Name_occurrences.overlap bound_names free_names_after) then
-    body
+  let all_code_ids_bound_names =
+    Name_occurrences.code_ids_and_newer_version_of_code_ids bound_names
+  in
+  let all_code_ids_free_names_after =
+    Name_occurrences.code_ids_and_newer_version_of_code_ids free_names_after
+  in
+  if (not (Name_occurrences.overlap bound_names free_names_after))
+    && Code_id.Set.is_empty (Code_id.Set.inter
+      all_code_ids_bound_names all_code_ids_free_names_after)
+  then body
   else
     match bound_symbols with
     | Singleton _ ->

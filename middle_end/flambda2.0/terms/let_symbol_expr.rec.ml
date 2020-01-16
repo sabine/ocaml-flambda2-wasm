@@ -166,26 +166,26 @@ type flattened_for_printing_descr =
   | Other of Symbol.t * Static_const.t
 
 type flattened_for_printing = {
-  second_or_later_binding_within_rec : bool;
+  second_or_later_binding_within_one_set : bool;
   second_or_later_set_of_closures : bool;
   descr : flattened_for_printing_descr;
 }
 
+let triangle_colour descr =
+  match descr with
+  | Code _ -> Flambda_colours.code_id ()
+  | Set_of_closures _ | Other _ -> Flambda_colours.symbol ()
+
 let flatten_for_printing { bound_symbols; defining_expr; _ } =
   match bound_symbols with
   | Singleton symbol ->
-    [{ second_or_later_binding_within_rec = false;
+    [{ second_or_later_binding_within_one_set = false;
        second_or_later_set_of_closures = false;
        descr = Other (symbol, defining_expr);
     }]
   | Sets_of_closures bound_symbol_components ->
     let code_and_sets_of_closures =
-      match defining_expr with
-      | Sets_of_closures code_and_sets_of_closures ->
-        code_and_sets_of_closures
-      | _ ->
-        Misc.fatal_errorf "Bad form of static constant:@ %a"
-          Static_const.print defining_expr
+      Static_const.must_be_sets_of_closures defining_expr
     in
     let flattened, _ =
       List.fold_left2
@@ -194,10 +194,10 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
                 : Bound_symbols.Code_and_set_of_closures.t)
              ({ code; set_of_closures; }
                 : Static_const.Code_and_set_of_closures.t) ->
-          let flattened,_ =
+          let flattened, _ =
             Code_id.Map.fold (fun code_id code (flattened', first) ->
                 let flattened =
-                  { second_or_later_binding_within_rec = not first;
+                  { second_or_later_binding_within_one_set = not first;
                     second_or_later_set_of_closures;
                     descr = Code (code_id, code);
                   }
@@ -209,24 +209,21 @@ let flatten_for_printing { bound_symbols; defining_expr; _ } =
           let flattened' =
             if Set_of_closures.is_empty set_of_closures then []
             else
-              let second_or_later_binding_within_rec =
+              let second_or_later_binding_within_one_set =
                 not (Code_id.Map.is_empty code)
               in
-              let second_or_later_set_of_closures =
-                second_or_later_set_of_closures
-                  && not (Code_id.Map.is_empty code)
-              in
-              [{ second_or_later_binding_within_rec;
+              [{ second_or_later_binding_within_one_set;
                  second_or_later_set_of_closures;
                  descr = Set_of_closures (closure_symbols, set_of_closures);
               }]
           in
           let flattened_acc =
-            (List.rev flattened) @ (List.rev flattened') @ flattened_acc
+            flattened_acc @ (List.rev flattened) @ (List.rev flattened')
           in
           flattened_acc, true)
         ([], false)
-        bound_symbol_components code_and_sets_of_closures
+        bound_symbol_components
+        code_and_sets_of_closures
     in
     flattened
 
@@ -259,15 +256,24 @@ let print_flattened_descr_rhs ppf descr =
   | Other (_, static_const) -> Static_const.print ppf static_const
 
 let print_flattened ppf
-      { second_or_later_binding_within_rec;
+      { second_or_later_binding_within_one_set;
         second_or_later_set_of_closures;
         descr;
       } =
   fprintf ppf "@[<hov 1>";
-  if second_or_later_binding_within_rec then begin
-    fprintf ppf "@<0>%sand%s @<0>%s"
+  if second_or_later_set_of_closures
+    && not second_or_later_binding_within_one_set
+  then begin
+    fprintf ppf "@<0>%sand_set @<0>%s"
       (Flambda_colours.elide ())
-      (if second_or_later_set_of_closures then " [another set]" else "")
+      (Flambda_colours.normal ())
+  end else if second_or_later_binding_within_one_set then begin
+    fprintf ppf "@<0>%sand @<0>%s"
+      (Flambda_colours.elide ())
+      (Flambda_colours.normal ())
+  end else begin
+    fprintf ppf "@<0>%s@<1>\u{25b6} @<0>%s"
+      (triangle_colour descr)
       (Flambda_colours.normal ())
   end;
   fprintf ppf
@@ -303,12 +309,12 @@ let print_with_cache ~cache ppf t =
   match flattened with
   | [] -> assert false
   | flat::flattened ->
-    fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ (@[<v 0>%a"
+    fprintf ppf "@[<v 1>(@<0>%slet_symbol@<0>%s@ @[<v 0>%a"
       (Flambda_colours.expr_keyword ())
       (Flambda_colours.normal ())
       print_flattened flat;
     print_more flattened;
-    fprintf ppf "@])@ %a)@]" (Expr.print_with_cache ~cache) body
+    fprintf ppf "@]@ %a)@]" (Expr.print_with_cache ~cache) body
 
 let print ppf t = print_with_cache ~cache:(Printing_cache.create ()) ppf t
 
