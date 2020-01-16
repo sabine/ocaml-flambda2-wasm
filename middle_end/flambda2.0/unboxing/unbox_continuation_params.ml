@@ -56,12 +56,15 @@ module Make (U : Unboxing_spec) = struct
     let shape =
       U.make_boxed_value_accommodating info index ~index_var:field_var
     in
+Format.eprintf "shape:@ %a\n%!" T.print shape;
     (* Don't unbox parameters unless, at all use sites, there is a
        non-irrelevant [Simple] available for the corresponding field of the
        block. *)
     Apply_cont_rewrite_id.Map.fold
       (fun id (typing_env_at_use, arg_type_at_use)
            (extra_args, field_types_by_id) ->
+Format.eprintf "arg type at use:@ %a\n%!" T.print arg_type_at_use;
+Format.eprintf "starting env:@ %a\n%!" TE.print typing_env_at_use;
         let env_extension =
           let result_var =
             Var_in_binding_pos.create field_var Name_mode.normal
@@ -79,6 +82,7 @@ module Make (U : Unboxing_spec) = struct
           in
           None, field_types_by_id
         | Ok env_extension ->
+Format.eprintf "meet result:@ %a\n%!" TEE.print env_extension;
           let typing_env_at_use =
             TE.add_definition typing_env_at_use field_name param_kind
           in
@@ -91,9 +95,11 @@ module Make (U : Unboxing_spec) = struct
               (typing_env_at_use, field_type)
               field_types_by_id
           in
+          (* CR mshinwell: hoist extra_args None check *)
           match extra_args with
           | None -> None, field_types_by_id
           | Some extra_args ->
+Format.eprintf "env:@ %a\n%!" TE.print typing_env_at_use;
             let canonical_simple, kind' =
               TE.get_canonical_simple_with_kind typing_env_at_use
                 ~min_name_mode:Name_mode.normal
@@ -113,8 +119,14 @@ module Make (U : Unboxing_spec) = struct
                mshinwell: We never add any loads now, but might in the future.
             *)
             match canonical_simple with
-            | Bottom | Ok None -> None, field_types_by_id
+            | Bottom | Ok None ->
+              Format.eprintf "No canonical simple for %a\n%!"
+                Simple.print field;
+              None, field_types_by_id
             | Ok (Some simple) ->
+              Format.eprintf "Canonical simple for %a is %a\n%!"
+                Simple.print field
+                Simple.print simple;
               if Simple.equal simple field then None, field_types_by_id
               else
                 let extra_arg : EA.t = Already_in_scope simple in
@@ -179,6 +191,7 @@ module Make (U : Unboxing_spec) = struct
         extra_params_and_args
     in
     let block_type = U.make_boxed_value info ~fields in
+Format.eprintf "Block type:@ %a\n%!" T.print block_type;
     let typing_env =
       TE.add_definitions_of_params typing_env
         ~params:(Index.Map.data new_param_vars)
@@ -465,8 +478,10 @@ let rec make_unboxing_decision typing_env ~depth ~arg_types_by_use_id
             TE.print typing_env
         end
     | Wrong_kind | Invalid | Unknown ->
+Format.eprintf "Param type:@ %a\n%!" T.print param_type;
       match T.prove_single_closures_entry' typing_env param_type with
       | Proved (closure_id, closures_entry, Ok _func_decl_type) ->
+Format.eprintf "CLOSURE UNBOXED\n%!";
         let closure_var_types =
           T.Closures_entry.closure_var_types closures_entry
         in
@@ -480,6 +495,7 @@ let rec make_unboxing_decision typing_env ~depth ~arg_types_by_use_id
           ~arg_types_by_use_id ~param_type extra_params_and_args
           ~unbox_value:make_unboxing_decision info closure_vars K.value
       | Proved (_, _, (Unknown | Bottom)) | Wrong_kind | Invalid | Unknown ->
+Format.eprintf "CLOSURE NOT UNBOXED\n%!";
         let rec try_unboxing = function
           | [] -> typing_env, param_type, extra_params_and_args
           | (prover, unboxer, tag, kind) :: decisions ->

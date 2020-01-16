@@ -18,6 +18,9 @@
     any two pieces of code, which one is newer (or that the pieces of code
     are unrelated). *)
 
+(* CR-someday lwhite/mshinwell: Perhaps inlining benefit could be attached
+   to the edges of this graph *)
+
 type t
 
 val print : Format.formatter -> t -> unit
