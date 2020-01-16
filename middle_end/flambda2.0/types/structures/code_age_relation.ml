@@ -84,8 +84,11 @@ let has_at_most_one_newer_version t id =
       Exactly_one_newer_version newer
     | None -> More_than_one_newer_version
 
-let rec newer_versions_form_linear_chain t id =
-  match has_at_most_one_newer_version t id with
-  | No_newer_version -> true
-  | Exactly_one_newer_version id -> newer_versions_form_linear_chain t id
-  | More_than_one_newer_version -> false
+let rec newer_versions_form_linear_chain t id ~all_code_ids_still_existing =
+  if not (Code_id.Set.mem id all_code_ids_still_existing) then true
+  else
+    match has_at_most_one_newer_version t id with
+    | No_newer_version -> true
+    | Exactly_one_newer_version id ->
+      newer_versions_form_linear_chain t id ~all_code_ids_still_existing
+    | More_than_one_newer_version -> false

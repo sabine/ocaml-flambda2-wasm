@@ -173,6 +173,11 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
   let all_code_ids_free_names_after =
     Name_occurrences.code_ids_and_newer_version_of_code_ids free_names_after
   in
+  let all_code_ids =
+    (* CR mshinwell: This is only used for the code age relation check below;
+       maybe we don't need to check against as many code IDs as this? *)
+    Code_id.Set.union all_code_ids_bound_names all_code_ids_free_names_after
+  in
   if (not (Name_occurrences.overlap bound_names free_names_after))
     && Code_id.Set.is_empty (Code_id.Set.inter
       all_code_ids_bound_names all_code_ids_free_names_after)
@@ -198,7 +203,8 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
            operation between later versions of it cannot happen. *)
         Code_id.Set.filter (fun code_id ->
             Code_age_relation.newer_versions_form_linear_chain
-              code_age_relation code_id)
+              code_age_relation code_id
+              ~all_code_ids_still_existing:all_code_ids)
           code_ids_only_used_in_newer_version_of
       in
       let sets =
