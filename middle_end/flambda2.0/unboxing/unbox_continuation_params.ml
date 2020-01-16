@@ -222,6 +222,99 @@ module Make (U : Unboxing_spec) = struct
       typing_env, param_type, extra_params_and_args
 end
 
+module Tags_and_sizes : sig
+  type t = private
+    | Block of {
+        tag : Tag.t;
+        size : Targetint.OCaml.t;
+        field_kind : K.t;
+      }
+    | Variant of T.variant
+
+  val block : Tag.t -> size:Targetint.OCaml.t -> field_kind:K.t -> t
+  val variant : T.variant -> t
+
+  val is_variant : t -> bool
+
+  val unboxed_param_kind : t -> K.t
+
+  val must_be_a_block : t -> f:(Tag.t -> size:Targetint.OCaml.t -> 'a) -> 'a
+
+  val max_size : t -> Targetint.OCaml.t
+end = struct
+  type t =
+    | Block of {
+        tag : Tag.t;
+        size : Targetint.OCaml.t;
+        field_kind : K.t;
+      }
+    | Variant of T.variant
+
+  let block tag ~size ~field_kind =
+    Block {
+      tag;
+      size;
+      field_kind;
+    }
+
+  let variant v = Variant v
+
+  let is_variant t =
+    match t with
+    | Block _ -> false
+    | Variant _ -> true
+
+  let unboxed_param_kind t =
+    match t with
+    | Block { kind; _ } -> kind
+    | Variant _ -> K.value
+
+  let must_be_a_block t ~f =
+    match t with
+    | Block { tag; size; _ } -> f tag ~size
+    | Variant _ -> Misc.fatal_error "Not a block"
+
+  let max_size t =
+    match t with
+    | Block { size; _ } -> size
+    | Variant v ->
+      Tag.Map.fold (fun _tag size max_size ->
+          if Targetint.OCaml.compare size max_size > 0 then size
+          else max_size)
+        v.non_const_ctors_with_sizes
+        Targetint.OCaml.zero
+end
+
+(*
+Blocks:
+  b f0 ... fn
+
+  Shape
+  b : [0: =f0; ...; =fn]
+
+  No CSE.
+
+Variants:
+  v is_int tag f0 ... fn
+
+  n is the maximum index for any tag
+
+  Type assignments
+  is_int : Is_int (v)
+  tag : Get_tag (v)
+
+  Shape
+  v : =0
+    | =1
+    | [0: =f0; ...; = fn]
+    | [1: =f0]
+    | ...
+
+  CSE
+  Unary (Is_int v) = is_int
+  Unary (Get_tag v) = tag
+*)
+
 module Block_of_values_spec : Unboxing_spec
   with module Info = Tag
   with module Index = Targetint.OCaml =
@@ -243,6 +336,31 @@ struct
       ~field_n_minus_one:index_var
 
   let project_field _tag ~block ~index =
+    let index = Simple.const_int index in
+    P.Binary (Block_load (Block (Value Anything), Immutable), block, index)
+end
+
+module Variants_spec : Unboxing_spec
+  with module Info = Tags_and_sizes
+  with module Index = Targetint.OCaml =
+struct
+  module Index = Targetint.OCaml
+  module Info = Tags_and_sizes
+
+  let var_name = "unboxed"
+
+  let make_boxed_value tags_and_sizes ~fields =
+    let fields = Index.Map.data fields in
+    T.immutable_block tag ~field_kind:Flambda_kind.value ~fields
+
+  let make_boxed_value_accommodating _tags_and_sizes index ~index_var =
+    (* CR mshinwell: Should create the type using the tag too. *)
+    T.immutable_block_with_size_at_least
+      ~n:(Targetint.OCaml.add index Targetint.OCaml.one)
+      ~field_kind:Flambda_kind.value
+      ~field_n_minus_one:index_var
+
+  let project_field _tags_and_sizes ~block ~index =
     let index = Simple.const_int index in
     P.Binary (Block_load (Block (Value Anything), Immutable), block, index)
 end
@@ -467,38 +585,52 @@ let rec make_unboxing_decision typing_env ~depth ~arg_types_by_use_id
             TE.print typing_env
         end
     | Wrong_kind | Invalid | Unknown ->
-      match T.prove_single_closures_entry' typing_env param_type with
-      | Proved (closure_id, closures_entry, Ok _func_decl_type) ->
-        let closure_var_types =
-          T.Closures_entry.closure_var_types closures_entry
+      (* CR mshinwell: This variant case should be able to subsume the
+         "block of values" case. *)
+      match T.prove_variant typing_env param_type with
+      | Proved variant ->
+        let info = Tags_and_sizes.of_variant variant in
+        let indexes =
+          let size = Tags_and_sizes.max_size info in
+          Targetint.OCaml.Set.of_list
+            (List.init size (fun index -> Targetint.OCaml.of_int index))
         in
-        let info : Closures_spec.Info.t =
-          { closure_id;
-            closures_entry;
-          }
-        in
-        let closure_vars = Var_within_closure.Map.keys closure_var_types in
-        Closures.unbox_one_parameter typing_env ~depth
+        Variants.unbox_one_parameter typing_env ~depth
           ~arg_types_by_use_id ~param_type extra_params_and_args
-          ~unbox_value:make_unboxing_decision info closure_vars K.value
-      | Proved (_, _, (Unknown | Bottom)) | Wrong_kind | Invalid | Unknown ->
-        let rec try_unboxing = function
-          | [] -> typing_env, param_type, extra_params_and_args
-          | (prover, unboxer, tag, kind) :: decisions ->
-            let proof : _ T.proof_allowing_kind_mismatch =
-              prover typing_env param_type
-            in
-            match proof with
-            | Proved () ->
-              let indexes =
-                Targetint.OCaml.Set.singleton Targetint.OCaml.zero
+          ~unbox_value:make_unboxing_decision info indexes K.value
+      | Wrong_kind | Invalid | Unknown ->
+        match T.prove_single_closures_entry' typing_env param_type with
+        | Proved (closure_id, closures_entry, Ok _func_decl_type) ->
+          let closure_var_types =
+            T.Closures_entry.closure_var_types closures_entry
+          in
+          let info : Closures_spec.Info.t =
+            { closure_id;
+              closures_entry;
+            }
+          in
+          let closure_vars = Var_within_closure.Map.keys closure_var_types in
+          Closures.unbox_one_parameter typing_env ~depth
+            ~arg_types_by_use_id ~param_type extra_params_and_args
+            ~unbox_value:make_unboxing_decision info closure_vars K.value
+        | Proved (_, _, (Unknown | Bottom)) | Wrong_kind | Invalid | Unknown ->
+          let rec try_unboxing = function
+            | [] -> typing_env, param_type, extra_params_and_args
+            | (prover, unboxer, tag, kind) :: decisions ->
+              let proof : _ T.proof_allowing_kind_mismatch =
+                prover typing_env param_type
               in
-              unboxer typing_env ~depth ~arg_types_by_use_id ~param_type
-                extra_params_and_args ~unbox_value:make_unboxing_decision
-                tag indexes kind
-            | Wrong_kind | Invalid | Unknown -> try_unboxing decisions
-        in
-        try_unboxing unboxed_number_decisions
+              match proof with
+              | Proved () ->
+                let indexes =
+                  Targetint.OCaml.Set.singleton Targetint.OCaml.zero
+                in
+                unboxer typing_env ~depth ~arg_types_by_use_id ~param_type
+                  extra_params_and_args ~unbox_value:make_unboxing_decision
+                  tag indexes kind
+              | Wrong_kind | Invalid | Unknown -> try_unboxing decisions
+          in
+          try_unboxing unboxed_number_decisions
 
 let make_unboxing_decisions typing_env ~arg_types_by_use_id ~params ~param_types
       extra_params_and_args =
