@@ -161,6 +161,12 @@ let create_let_symbol code_age_relation (bound_symbols : Bound_symbols.t)
       (static_const : Static_const.t) body =
   let bound_names = Bound_symbols.free_names bound_symbols in
   let free_names_after = Expr.free_names body in
+(*
+  Format.eprintf "Creating Let_symbol %a@ =@ %a@ free_names_after:@ %a\n%!"
+    Bound_symbols.print bound_symbols
+    Static_const.print static_const
+    Name_occurrences.print free_names_after;
+*)
   if not (Name_occurrences.overlap bound_names free_names_after) then
     body
   else

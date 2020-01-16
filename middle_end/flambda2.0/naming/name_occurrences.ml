@@ -449,7 +449,7 @@ let apply_name_permutation
       newer_version_of_code_ids;
     }
 
-let binary_predicate ~for_variables ~for_continuations ~for_symbols
+let binary_conjunction ~for_variables ~for_continuations ~for_symbols
       ~for_closure_vars ~for_code_ids 
       { variables = variables1;
         continuations = continuations1;
@@ -471,6 +471,29 @@ let binary_predicate ~for_variables ~for_continuations ~for_symbols
     && for_closure_vars closure_vars1 closure_vars2
     && for_code_ids code_ids1 code_ids2
     && for_code_ids newer_version_of_code_ids1 newer_version_of_code_ids2
+
+let binary_disjunction ~for_variables ~for_continuations ~for_symbols
+      ~for_closure_vars ~for_code_ids 
+      { variables = variables1;
+        continuations = continuations1;
+        symbols = symbols1;
+        closure_vars = closure_vars1;
+        code_ids = code_ids1;
+        newer_version_of_code_ids = newer_version_of_code_ids1;
+      }
+      { variables = variables2;
+        continuations = continuations2;
+        symbols = symbols2;
+        closure_vars = closure_vars2;
+        code_ids = code_ids2;
+        newer_version_of_code_ids = newer_version_of_code_ids2;
+      } =
+  for_variables variables1 variables2
+    || for_continuations continuations1 continuations2
+    || for_symbols symbols1 symbols2
+    || for_closure_vars closure_vars1 closure_vars2
+    || for_code_ids code_ids1 code_ids2
+    || for_code_ids newer_version_of_code_ids1 newer_version_of_code_ids2
 
 let binary_op ~for_variables ~for_continuations ~for_symbols ~for_closure_vars
       ~for_code_ids
@@ -521,7 +544,7 @@ let union t1 t2 =
     t1 t2
 
 let equal t1 t2 =
-  binary_predicate ~for_variables:For_variables.equal
+  binary_conjunction ~for_variables:For_variables.equal
     ~for_continuations:For_continuations.equal
     ~for_symbols:For_symbols.equal
     ~for_closure_vars:For_closure_vars.equal
@@ -531,7 +554,7 @@ let equal t1 t2 =
 let is_empty t = equal t empty
 
 let subset_domain t1 t2 =
-  binary_predicate ~for_variables:For_variables.subset_domain
+  binary_conjunction ~for_variables:For_variables.subset_domain
     ~for_continuations:For_continuations.subset_domain
     ~for_symbols:For_symbols.subset_domain
     ~for_closure_vars:For_closure_vars.subset_domain
@@ -539,7 +562,7 @@ let subset_domain t1 t2 =
     t1 t2
 
 let overlap t1 t2 =
-  binary_predicate ~for_variables:For_variables.overlap
+  binary_disjunction ~for_variables:For_variables.overlap
     ~for_continuations:For_continuations.overlap
     ~for_symbols:For_symbols.overlap
     ~for_closure_vars:For_closure_vars.overlap
@@ -562,7 +585,7 @@ let code_ids_and_newer_version_of_code_ids t =
   Code_id.Set.union (code_ids t) (newer_version_of_code_ids t)
 
 let only_newer_version_of_code_ids t =
-  Code_id.Set.union (newer_version_of_code_ids t) (code_ids t)
+  Code_id.Set.diff (newer_version_of_code_ids t) (code_ids t)
 
 let names t =
   Name.Set.union (Name.set_of_var_set (variables t))

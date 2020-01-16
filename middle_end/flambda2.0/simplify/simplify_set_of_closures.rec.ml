@@ -310,6 +310,15 @@ let dacc_inside_function context r ~params ~my_closure closure_id
           (Var_in_binding_pos.create my_closure NM.normal)
           (T.alias_type_of K.value (Simple.name name)))
   in
+  let dacc =
+    DA.map_denv dacc ~f:(fun denv ->
+      Closure_id.Map.fold (fun _closure_id bound_name denv ->
+          match Name_in_binding_pos.to_name bound_name with
+          | Var _ -> denv
+          | Symbol closure_symbol -> DE.now_defining_symbol denv closure_symbol)
+        closure_bound_names_inside_function
+        denv)
+  in
   DA.with_r dacc r
 
 type simplify_function_result = {
@@ -336,6 +345,7 @@ let simplify_function context r closure_id function_decl
             dacc_inside_function context r ~params ~my_closure closure_id
               ~closure_bound_names_inside_function
           in
+          (* CR mshinwell: DE.no_longer_defining_symbol is redundant now? *)
           match
             Simplify_toplevel.simplify_toplevel dacc body
               ~return_continuation
@@ -502,15 +512,8 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
             T.alias_type_of K.value (Simple.symbol closure_symbol))
       closure_elements
   in
-  let dacc_prior_to_sets =
-    DA.map_denv dacc ~f:(fun denv ->
-      Closure_id.Map.fold (fun _closure_id closure_symbol denv ->
-          DE.now_defining_symbol denv closure_symbol)
-        closure_symbols
-        denv)
-  in
   let context =
-    C.create ~dacc_prior_to_sets
+    C.create ~dacc_prior_to_sets:dacc
       ~all_sets_of_closures:[set_of_closures]
       ~closure_bound_names_all_sets:[closure_bound_names]
       ~closure_element_types_all_sets:[closure_element_types]
@@ -527,13 +530,6 @@ let simplify_and_lift_set_of_closures dacc ~closure_bound_vars_inverse
     simplify_set_of_closures0 dacc context set_of_closures
       ~closure_bound_names ~closure_bound_names_inside ~closure_elements
       ~closure_element_types
-  in
-  let dacc =
-    DA.map_denv dacc ~f:(fun denv ->
-      Closure_id.Map.fold (fun _closure_id closure_symbol denv ->
-          DE.no_longer_defining_symbol denv closure_symbol)
-        closure_symbols
-        denv)
   in
   let closure_symbols_set =
     Symbol.Set.of_list (Closure_id.Map.data closure_symbols)

@@ -36,7 +36,7 @@ let build_dep_graph dacc lifted_constants =
   in
   List.fold_left
     (fun (dep_graph, code_id_or_symbol_to_const)
-         (bound_symbols, defining_expr) ->
+         ((bound_symbols : Bound_symbols.t), defining_expr) ->
       (*
       Format.eprintf "Input for one set: %a = %a\n%!"
         Bound_symbols.print bound_symbols
@@ -49,10 +49,14 @@ let build_dep_graph dacc lifted_constants =
           let free_names =
             (* To avoid existing sets of closures (with or without associated
                code) being pulled apart, we add a dependency from each code ID
-               or symbol [being_defined] to all other code IDs and symbols bound
-               by the same binding. *)
-            Name_occurrences.union bound_symbols_free_names
-              (Static_const.free_names defining_expr)
+               or closure symbol [being_defined] to all other code IDs and
+               symbols bound by the same binding. *)
+            match bound_symbols with
+            | Singleton _ ->
+              Static_const.free_names defining_expr
+            | Sets_of_closures _ ->
+              Name_occurrences.union bound_symbols_free_names
+                (Static_const.free_names defining_expr)
           in
           (* Beware: when coming from [Reify_continuation_params] the
              sets of closures may have dependencies on variables that are
@@ -151,7 +155,7 @@ let sort dacc lifted_constants =
                       match (bound_symbols : Bound_symbols.t) with
                       | Sets_of_closures sets -> sets
                       | Singleton _ ->
-                        Misc.fatal_errorf "Code ID or symbol %a was involved \
+                        Misc.fatal_errorf "Code ID or symbol %a was involved@ \
                             in (non-closure) recursion that cannot be compiled"
                           CIS.print code_id_or_symbol
                     in
