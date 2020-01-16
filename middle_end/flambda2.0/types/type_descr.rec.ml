@@ -399,7 +399,7 @@ Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
         get_canonical_simples_and_expand_heads ~force_to_kind ~to_type
           ~left_env:(Meet_or_join_env.left_join_env join_env)
           ~left_ty:t1
-          ~right_env:(Meet_or_join_env.left_join_env join_env)
+          ~right_env:(Meet_or_join_env.right_join_env join_env)
           ~right_ty:t2
       in
       match canonical_simple1, canonical_simple2 with

@@ -695,7 +695,7 @@ let non_trivial_join ~initial_env_at_join:env_at_join envs_with_levels =
                 Format.eprintf "The joined type is:@ %a\n%!"
                   Type_grammar.print join_ty;
                 join_ty)
-              (Type_grammar.unknown kind)
+              (Type_grammar.bottom kind)
               envs_with_levels
           in
           add_or_replace_equation result_t name join_ty
