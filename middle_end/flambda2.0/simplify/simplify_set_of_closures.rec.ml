@@ -18,6 +18,10 @@
 
 open! Simplify_import
 
+(* CR mshinwell: Unused closure variables should be deleted prior to
+   simplification of sets of closures, taking the used-var-in-closures
+   set from the previous round. *)
+
 let function_decl_type ~denv_prior_to_sets function_decl ?code_id rec_info =
   let decision =
     Inlining_decision.make_decision_for_function_declaration

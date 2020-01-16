@@ -306,14 +306,7 @@ Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
            might need transformation back from an expanded head (as would
            happen if we used the next case). *)
         create_equals simple1, TEE.empty ()
-      | Ok None, Ok None
-      | Ok None, Ok (Some (_, Const _))
-      | Ok (Some (_, Const _)), Ok None
-      | Ok (Some (_, Const _)), Ok (Some (_, Const _)) ->
-        (* [Simple]s that are constants must be treated differently during
-           [meet] from those that are e.g. variables. The reason is that the
-           latter encode constraints, which should not be forgotten, whereas the
-           former are treated just like they were part of the "head". *)
+      | Ok None, Ok None ->
         begin match meet_head_or_unknown_or_bottom env head1 head2 with
         | Left_head_unchanged -> t1, TEE.empty ()
         | Right_head_unchanged -> t2, TEE.empty ()
@@ -323,7 +316,7 @@ Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
           | Unknown -> unknown (), env_extension
           | Ok head -> create head, env_extension
         end
-      | Ok (Some (simple1, Name _)), Ok (Some (simple2, Name _)) ->
+      | Ok (Some (simple1, _)), Ok (Some (simple2, _)) ->
         assert (not (Simple.equal simple1 simple2));
         let env = Meet_env.now_meeting env simple1 simple2 in
         (* In the following cases we may generate equations "pointing the
@@ -357,7 +350,7 @@ Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
           | Bottom -> bottom (), env_extension
           | Unknown | Ok _ -> create_equals simple1, env_extension
         end
-      | Ok (Some (simple, Name _)), Ok (None | Some (_, Const _)) ->
+      | Ok (Some (simple, _)), Ok None ->
         begin match meet_head_or_unknown_or_bottom env head1 head2 with
         | Left_head_unchanged -> create_equals simple, TEE.empty ()
         | Right_head_unchanged ->
@@ -375,7 +368,7 @@ Format.eprintf "Two heads to join:@ %a@ and@ %a\n%!"
           | Bottom -> bottom (), env_extension
           | Unknown | Ok _ -> create_equals simple, env_extension
         end
-      | Ok (None | Some (_, Const _)), Ok (Some (simple, Name _)) ->
+      | Ok None, Ok (Some (simple, _)) ->
         begin match meet_head_or_unknown_or_bottom env head1 head2 with
         | Left_head_unchanged ->
           let env_extension =
