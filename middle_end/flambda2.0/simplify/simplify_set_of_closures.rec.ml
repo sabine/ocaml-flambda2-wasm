@@ -883,14 +883,14 @@ let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
     C.closure_bound_names_inside_functions_all_sets context
   in
   let bound_symbols_components_rev, code_and_sets_of_closures_rev, dacc =
-    List.fold_left2
+    Misc.Stdlib.List.fold_left4
       (fun (bound_symbols_components_rev, code_and_sets_of_closures_rev, dacc)
-           ((({ code_ids = _; closure_symbols; } as bound_symbol_component)
-              : Bound_symbols.Code_and_set_of_closures.t),
-            (({ code = _; set_of_closures; } as code_and_set_of_closures)
-              : SC.Code_and_set_of_closures.t))
-           (closure_bound_names_inside,
-            (closure_elements, closure_element_types)) ->
+           (({ code_ids = _; closure_symbols; } as bound_symbol_component)
+             : Bound_symbols.Code_and_set_of_closures.t)
+           (({ code = _; set_of_closures; } as code_and_set_of_closures)
+             : SC.Code_and_set_of_closures.t)
+           closure_bound_names_inside
+           (closure_elements, closure_element_types) ->
         let bound_symbol_component, code_and_set_of_closures, dacc =
           if Set_of_closures.is_empty set_of_closures then begin
             (* We don't currently simplify code on the way down.  [Un_cps] will
@@ -906,9 +906,10 @@ let simplify_lifted_sets_of_closures dacc ~orig_bound_symbols ~orig_static_const
           code_and_set_of_closures :: code_and_sets_of_closures_rev,
           dacc)
       ([], [], dacc)
-      (List.combine bound_symbols_components code_and_sets_of_closures)
-      (List.combine closure_bound_names_inside_all_sets
-        closure_elements_and_types_all_sets)
+      bound_symbols_components
+      code_and_sets_of_closures
+      closure_bound_names_inside_all_sets
+      closure_elements_and_types_all_sets
   in
   let bound_symbols : Bound_symbols.t =
     Sets_of_closures (List.rev bound_symbols_components_rev)
