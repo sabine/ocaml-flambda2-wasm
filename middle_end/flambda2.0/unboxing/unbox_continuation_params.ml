@@ -41,6 +41,8 @@ module type Unboxing_spec = sig
     -> T.t
 
   val project_field : Info.t -> block:Simple.t -> index:Index.t -> P.t
+
+  val arg_type_at_use_precondition : T.t -> bool
 end
 
 module Make (U : Unboxing_spec) = struct
@@ -62,68 +64,77 @@ module Make (U : Unboxing_spec) = struct
     Apply_cont_rewrite_id.Map.fold
       (fun id (typing_env_at_use, arg_type_at_use)
            (extra_args, field_types_by_id) ->
-        let env_extension =
-          let result_var =
-            Var_in_binding_pos.create field_var Name_mode.normal
-          in
-          T.meet_shape typing_env_at_use arg_type_at_use
-            ~shape ~result_var ~result_kind:param_kind
-        in
-        let field = Simple.var field_var in
-        match env_extension with
-        | Bottom ->
+        if not (U.arg_type_at_use_precondition arg_type_at_use) then
           let field_types_by_id =
+            (* CR mshinwell: check why this is required *)
             Apply_cont_rewrite_id.Map.add id
-              (typing_env_at_use, T.bottom param_kind)
+              (typing_env_at_use, T.unknown param_kind)
               field_types_by_id
           in
           None, field_types_by_id
-        | Ok env_extension ->
-          let typing_env_at_use =
-            TE.add_definition typing_env_at_use field_name param_kind
-          in
-          let typing_env_at_use =
-            TE.add_env_extension typing_env_at_use ~env_extension
-          in
-          let field_type = T.alias_type_of param_kind field in
-          let field_types_by_id =
-            Apply_cont_rewrite_id.Map.add id
-              (typing_env_at_use, field_type)
-              field_types_by_id
-          in
-          (* CR mshinwell: hoist extra_args None check *)
-          match extra_args with
-          | None -> None, field_types_by_id
-          | Some extra_args ->
-            let canonical_simple, kind' =
-              TE.get_canonical_simple_with_kind typing_env_at_use
-                ~min_name_mode:Name_mode.normal
-                field
+        else
+          let env_extension =
+            let result_var =
+              Var_in_binding_pos.create field_var Name_mode.normal
             in
-            assert (Flambda_kind.equal param_kind kind');
-            (* CR-someday pchambart: This shouldn't add another load if
-               there is already one in the list of parameters.  That is,
-                 apply_cont k (a, b) a
-                 where k x y
-               should become:
-                 apply_cont k (a, b) a b
-                 where k x y b'
-               not:
-                 apply_cont k (a, b) a a b
-                 where k x y a' b'
-               mshinwell: We never add any loads now, but might in the future.
-            *)
-            match canonical_simple with
-            | Bottom | Ok None ->
-              None, field_types_by_id
-            | Ok (Some simple) ->
-              if Simple.equal simple field then None, field_types_by_id
-              else
-                let extra_arg : EA.t = Already_in_scope simple in
-                let extra_args =
-                  Apply_cont_rewrite_id.Map.add id extra_arg extra_args
-                in
-                Some extra_args, field_types_by_id)
+            T.meet_shape typing_env_at_use arg_type_at_use
+              ~shape ~result_var ~result_kind:param_kind
+          in
+          let field = Simple.var field_var in
+          match env_extension with
+          | Bottom ->
+            let field_types_by_id =
+              Apply_cont_rewrite_id.Map.add id
+                (typing_env_at_use, T.bottom param_kind)
+                field_types_by_id
+            in
+            None, field_types_by_id
+          | Ok env_extension ->
+            let typing_env_at_use =
+              TE.add_definition typing_env_at_use field_name param_kind
+            in
+            let typing_env_at_use =
+              TE.add_env_extension typing_env_at_use ~env_extension
+            in
+            let field_type = T.alias_type_of param_kind field in
+            let field_types_by_id =
+              Apply_cont_rewrite_id.Map.add id
+                (typing_env_at_use, field_type)
+                field_types_by_id
+            in
+            (* CR mshinwell: hoist extra_args None check *)
+            match extra_args with
+            | None -> None, field_types_by_id
+            | Some extra_args ->
+              let canonical_simple, kind' =
+                TE.get_canonical_simple_with_kind typing_env_at_use
+                  ~min_name_mode:Name_mode.normal
+                  field
+              in
+              assert (Flambda_kind.equal param_kind kind');
+              (* CR-someday pchambart: This shouldn't add another load if
+                there is already one in the list of parameters.  That is,
+                  apply_cont k (a, b) a
+                  where k x y
+                should become:
+                  apply_cont k (a, b) a b
+                  where k x y b'
+                not:
+                  apply_cont k (a, b) a a b
+                  where k x y a' b'
+                mshinwell: We never add any loads now, but might in the future.
+              *)
+              match canonical_simple with
+              | Bottom | Ok None ->
+                None, field_types_by_id
+              | Ok (Some simple) ->
+                if Simple.equal simple field then None, field_types_by_id
+                else
+                  let extra_arg : EA.t = Already_in_scope simple in
+                  let extra_args =
+                    Apply_cont_rewrite_id.Map.add id extra_arg extra_args
+                  in
+                  Some extra_args, field_types_by_id)
       arg_types_by_use_id
       (Some Apply_cont_rewrite_id.Map.empty, Apply_cont_rewrite_id.Map.empty)
 
@@ -338,6 +349,8 @@ struct
   let project_field _tag ~block ~index =
     let index = Simple.const_int index in
     P.Binary (Block_load (Block (Value Anything), Immutable), block, index)
+
+  let arg_type_at_use_precondition _ = true
 end
 
 module Variants_spec : Unboxing_spec
@@ -350,11 +363,16 @@ struct
   let var_name = "unboxed"
 
   let make_boxed_value tags_and_sizes ~fields =
+    (* XXX This needs altering -- somewhere will be the place to pad with
+       unit arguments *)
     let fields = Index.Map.data fields in
     T.immutable_block tag ~field_kind:Flambda_kind.value ~fields
 
   let make_boxed_value_accommodating _tags_and_sizes index ~index_var =
-    (* CR mshinwell: Should create the type using the tag too. *)
+    (* XXX Here we presumably create the types of all variant cases
+       that fit within the index.  We will need something in Flambda_type
+       to create the actual final type too.
+    *)
     T.immutable_block_with_size_at_least
       ~n:(Targetint.OCaml.add index Targetint.OCaml.one)
       ~field_kind:Flambda_kind.value
@@ -363,6 +381,14 @@ struct
   let project_field _tags_and_sizes ~block ~index =
     let index = Simple.const_int index in
     P.Binary (Block_load (Block (Value Anything), Immutable), block, index)
+
+  let arg_type_at_use_precondition arg_ty =
+    (* To avoid inserting [Switch] expressions, make sure that each use
+       site has a unique tag and size. *)
+    match T.prove_unique_tag_and_size typing_env param_type with
+    | Proved (_tag, _size) -> true
+    | Invalid | Unknown -> false
+    | Wrong_kind -> assert false
 end
 
 module Block_of_naked_floats_spec : Unboxing_spec
@@ -388,6 +414,8 @@ struct
   let project_field _tag ~block ~index =
     let index = Simple.const_int index in
     P.Binary (Block_load (Block Naked_float, Immutable), block, index)
+
+  let arg_type_at_use_precondition _ = true
 end
 
 module Closures_info = struct
@@ -436,6 +464,8 @@ struct
         var = closure_var;
         },
       closure)
+
+  let arg_type_at_use_precondition _ = true
 end
 
 module Make_unboxed_number_spec (N : sig
@@ -470,6 +500,8 @@ end) = struct
 
   let project_field _tag ~block ~index:_ =
     P.Unary (Unbox_number N.boxable_number_kind, block)
+
+  let arg_type_at_use_precondition _ = true
 end
 
 module Immediate_spec : Unboxing_spec

@@ -462,6 +462,69 @@ let prove_unique_tag_and_size env t
       | None -> Unknown
       | Some (tag, size) -> Proved (tag, size)
 
+  type variant = {
+    const_ctors : Immediate.Set.t;
+    non_const_ctors_with_sizes : Targetint.OCaml.t Tag.Scannable.Map.t;
+  }
+
+  let prove_variant env t : variant proof =
+    let wrong_kind () =
+      Misc.fatal_errorf "Kind error: expected [Value]:@ %a" print t
+    in
+    match expand_head t env with
+    | Const (Tagged_immediate _) -> Unknown
+    | Const _ -> wrong_kind ()
+    | Resolved resolved ->
+      match resolved with
+      | Value (Ok (Variant blocks_imms)) ->
+        begin match blocks_imms.immediates with
+        | Unknown -> Unknown
+        | Known imms ->
+          match prove_equals_tagged_immediates env imms with
+          | Unknown -> Unknown
+          | Invalid -> Invalid
+          | Proved const_ctors ->
+            let valid =
+              Immediate.Set.for_all Immediate.is_strictly_positive const_ctors
+            in
+            if not valid then Invalid
+            else
+              match blocks_imms.blocks with
+              | Unknown -> Unknown
+              | Known blocks ->
+                match Row_like.For_blocks.all_tags_and_sizes blocks with
+                | Unknown -> Unknown
+                | Known non_const_ctors_with_sizes ->
+                  let non_const_ctors_with_sizes =
+                    Tag.Map.fold
+                      (fun tag size (result : _ Or_bottom.t) : _ Or_bottom.t ->
+                        match result with
+                        | Bottom -> Bottom
+                        | Ok result ->
+                          match Tag.Scannable.of_tag tag with
+                          | None -> Bottom
+                          | Some tag ->
+                            Ok (Tag.Scannable.Map.add tag size result))
+                      non_const_ctors_with_sizes
+                      (Or_bottom.Ok Tag.Scannable.Map.empty)
+                  in
+                  match non_const_ctors_with_sizes with
+                  | Bottom -> Invalid
+                  | Ok non_const_ctors_with_sizes ->
+                    Proved {
+                      const_ctors;
+                      non_const_ctors_with_sizes;
+                    }
+        end
+      | Value (Ok _) -> Invalid
+      | Value Unknown -> Unknown
+      | Value Bottom -> Invalid
+      | Naked_immediate _ -> wrong_kind ()
+      | Naked_float _ -> wrong_kind ()
+      | Naked_int32 _ -> wrong_kind ()
+      | Naked_int64 _ -> wrong_kind ()
+      | Naked_nativeint _ -> wrong_kind ()
+
 let prove_is_a_tagged_immediate env t : _ proof_allowing_kind_mismatch =
   match expand_head t env with
   | Const (Tagged_immediate _) -> Proved ()
