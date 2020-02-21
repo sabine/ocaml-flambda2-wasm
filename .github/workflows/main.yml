@@ -73,4 +73,9 @@ jobs:
     # Run some part of the testsuite
     - name: Running the testsuite
       run: cd testsuite && make list-parallel FILE=../.github/workflows/main.list
+    # If the testsuite has failed, dump the relavant ocamltest logs
+    - name: Ocamltest failing logs
+      if: failure()
+      run: cd testsuite && ../runtime/ocamlrun ../ocaml -nostdlib -I ../stdlib/ -I ../otherlibs/unix/ ../otherlibs/unix/unix.cma ../.github/workflows/dump_logs.ml < _report
+
 
