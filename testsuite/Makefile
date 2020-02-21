@@ -26,7 +26,6 @@ OCAMLTESTDIR_CYGPATH=$(shell $(CYGPATH) $(BASEDIR)/$(DIR)/_ocamltest)
 failstamp := failure.stamp
 
 TESTLOG ?= _log
-TESTREPORT ?= _report
 
 ocamltest_directory := ../ocamltest
 
@@ -85,7 +84,7 @@ default:
 
 .PHONY: all
 all:
-	@rm -f $(TESTLOG) $(TESTREPORT)
+	@rm -f $(TESTLOG)
 	@$(MAKE) $(NO_PRINT) new-without-report
 	@$(MAKE) $(NO_PRINT) report
 
@@ -281,7 +280,15 @@ clean:
 .PHONY: report
 report:
 	@if [ ! -f $(TESTLOG) ]; then echo "No $(TESTLOG) file."; exit 1; fi
-	@awk -f summarize.awk < $(TESTLOG) | tee $(TESTREPORT)
+	@awk -f summarize.awk < $(TESTLOG)
+
+.PHONY:logs
+logs:
+	@if [ ! -f $(TESTLOG) ]; then echo "No $(TESTLOG) file."; exit 1; fi
+	@awk -f summarize.awk < $(TESTLOG) | \
+		../runtime/ocamlrun ../ocaml -nostdlib -I ../stdlib/ \
+			-I ../otherlibs/unix/ ../otherlibs/unix/unix.cma \
+			ocamltest_logs.ml
 
 .PHONY: retry-list
 retry-list:

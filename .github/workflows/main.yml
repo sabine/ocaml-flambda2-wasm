@@ -76,6 +76,6 @@ jobs:
     # If the testsuite has failed, dump the relavant ocamltest logs
     - name: Ocamltest failing logs
       if: failure()
-      run: cd testsuite && ../runtime/ocamlrun ../ocaml -nostdlib -I ../stdlib/ -I ../otherlibs/unix/ ../otherlibs/unix/unix.cma ../.github/workflows/dump_logs.ml < _report
+      run: cd testsuite && make logs
 
 
