@@ -62,10 +62,7 @@ jobs:
         make -j $J runtimeopt
         make -j $J libraryopt
         make -j $J compilerlibs/ocamlcommon.cmxa
-        make -j $J -C otherlibs/str allopt
-        make -j $J -C otherlibs/unix allopt
-        make -j $J -C otherlibs/bigarray allopt
-        make -j $J -C otherlibs/systhreads allopt
+        make -j $J otherlibrariesopt
         make       -C testsuite tools lib
     # Generate list of tests to run
     - name: Generate test list
