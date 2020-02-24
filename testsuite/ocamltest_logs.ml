@@ -40,28 +40,44 @@ let remove_quotes_and_ext s =
 
 let make_path components = List.fold_left Filename.concat "" components
 
-let print_log s =
+let files_to_print path test =
+  let rec aux acc h =
+    match Unix.readdir h with
+    | exception End_of_file -> acc
+    | s ->
+      begin match Filename.extension s with
+        | ".log" | ".output" ->
+          aux (Filename.concat path s :: acc) h
+        | _ -> aux acc h
+      end
+  in
+  aux [] (Unix.opendir path)
+  (* [ make_path [path; Format.asprintf "%s.log" test] ] *)
+
+let print_logs s =
+  (* Determine path to ocamltest directory for the test *)
   let f = List.hd (String.split_on_char ' ' s) in
   let l = String.split_on_char '/' f in
-  let path, test_name = split_last [] l in
+  let path_l, test_name = split_last [] l in
   let test_name = remove_quotes_and_ext test_name in
-  let path_to_log =
-    make_path (
-      path @
-      [ "_ocamltest" ] @
-      path @
-      [ test_name;
-        test_name ^ ".log" ]
-    )
+  let path_s = make_path path_l in
+  let directory_path =
+    make_path [path_s; "_ocamltest"; path_s; test_name]
   in
+  (* Determine the files to print *)
+  let files = files_to_print directory_path test_name in
+  (* Print some log + the files *)
   let sep = String.make 80 '#' in
-  Format.printf "%s@\n### LOG for test %s ###@\n@." sep test_name;
-  read_file_and_output path_to_log;
-  Format.printf "@\n@\n## END LOG ###@\n@."
+  Format.printf "%s@\n%s@\n@." sep sep;
+  List.iter (fun file ->
+      Format.printf "### LOG '%s' ###@\n@." file;
+      read_file_and_output file;
+      Format.printf "@\n## END LOG ###@\n@."
+    ) files
 
 let dispatch s = function
   | Failed_tests
-  | Unexpected_errors -> print_log s
+  | Unexpected_errors -> print_logs s
   | _ -> ()
 
 let rec read_and_dispatch mode =
