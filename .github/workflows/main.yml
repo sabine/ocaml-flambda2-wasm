@@ -47,7 +47,7 @@ jobs:
       run: git apply .github/workflows/ocamltest_makefile.patch
     # Install dependencies
     - name: Install dependencies
-      run: sudo apt-get install parallel
+      run: sudo apt-get install parallel texlive-latex-extra texlive-fonts-recommended
     # Configure the compiler
     - name: configure
       run: ./configure --enable-flambda
