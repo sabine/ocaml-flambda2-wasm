@@ -66,6 +66,7 @@ jobs:
         make -j $J -C otherlibs/unix allopt
         make -j $J -C otherlibs/bigarray allopt
         make -j $J -C otherlibs/systhreads allopt
+        make -j $J -C tools caml-tex
         make       -C testsuite tools lib
     # Generate list of tests to run
     - name: Generate test list
