@@ -375,12 +375,15 @@ let bytes_like_set_aux ~dbg kind width block ptr idx value =
 let bytes_like_set ?(dbg=Debuginfo.none) kind width block index value =
   match (kind : Flambda_primitive.bytes_like_value) with
   | Bytes ->
-      bytes_like_set_aux ~dbg kind width block block index value
+    return_unit dbg (
+      bytes_like_set_aux ~dbg kind width block block index value)
   | Bigstring ->
       let ba_data_addr = field_address block 1 dbg in
       let ba_data = load ~dbg Cmm.Word_int Asttypes.Mutable ba_data_addr in
-      bind "ba_data" ba_data (fun ptr ->
+      return_unit dbg (
+        bind "ba_data" ba_data (fun ptr ->
           bytes_like_set_aux ~dbg kind width block ptr index value)
+      )
 
 (* wrappers for bigarrays *)
 
@@ -431,7 +434,8 @@ let bigarray_store ?(dbg=Debuginfo.none) (is_safe : Flambda_primitive.is_safe)
         | Safe -> false
         | Unsafe -> true
       in
-      bigarray_set is_unsafe kind layout ba indexes value dbg
+      return_unit dbg (
+        bigarray_set is_unsafe kind layout ba indexes value dbg)
   | _ -> assert false
 
 (* try-with blocks *)
