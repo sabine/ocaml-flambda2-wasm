@@ -725,7 +725,7 @@ end = struct
 
   let create denv bound_symbols defining_expr ~types_of_symbols =
     let being_defined = Let_symbol.Bound_symbols.being_defined bound_symbols in
-    if not (Symbol.Set.subset (Symbol.Map.keys types_of_symbols) being_defined)
+    if not (Symbol.Set.equal (Symbol.Map.keys types_of_symbols) being_defined)
     then begin
       Misc.fatal_errorf "[types_of_symbols]:@ %a@ does not cover all symbols \
           in the definition:@ %a"

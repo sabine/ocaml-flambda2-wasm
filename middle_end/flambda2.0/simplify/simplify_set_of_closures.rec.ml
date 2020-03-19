@@ -489,10 +489,10 @@ let simplify_set_of_closures0 dacc context set_of_closures
       denv
       |> DE.map_typing_env ~f:(fun typing_env ->
         TE.with_code_age_relation typing_env code_age_relation)
-      |> DE.add_lifted_constants ~lifted:(R.get_lifted_constants r)
       |> Closure_id.Map.fold (fun _closure_id bound_name denv ->
              DE.define_name_if_undefined denv bound_name K.value)
            closure_bound_names
+      |> DE.add_lifted_constants ~lifted:(R.get_lifted_constants r)
       |> Name_in_binding_pos.Map.fold (fun bound_name closure_type denv ->
              let bound_name = Name_in_binding_pos.to_name bound_name in
              DE.add_equation_on_name denv bound_name closure_type)
