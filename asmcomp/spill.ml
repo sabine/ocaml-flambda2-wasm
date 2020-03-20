@@ -238,7 +238,7 @@ let rec reload i before =
       let set = find_reload_at_exit nfail in
       set := Reg.Set.union !set before;
       (i, Reg.Set.empty)
-  | Itrywith(body, kind, handler) ->
+  | Itrywith(body, kind, (ts, handler)) ->
       let (new_body, after_body) = reload body before in
       (* All registers live at the beginning of the handler are destroyed,
          except the exception bucket *)
@@ -248,7 +248,8 @@ let rec reload i before =
       let (new_handler, after_handler) = reload handler before_handler in
       let (new_next, finally) =
         reload i.next (Reg.Set.union after_body after_handler) in
-      (instr_cons (Itrywith(new_body, kind, new_handler)) i.arg i.res new_next,
+      (instr_cons (Itrywith(new_body, kind, (ts, new_handler)))
+         i.arg i.res new_next,
        finally)
   | Iraise _ ->
       (add_reloads (Reg.inter_set_array before i.arg) i, Reg.Set.empty)
@@ -415,9 +416,12 @@ let rec spill env i finally =
        before)
   | Iexit (nfail, _traps) ->
       (i, find_spill_at_exit env nfail)
-  | Itrywith(body, kind, handler) ->
+  | Itrywith(body, kind, (ts, handler)) ->
       let (new_next, at_join) = spill env i.next finally in
-      let (new_handler, before_handler) = spill env handler at_join in
+      let env_handler =
+        { env with at_raise = at_raise_from_trap_stack env ts; }
+      in
+      let (new_handler, before_handler) = spill env_handler handler at_join in
       let env_body =
         match kind with
         | Regular ->
@@ -430,7 +434,8 @@ let rec spill env i finally =
             }
       in
       let (new_body, before_body) = spill env_body body at_join in
-      (instr_cons (Itrywith(new_body, kind, new_handler)) i.arg i.res new_next,
+      (instr_cons (Itrywith(new_body, kind, (ts, new_handler)))
+         i.arg i.res new_next,
        before_body)
   | Iraise _ ->
       (i, env.at_raise)

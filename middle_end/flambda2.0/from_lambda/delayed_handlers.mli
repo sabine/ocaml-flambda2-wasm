@@ -33,10 +33,6 @@ val all
    : t
   -> (Continuation_handler.t * Name_occurrences.t) Continuation.Map.t
 
-val exn_handlers
-   : t
-  -> (Continuation_handler.t * Name_occurrences.t) Continuation.Map.t
-
 val remove_domain_of_map : t -> _ Continuation.Map.t -> t
 
 val union : t -> t -> t

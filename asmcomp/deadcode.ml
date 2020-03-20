@@ -141,11 +141,12 @@ let rec deadcode i =
     end
   | Iexit (nfail, _traps) ->
       { i;  regs = i.live; exits = Int.Set.singleton nfail; }
-  | Itrywith(body, kind, handler) ->
+  | Itrywith(body, kind, (ts, handler)) ->
       let body' = deadcode body in
       let handler' = deadcode handler in
       let s = deadcode i.next in
-      { i = {i with desc = Itrywith(body'.i, kind, handler'.i); next = s.i};
+      { i = {i with desc = Itrywith(body'.i, kind, (ts, handler'.i));
+                    next = s.i};
         regs = i.live;
         exits = Int.Set.union s.exits
                   (Int.Set.union body'.exits handler'.exits);

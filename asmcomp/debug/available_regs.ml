@@ -296,7 +296,7 @@ let rec available_regs (instr : M.instruction)
         in
         Hashtbl.replace avail_at_exit nfail avail_at_top_of_handler;
         None, unreachable
-      | Itrywith (body, Regular, handler) ->
+      | Itrywith (body, Regular, (_ts, handler)) ->
         let saved_avail_at_raise = !avail_at_raise in
         avail_at_raise := unreachable;
         let avail_before = ok avail_before in

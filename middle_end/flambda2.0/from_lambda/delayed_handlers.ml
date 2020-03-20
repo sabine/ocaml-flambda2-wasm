@@ -19,14 +19,12 @@ open! Flambda
 type t = {
   definitions :
     (Continuation_handler.t * Name_occurrences.t) Continuation.Map.t;
-  exn_handlers : Continuation.Set.t;
   rev_deps_of_variables : Continuation.Set.t Variable.Map.t;
   rev_deps_of_continuations : Continuation.Set.t Continuation.Map.t;
 }
 
 let empty = {
   definitions = Continuation.Map.empty;
-  exn_handlers = Continuation.Set.empty;
   rev_deps_of_variables = Variable.Map.empty;
   rev_deps_of_continuations = Continuation.Map.empty;
 }
@@ -36,12 +34,6 @@ let add_handler t cont handler =
     Continuation.Map.add cont
       (handler, Continuation_handler.free_names handler)
       t.definitions
-  in
-  let exn_handlers =
-    if Continuation_handler.is_exn_handler handler then
-      Continuation.Set.add cont t.exn_handlers
-    else
-      t.exn_handlers
   in
   let free_names = Continuation_handler.free_names handler in
   let rev_deps_of_variables =
@@ -69,7 +61,6 @@ let add_handler t cont handler =
           rev_deps_of_continuations)
   in
   { definitions;
-    exn_handlers;
     rev_deps_of_variables;
     rev_deps_of_continuations;
   }
@@ -127,43 +118,28 @@ let find_rev_deps t names =
 
 let all t = t.definitions
 
-let exn_handlers t =
-  Continuation.Set.fold (fun cont result ->
-      let handler = Continuation.Map.find cont t.definitions in
-      Continuation.Map.add cont handler result)
-    t.exn_handlers
-    Continuation.Map.empty
-
 let remove_domain_of_map t map =
   let definitions =
     Continuation.Map.filter (fun cont _ -> not (Continuation.Map.mem cont map))
       t.definitions
   in
-  let exn_handlers =
-    Continuation.Set.filter (fun cont -> not (Continuation.Map.mem cont map))
-      t.exn_handlers
-  in
   { definitions;
-    exn_handlers;
     rev_deps_of_variables = t.rev_deps_of_variables;
     rev_deps_of_continuations = t.rev_deps_of_continuations;
   }
 
 let union
       { definitions = definitions1;
-        exn_handlers = exn_handlers1;
         rev_deps_of_variables = rev_deps_of_variables1;
         rev_deps_of_continuations = rev_deps_of_continuations1;
       }
       { definitions = definitions2;
-        exn_handlers = exn_handlers2;
         rev_deps_of_variables = rev_deps_of_variables2;
         rev_deps_of_continuations = rev_deps_of_continuations2;
       } =
   let definitions =
     Continuation.Map.disjoint_union definitions1 definitions2
   in
-  let exn_handlers = Continuation.Set.union exn_handlers1 exn_handlers2 in
   let rev_deps_of_variables =
     Variable.Map.union
       (fun _ conts1 conts2 -> Some (Continuation.Set.union conts1 conts2))
@@ -177,7 +153,6 @@ let union
       rev_deps_of_continuations2
   in
   { definitions;
-    exn_handlers;
     rev_deps_of_variables;
     rev_deps_of_continuations;
   }

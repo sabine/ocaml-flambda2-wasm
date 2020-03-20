@@ -82,11 +82,7 @@ let drop_handlers handlers ~leaving_scope_of ~around:body =
        a continuation [k] depends on such variable or continuation, then the
        continuation [k] must be dropped just after the corresponding binding,
        together with any other continuations which have [k] free in them. *)
-    Continuation.Map.disjoint_union
-      ~eq:(fun (handler, _) (handler', _) -> handler == handler')
-      (Delayed_handlers.find_rev_deps handlers leaving_scope_of)
-      (* CR mshinwell: Remove the following when the backend is fixed: *)
-      (Delayed_handlers.exn_handlers handlers)
+    Delayed_handlers.find_rev_deps handlers leaving_scope_of
   in
   let body = drop_handlers0 to_drop ~around:body in
   let handlers = Delayed_handlers.remove_domain_of_map handlers to_drop in

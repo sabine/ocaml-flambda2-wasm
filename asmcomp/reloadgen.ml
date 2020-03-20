@@ -119,9 +119,9 @@ method private reload i =
         (self#reload i.next)
   | Iexit (i, traps) ->
       instr_cons (Iexit (i, traps)) [||] [||] dummy_instr
-  | Itrywith(body, kind, handler) ->
-      instr_cons (Itrywith(self#reload body, kind, self#reload handler)) [||] [||]
-        (self#reload i.next)
+  | Itrywith(body, kind, (ts, handler)) ->
+      instr_cons (Itrywith(self#reload body, kind, (ts, self#reload handler)))
+        [||] [||] (self#reload i.next)
 
 method fundecl f num_stack_slots =
   redo_regalloc <- false;

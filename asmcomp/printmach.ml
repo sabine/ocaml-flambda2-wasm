@@ -223,7 +223,7 @@ let rec instr ppf i =
       fprintf ppf "@;<0 -2>endcatch@]"
   | Iexit (i, traps) ->
       fprintf ppf "exit%a(%d)" Printcmm.trap_action_list traps i
-  | Itrywith(body, kind, handler) ->
+  | Itrywith(body, kind, (_ts, handler)) ->
       fprintf ppf "@[<v 2>try%a@,%a@;<0 -2>with@,%a@;<0 -2>endtry@]"
              Printcmm.trywith_kind kind instr body instr handler
   | Iraise k ->

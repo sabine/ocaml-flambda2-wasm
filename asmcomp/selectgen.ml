@@ -55,7 +55,7 @@ let env_find_static_exception id env =
 let env_enter_trywith env kind =
   match kind with
   | Regular -> { env with trap_stack = Generic_trap env.trap_stack; }
-  | Delayed _ -> env
+  | Delayed id -> let env, _ = env_add_static_exception id [] env in env
 
 let env_set_trap_stack env trap_stack =
   { env with trap_stack; }
@@ -69,14 +69,40 @@ let rec combine_traps trap_stack = function
       | Generic_trap ts | Specific_trap (_, ts) -> combine_traps ts l
       end
 
+let print_traps ppf traps =
+  let rec print_traps ppf = function
+    | Uncaught -> Format.fprintf ppf "T"
+    | Generic_trap ts -> Format.fprintf ppf "_::%a" print_traps ts
+    | Specific_trap (lbl, ts) -> Format.fprintf ppf "%d::%a" lbl print_traps ts
+  in
+  Format.fprintf ppf "(%a)" print_traps traps
+
 let set_traps nfail traps_ref base_traps exit_traps =
   let traps = combine_traps base_traps exit_traps in
   match !traps_ref with
-  | Unreachable -> traps_ref := Reachable traps
+  | Unreachable ->
+    (* Format.eprintf "Traps for %d set to %a@." nfail print_traps traps; *)
+    traps_ref := Reachable traps
   | Reachable prev_traps ->
       if prev_traps <> traps then
-        Misc.fatal_errorf "Mismatching trap stacks for continuation %d" nfail
+        Misc.fatal_errorf "Mismatching trap stacks for continuation %d@.\
+                           Previous traps: %a@.\
+                           New traps: %a"
+          nfail
+          print_traps prev_traps
+          print_traps traps
       else ()
+
+let set_traps_for_raise env =
+  let ts = env.trap_stack in
+  match ts with
+  | Uncaught
+  | Generic_trap _ -> ()
+  | Specific_trap (lbl, _) ->
+    begin match env_find_static_exception lbl env with
+    | (_, traps_ref) -> set_traps lbl traps_ref ts [Pop]
+    | exception Not_found -> Misc.fatal_errorf "Trap %d not registered in env" lbl
+    end
 
 let trap_stack_is_empty env =
   match env.trap_stack with
@@ -763,6 +789,7 @@ method emit_expr (env:environment) exp =
           let rd = [|Proc.loc_exn_bucket|] in
           self#insert env (Iop Imove) r1 rd;
           self#insert_debug env  (Iraise k) dbg rd [||];
+          set_traps_for_raise env;
           None
       end
   | Cop(Ccmpf _, _, dbg) ->
@@ -792,6 +819,7 @@ method emit_expr (env:environment) exp =
               self#insert_debug env (Iop new_op) dbg
                           (Array.append [|r1.(0)|] loc_arg) loc_res;
               self#insert_move_results env loc_res rd stack_ofs;
+              set_traps_for_raise env;
               Some rd
           | Icall_imm _ ->
               let r1 = self#emit_tuple env new_args in
@@ -805,6 +833,7 @@ method emit_expr (env:environment) exp =
               self#maybe_emit_spacetime_move env ~spacetime_reg;
               self#insert_debug env (Iop new_op) dbg loc_arg loc_res;
               self#insert_move_results env loc_res rd stack_ofs;
+              set_traps_for_raise env;
               Some rd
           | Iextcall _ ->
               let spacetime_reg =
@@ -817,6 +846,7 @@ method emit_expr (env:environment) exp =
                 self#insert_op_debug env new_op dbg
                   loc_arg (Proc.loc_external_results rd) in
               self#insert_move_results env loc_res rd stack_ofs;
+              set_traps_for_raise env;
               Some rd
           | Ialloc { bytes = _; spacetime_index; label_after_call_gc; } ->
               let rd = self#regs_for typ_val in
@@ -827,6 +857,7 @@ method emit_expr (env:environment) exp =
               let args = self#select_allocation_args env in
               self#insert_debug env (Iop op) dbg args rd;
               self#emit_stores env new_args rd;
+              set_traps_for_raise env;
               Some rd
           | op ->
               let r1 = self#emit_tuple env new_args in
@@ -964,12 +995,27 @@ method emit_expr (env:environment) exp =
       let env_body = env_enter_trywith env kind in
       let (r1, s1) = self#emit_sequence env_body e1 in
       let rv = self#regs_for typ_val in
-      let (r2, s2) = self#emit_sequence (env_add v rv env) e2 in
+      let env_handler =
+        let env = env_add v rv env in
+        match kind with
+        | Regular -> env
+        | Delayed lbl ->
+          begin match env_find_static_exception lbl env_body with
+          | (_, { contents = Reachable ts; }) ->
+            env_set_trap_stack env ts
+          | (_, { contents = Unreachable; }) ->
+            Misc.fatal_errorf "Selection.emit_expr: Unreachable exception handler %d" lbl
+          | exception Not_found ->
+            Misc.fatal_errorf "Selection.emit_expr: Unbound handler %d" lbl
+          end
+      in
+      let (r2, s2) = self#emit_sequence env_handler e2 in
       let r = join env r1 s1 r2 s2 in
       self#insert env
         (Itrywith(s1#extract, kind,
-                  instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv
-                             (s2#extract)))
+                  (env_handler.trap_stack,
+                   instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv
+                              (s2#extract))))
         [||] [||];
       r
 
@@ -1179,6 +1225,7 @@ method emit_tail (env:environment) exp =
                 self#maybe_emit_spacetime_move env ~spacetime_reg;
                 self#insert_debug env (Iop new_op) dbg
                             (Array.append [|r1.(0)|] loc_arg) loc_res;
+                set_traps_for_raise env;
                 self#insert env (Iop(Istackoffset(-stack_ofs))) [||] [||];
                 self#insert env (Ireturn (pop_all_traps env)) loc_res [||]
               end
@@ -1193,7 +1240,7 @@ method emit_tail (env:environment) exp =
                 self#insert_moves env r1 loc_arg;
                 self#maybe_emit_spacetime_move env ~spacetime_reg;
                 self#insert_debug env call dbg loc_arg [||];
-              end else if func = !current_function_name then begin
+              end else if func = !current_function_name && trap_stack_is_empty env then begin
                 let call = Iop (Itailcall_imm { func; label_after; }) in
                 let loc_arg' = Proc.loc_parameters r1 in
                 let spacetime_reg =
@@ -1211,6 +1258,7 @@ method emit_tail (env:environment) exp =
                 self#insert_move_args env r1 loc_arg stack_ofs;
                 self#maybe_emit_spacetime_move env ~spacetime_reg;
                 self#insert_debug env (Iop new_op) dbg loc_arg loc_res;
+                set_traps_for_raise env;
                 self#insert env (Iop(Istackoffset(-stack_ofs))) [||] [||];
                 self#insert env (Ireturn (pop_all_traps env)) loc_res [||]
               end
@@ -1298,10 +1346,25 @@ method emit_tail (env:environment) exp =
       let env_body = env_enter_trywith env kind in
       let s1 = self#emit_tail_sequence env_body e1 in
       let rv = self#regs_for typ_val in
-      let s2 = self#emit_tail_sequence (env_add v rv env) e2 in
+      let env_handler =
+        let env = env_add v rv env in
+        match kind with
+        | Regular -> env
+        | Delayed lbl ->
+          begin match env_find_static_exception lbl env_body with
+          | (_, { contents = Reachable ts; }) ->
+            env_set_trap_stack env ts
+          | (_, { contents = Unreachable; }) ->
+            Misc.fatal_errorf "Selection.emit_expr: Unreachable exception handler %d" lbl
+          | exception Not_found ->
+            Misc.fatal_errorf "Selection.emit_expr: Unbound handler %d" lbl
+          end
+      in
+      let s2 = self#emit_tail_sequence env_handler e2 in
       self#insert env
         (Itrywith(s1, kind,
-                  instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv s2))
+                  (env_handler.trap_stack,
+                   instr_cons (Iop Imove) [|Proc.loc_exn_bucket|] rv s2)))
         [||] [||]
   | _ ->
       self#emit_return env exp (pop_all_traps env)

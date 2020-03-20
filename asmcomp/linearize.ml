@@ -280,8 +280,9 @@ let linear i n contains_calls =
         in
         let n1 = adjust_trap_depth (-delta_traps) n in
         add_traps env (add_branch lbl n1) traps
-    | Itrywith(body, Regular, handler) ->
+    | Itrywith(body, Regular, (ts, handler)) ->
         let (lbl_join, n1) = get_label (linear env i.Mach.next n) in
+        assert (ts = env.trap_stack);
         let (lbl_handler, n2) =
           get_label (cons_instr Lentertrap (linear env handler n1))
         in
@@ -295,15 +296,19 @@ let linear i n contains_calls =
                          Lpoptrap
                          (add_branch lbl_join n2))) in
         n3
-    | Itrywith(body, Delayed nfail, handler) ->
+    | Itrywith(body, Delayed nfail, (ts, handler)) ->
         let (lbl_join, n1) = get_label (linear env i.Mach.next n) in
+        let delta = delta_traps ts env.trap_stack in
+        let n1' = adjust_trap_depth delta n1 in
+        let env_handler = { env with trap_stack = ts; } in
         let (lbl_handler, n2) =
-          get_label (cons_instr Lentertrap (linear env handler n1))
+          get_label (cons_instr Lentertrap (linear env_handler handler n1'))
         in
+        let n2' = adjust_trap_depth (-delta) n2 in
         let env_body =
           {env with exit_label = (nfail, lbl_handler) :: env.exit_label; }
         in
-        let n3 = linear env_body body (add_branch lbl_join n2) in
+        let n3 = linear env_body body (add_branch lbl_join n2') in
         n3
     | Iraise k ->
         copy_instr (Lraise k) i (discard_dead_code n)

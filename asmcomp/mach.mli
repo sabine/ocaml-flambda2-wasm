@@ -107,7 +107,7 @@ and instruction_desc =
   | Iswitch of int array * instruction array
   | Icatch of Cmm.rec_flag * (int * trap_stack * instruction) list * instruction
   | Iexit of int * Cmm.trap_action list
-  | Itrywith of instruction * Cmm.trywith_kind * instruction
+  | Itrywith of instruction * Cmm.trywith_kind * (trap_stack * instruction)
   | Iraise of Lambda.raise_kind
 
 type spacetime_part_of_shape =

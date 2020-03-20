@@ -70,7 +70,7 @@ let inline dacc ~callee ~args function_decl
               (DE.set_inlined_debuginfo denv dbg)
               (apply_inlining_depth + 1)
           in
-          let make_inlined_body ~apply_exn_continuation =
+          let make_inlined_body ~apply_exn_continuation ~apply_return_continuation =
             let perm =
               Name_permutation.add_continuation
                 (Name_permutation.add_continuation Name_permutation.empty
@@ -97,9 +97,52 @@ let inline dacc ~callee ~args function_decl
             | [] ->
               make_inlined_body ~apply_exn_continuation:
                 (Exn_continuation.exn_handler apply_exn_continuation)
+                ~apply_return_continuation
             | extra_args ->
+              (* We need to add a wrapper for the exception handler, so that
+                 exceptions coming from the inlined body go through the wrapper
+                 and are re-raised with the correct extra arguments.
+                 This means we also need to add a push trap before the inlined
+                 body, and a pop trap after.
+                 The push trap is simply a matter of jumping to the body, while
+                 the pop trap needs to replace the body's return continuation with
+                 a wrapper that pops then jumps back.
+              *)
               let wrapper = Continuation.create ~sort:Exn () in
-              let body = make_inlined_body ~apply_exn_continuation:wrapper in
+              let pop_wrapper_cont = Continuation.create () in
+              let pop_wrapper_handler =
+                let kinded_params =
+                  List.map (fun k -> (Variable.create "wrapper_return", k))
+                    (I.result_arity function_decl)
+                in
+                let trap_action =
+                  Trap_action.Pop { exn_handler = wrapper; raise_kind = None; }
+                in
+                let args = List.map (fun (v, _) -> Simple.var v) kinded_params in
+                let handler =
+                  Expr.create_apply_cont (Apply_cont.create
+                    ~trap_action
+                    apply_return_continuation
+                    ~args
+                    ~dbg: Debuginfo.none)
+                in
+                let params_and_handler =
+                  Continuation_params_and_handler.create
+                    (Kinded_parameter.List.create kinded_params)
+                    ~handler
+                in
+                Continuation_handler.create ~params_and_handler
+                  ~stub:false
+                  ~is_exn_handler:false
+              in
+              let body =
+                make_inlined_body ~apply_exn_continuation:wrapper
+                  ~apply_return_continuation:pop_wrapper_cont
+              in
+              let body_with_pop =
+                Let_cont.create_non_recursive pop_wrapper_cont
+                  pop_wrapper_handler ~body
+              in
               let wrapper_handler =
                 let param = Variable.create "exn" in
                 let kinded_params = [KP.create param K.value] in
@@ -125,7 +168,33 @@ let inline dacc ~callee ~args function_decl
                   ~stub:false
                   ~is_exn_handler:true
               in
-              Let_cont.create_non_recursive wrapper wrapper_handler ~body
+              let body_with_push =
+                (* Wrap the body between push and pop of the wrapper handler *)
+                let push_wrapper_cont = Continuation.create () in
+                let handler = body_with_pop in
+                let params_and_handler =
+                  Continuation_params_and_handler.create [] ~handler
+                in
+                let push_wrapper_handler =
+                  Continuation_handler.create ~params_and_handler
+                    ~stub:false
+                    ~is_exn_handler:false
+                in
+                let trap_action =
+                  Trap_action.Push { exn_handler = wrapper; }
+                in
+                let body =
+                  Expr.create_apply_cont (Apply_cont.create
+                    ~trap_action
+                    push_wrapper_cont
+                    ~args: []
+                    ~dbg: Debuginfo.none)
+                in
+                Let_cont.create_non_recursive push_wrapper_cont
+                  push_wrapper_handler ~body
+              in
+              Let_cont.create_non_recursive wrapper wrapper_handler
+                ~body:body_with_push
           in
 (*
   Format.eprintf "Inlined body to be simplified:@ %a\n%!"

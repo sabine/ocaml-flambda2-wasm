@@ -228,7 +228,7 @@ let rec instruction_desc env i args res = function
       List.fold_left instruction (instruction env body) (List.map h l)
   | Iexit _ ->
       env
-  | Itrywith (e, _, f) ->
+  | Itrywith (e, _, (_, f)) ->
       instruction (instruction env e) f
   | Iraise _ ->
       env

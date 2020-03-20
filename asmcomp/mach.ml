@@ -88,7 +88,7 @@ and instruction_desc =
   | Iswitch of int array * instruction array
   | Icatch of Cmm.rec_flag * (int * trap_stack * instruction) list * instruction
   | Iexit of int * Cmm.trap_action list
-  | Itrywith of instruction * Cmm.trywith_kind * instruction
+  | Itrywith of instruction * Cmm.trywith_kind * (trap_stack * instruction)
   | Iraise of Lambda.raise_kind
 
 type spacetime_part_of_shape =
@@ -164,7 +164,7 @@ let rec instr_iter f i =
           List.iter (fun (_n, _ts, handler) -> instr_iter f handler) handlers;
           instr_iter f i.next
       | Iexit _ -> ()
-      | Itrywith(body, _kind, handler) ->
+      | Itrywith(body, _kind, (_ts, handler)) ->
           instr_iter f body; instr_iter f handler; instr_iter f i.next
       | Iraise _ -> ()
       | _ ->

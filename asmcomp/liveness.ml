@@ -146,9 +146,10 @@ let rec live env i finally =
       let this_live = find_live_at_exit env nfail in
       i.live <- this_live ;
       this_live
-  | Itrywith(body, kind, handler) ->
+  | Itrywith(body, kind, (ts, handler)) ->
       let at_join = live env i.next finally in
-      let before_handler = live env handler at_join in
+      let env_handler = env_from_trap_stack env ts in
+      let before_handler = live env_handler handler at_join in
       let live_at_raise = Reg.Set.remove Proc.loc_exn_bucket before_handler in
       let env =
         match kind with
