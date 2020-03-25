@@ -103,7 +103,8 @@ let primitive_boxed_int_of_standard_int b =
   | Naked_int64 -> Primitive.Pint64
   | Naked_nativeint -> Primitive.Pnativeint
   | Naked_immediate
-  | Tagged_immediate -> assert false
+  | Tagged_immediate ->
+    Misc.fatal_errorf "No corresponding primitive boxed int type."
 
 let primitive_boxed_int_of_boxable_number b =
   match (b : Flambda_kind.Boxable_number.t) with
