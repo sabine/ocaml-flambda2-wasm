@@ -339,8 +339,8 @@ let variadic_prim_size prim args =
     alloc_extcall_size + List.length args
   (* CR Gbury: this is assuming that the modification to the
      generation of code for indexing into bigarray is done *)
-  | Bigarray_load (_is_safe, _dimensions, _kind, _layout) -> 2
-  | Bigarray_set (_is_safe, _dimensions, _kind, _layout) -> 2
+  | Bigarray_load (_is_safe, dims, _kind, _layout) -> 4 + dims * 6
+  | Bigarray_set (_is_safe, dims, _kind, _layout) -> 4 + dims * 6
 
 let prim_size (prim : Flambda_primitive.t) =
   match prim with
