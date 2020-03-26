@@ -810,27 +810,37 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
   | Pbigarrayref (unsafe, num_dimensions, kind, layout), args ->
     begin match C.convert_bigarray_kind kind,
                 C.convert_bigarray_layout layout with
-    | Some _kind, Some _layout ->
+    | Some kind, Some layout ->
       let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
       let box = bigarray_box_raw_value_read kind in
       box (Variadic (Bigarray_load (is_safe, num_dimensions, kind, layout), args))
     | None, _ ->
       Misc.fatal_errorf
-        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
          with an unknown kind should have been removed by Prepare_lambda."
     | _, None ->
       Misc.fatal_errorf
-        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
          with an unknown layout should have been removed by Prepare_lambda."
     end
   | Pbigarrayset (unsafe, num_dimensions, kind, layout), args ->
-    let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
-    let kind = C.convert_bigarray_kind kind in
-    let layout = C.convert_bigarray_layout layout in
-    let unbox = bigarray_unbox_value_to_store kind in
-    let indexes, value_to_store = Misc.split_last args in
-    Variadic (Bigarray_set (is_safe, num_dimensions, kind, layout),
-              indexes @ [unbox value_to_store])
+    begin match C.convert_bigarray_kind kind,
+                C.convert_bigarray_layout layout with
+    | Some kind, Some layout ->
+      let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
+      let unbox = bigarray_unbox_value_to_store kind in
+      let indexes, value_to_store = Misc.split_last args in
+      Variadic (Bigarray_set (is_safe, num_dimensions, kind, layout),
+                indexes @ [unbox value_to_store])
+    | None, _ ->
+      Misc.fatal_errorf
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
+         with an unknown kind should have been removed by Prepare_lambda."
+    | _, None ->
+      Misc.fatal_errorf
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
+         with an unknown layout should have been removed by Prepare_lambda."
+    end
   | Pbigarraydim dimension, [arg] ->
     tag_int (Unary (Bigarray_length { dimension; }, arg))
   | Pbigstring_load_16 true, [arg1; arg2] ->

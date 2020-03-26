@@ -392,11 +392,9 @@ let lambda_ba_layout layout =
   match (layout : Flambda_primitive.bigarray_layout) with
   | C -> Lambda.Pbigarray_c_layout
   | Fortran -> Lambda.Pbigarray_fortran_layout
-  | Unknown -> Lambda.Pbigarray_unknown_layout
 
 let lambda_ba_kind k =
   match (k : Flambda_primitive.bigarray_kind) with
-  | Unknown -> Lambda.Pbigarray_unknown
   | Float32 -> Lambda.Pbigarray_float32
   | Float64 -> Lambda.Pbigarray_float64
   | Sint8   -> Lambda.Pbigarray_sint8

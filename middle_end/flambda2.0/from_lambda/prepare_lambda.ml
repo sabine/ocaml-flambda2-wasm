@@ -455,62 +455,50 @@ let simplify_primitive (prim : L.primitive) args loc =
       }
     in
     L.Lapply apply
-  | Pbigarrayref (unsafe, num_dimensions, kind, layout), args ->
+  | Pbigarrayref (_unsafe, num_dimensions, kind, layout), args ->
     begin match C.convert_bigarray_kind kind,
                 C.convert_bigarray_layout layout with
     | Some _, Some _ ->
       L.Lprim (prim, args, loc)
     | None, None ->
       if 1 <= num_dimensions && num_dimensions <= 3 then begin
-        if unsafe then
-          Misc.fatal_errorf
-            "Prepare_lambda.prepare_prim: Pbigarrayref with unknown layout
-             and elements should be safe, not unsafe (see translprim)."
-        else begin
-          let arity = 1 + num_dimensions in
-          let name = "caml_ba_get_" ^ string_of_int num_dimensions in
-          let desc = Primitive.simple ~name ~arity ~alloc:true in
-          L.Lprim (Pccall desc, args, loc)
-        end
+        let arity = 1 + num_dimensions in
+        let name = "caml_ba_get_" ^ string_of_int num_dimensions in
+        let desc = Primitive.simple ~name ~arity ~alloc:true in
+        L.Lprim (Pccall desc, args, loc)
       end else begin
         Misc.fatal_errorf
-          "Prepare_lambda.prepare_prim: Pbigarrayref with unknown layout
-           and elements should only have dimensions between 1 and 3
+          "Prepare_lambda.prepare_prim: Pbigarrayref with unknown layout \
+           and elements should only have dimensions between 1 and 3 \
            (see translprim)."
       end
     | None, Some _
     | Some _, None ->
       Misc.fatal_errorf
-        "Prepare_lambda.prepare_prim: Pbigarrayref should either have
+        "Prepare_lambda.prepare_prim: Pbigarrayref should either have \
          both layout and elt_kind unknown or both known (seet translprim)."
     end
-  | Pbigarrayset (unsafe, num_dimensions, kind, layout), args ->
+  | Pbigarrayset (_unsafe, num_dimensions, kind, layout), args ->
     begin match C.convert_bigarray_kind kind,
                 C.convert_bigarray_layout layout with
     | Some _, Some _ ->
       L.Lprim (prim, args, loc)
     | None, None ->
       if 1 <= num_dimensions && num_dimensions <= 3 then begin
-        if unsafe then
-          Misc.fatal_errorf
-            "Prepare_lambda.prepare_prim: Pbigarrayset with unknown layout
-             and elements should be safe, not unsafe (see translprim)."
-        else begin
-          let arity = 1 + num_dimensions in
-          let name = "caml_ba_set_" ^ string_of_int num_dimensions in
-          let desc = Primitive.simple ~name ~arity ~alloc:true in
-          L.Lprim (Pccall desc, args, loc)
-        end
+        let arity = 2 + num_dimensions in
+        let name = "caml_ba_set_" ^ string_of_int num_dimensions in
+        let desc = Primitive.simple ~name ~arity ~alloc:true in
+        L.Lprim (Pccall desc, args, loc)
       end else begin
         Misc.fatal_errorf
-          "Prepare_lambda.prepare_prim: Pbigarrayset with unknown layout
-           and elements should only have dimensions between 1 and 3
+          "Prepare_lambda.prepare_prim: Pbigarrayset with unknown layout \
+           and elements should only have dimensions between 1 and 3 \
            (see translprim)."
       end
     | None, Some _
     | Some _, None ->
       Misc.fatal_errorf
-        "Prepare_lambda.prepare_prim: Pbigarrayset should either have
+        "Prepare_lambda.prepare_prim: Pbigarrayset should either have \
          both layout and elt_kind unknown or both known (see translprim)."
     end
   | _, _ -> L.Lprim (prim, args, loc)
