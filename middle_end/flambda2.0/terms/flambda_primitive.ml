@@ -331,7 +331,7 @@ let element_kind_of_bigarray_kind k =
 let print_bigarray_kind ppf k =
   let fprintf = Format.fprintf in
   match k with
-  | Unknown -> fprintf ppf "Unknown"
+  (* | Unknown -> fprintf ppf "Unknown" *)
   | Float32 -> fprintf ppf "Float32"
   | Float64 -> fprintf ppf "Float64"
   | Sint8 -> fprintf ppf "Sint8"
@@ -1121,7 +1121,7 @@ let effects_and_coeffects_of_variadic_primitive p =
   | Bigarray_set (_, _, _, _) ->
     (* XXX Need to check the is_safe flag *)
     writing_to_an_array_like_thing
-  | Bigarray_load (_, _, (Unknown | Complex32 | Complex64), _) ->
+  | Bigarray_load (_, _, ((*Unknown | *) Complex32 | Complex64), _) ->
     (* XXX Need to check the is_safe flag *)
     Effects.Only_generative_effects Immutable, Coeffects.Has_coeffects
   | Bigarray_load (_, _, _, _) ->
