@@ -124,7 +124,7 @@ type ordered_comparison = Lt | Gt | Le | Ge
 type equality_comparison = Eq | Neq
 
 type bigarray_kind =
-  | Unknown
+  (* | Unknown *)
   | Float32 | Float64
   | Sint8 | Uint8
   | Sint16 | Uint16
@@ -136,7 +136,7 @@ val element_kind_of_bigarray_kind : bigarray_kind -> Flambda_kind.t
 
 type is_safe = Safe | Unsafe
 
-type bigarray_layout = Unknown | C | Fortran
+type bigarray_layout = (* Unknown | *) C | Fortran
 
 (* CR xclerc: We can use array_kind instead
 type block_set_kind =

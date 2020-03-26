@@ -302,7 +302,7 @@ let compare_is_safe is_safe1 is_safe2 =
   Stdlib.compare is_safe1 is_safe2
 
 type bigarray_kind =
-  | Unknown
+  (* | Unknown *)
   | Float32 | Float64
   | Sint8 | Uint8
   | Sint16 | Uint16
@@ -312,7 +312,7 @@ type bigarray_kind =
 
 let element_kind_of_bigarray_kind k =
   match k with
-  | Unknown -> K.value
+  (* | Unknown -> K.value *)
   | Float32
   | Float64 -> K.naked_float
   | Sint8
@@ -345,12 +345,12 @@ let print_bigarray_kind ppf k =
   | Complex32 -> fprintf ppf "Complex32"
   | Complex64 -> fprintf ppf "Complex64"
 
-type bigarray_layout = Unknown | C | Fortran
+type bigarray_layout = (* Unknown | *) C | Fortran
 
 let print_bigarray_layout ppf l =
   let fprintf = Format.fprintf in
   match l with
-  | Unknown -> fprintf ppf "Unknown"
+  (* | Unknown -> fprintf ppf "Unknown" *)
   | C -> fprintf ppf "C"
   | Fortran -> fprintf ppf "Fortran"
 
