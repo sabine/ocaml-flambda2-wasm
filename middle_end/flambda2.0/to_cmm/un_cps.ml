@@ -607,18 +607,27 @@ and named env n =
 
 and let_expr env t =
   Let.pattern_match t ~f:(fun ~bound_vars ~body ->
+    let mode = Bindable_let_bound.name_mode bound_vars in
+    begin match Name_mode.descr mode with
+    | In_types ->
+      Misc.fatal_errorf
+        "Binding in terms a variable of mode In_types is forbidden"
+    | Phantom ->
+      expr env body
+    | Normal ->
       let e = Let.defining_expr t in
-      match bound_vars, e with
+      begin match bound_vars, e with
       | Singleton v, _ ->
-          let v = Var_in_binding_pos.var v in
-          let_expr_aux env v e body
+        let v = Var_in_binding_pos.var v in
+        let_expr_aux env v e body
       | Set_of_closures { closure_vars; _ }, Set_of_closures soc ->
-          let_set_of_closures env body closure_vars soc
+        let_set_of_closures env body closure_vars soc
       | Set_of_closures _, (Simple _ | Prim _) ->
-          Misc.fatal_errorf
-            "Set_of_closures binding a non-Set_of_closures:@ %a"
-            Let.print t
-    )
+        Misc.fatal_errorf
+          "Set_of_closures binding a non-Set_of_closures:@ %a"
+          Let.print t
+      end
+    end)
 
 and let_symbol env let_sym =
   let body = Let_symbol.body let_sym in
