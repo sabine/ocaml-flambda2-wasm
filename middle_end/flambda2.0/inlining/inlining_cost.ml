@@ -376,7 +376,6 @@ let smaller' denv expr ~than:threshold =
               continuation_handler_size denv handler)
             handlers)
     | Apply apply ->
-      let call_args = List.length (Apply.args apply) in
       let call_cost =
         match Apply.call_kind apply with
         | Function Direct _ -> direct_call_size
@@ -387,8 +386,13 @@ let smaller' denv expr ~than:threshold =
         | C_call { alloc = false; _ } -> nonalloc_extcall_size
         | Method _ -> 8 (* from flambda/inlining_cost.ml *)
       in
-      size := !size + call_cost + call_args
-    | Apply_cont _ -> incr size
+      size := !size + call_cost
+    | Apply_cont e ->
+      begin match Apply_cont.trap_action e with
+      | None -> ()
+      | Some (Push _ | Pop _) -> size := !size + 4
+      end;
+      incr size
     | Switch switch -> size := !size + (5 * Switch.num_arms switch)
     | Invalid _ -> ()
   and named_size denv (named : Named.t) =
