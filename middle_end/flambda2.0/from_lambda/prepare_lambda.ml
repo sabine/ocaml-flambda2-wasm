@@ -476,7 +476,7 @@ let simplify_primitive (prim : L.primitive) args loc =
     | Some _, None ->
       Misc.fatal_errorf
         "Prepare_lambda.prepare_prim: Pbigarrayref should either have \
-         both layout and elt_kind unknown or both known (seet translprim)."
+         both layout and elt_kind unknown or both known (see translprim)."
     end
   | Pbigarrayset (_unsafe, num_dimensions, kind, layout), args ->
     begin match C.convert_bigarray_kind kind,

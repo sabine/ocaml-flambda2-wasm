@@ -174,6 +174,12 @@ let bigarray_unbox_value_to_store kind =
       "Don't know how to unbox a fabricated expression to \
        store it in a bigarray"
 
+let bigarray_indexing kind layout b args =
+  let aux ((checks, offset) as acc) idx =
+    assert false
+  in
+  List.fold_left aux ([], 0) args
+
 let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       (dbg : Debuginfo.t) : H.expr_primitive =
   let args = List.map (fun arg : H.simple_or_prim -> Simple arg) args in
