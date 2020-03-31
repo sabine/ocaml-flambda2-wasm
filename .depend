@@ -1960,7 +1960,6 @@ asmcomp/asmgen.cmo : \
     asmcomp/selection.cmi \
     asmcomp/scheduling.cmi \
     asmcomp/reload.cmi \
-    asmcomp/regtype.cmi \
     asmcomp/reg.cmi \
     utils/profile.cmi \
     asmcomp/proc.cmi \
@@ -2009,7 +2008,6 @@ asmcomp/asmgen.cmx : \
     asmcomp/selection.cmx \
     asmcomp/scheduling.cmx \
     asmcomp/reload.cmx \
-    asmcomp/regtype.cmx \
     asmcomp/reg.cmx \
     utils/profile.cmx \
     asmcomp/proc.cmx \
@@ -2663,26 +2661,6 @@ asmcomp/reg.cmx : \
 asmcomp/reg.cmi : \
     asmcomp/cmm.cmi \
     middle_end/backend_var.cmi
-asmcomp/regtype.cmo : \
-    asmcomp/reg.cmi \
-    asmcomp/printmach.cmi \
-    asmcomp/printcmm.cmi \
-    utils/misc.cmi \
-    asmcomp/mach.cmi \
-    asmcomp/cmm.cmi \
-    asmcomp/arch.cmo \
-    asmcomp/regtype.cmi
-asmcomp/regtype.cmx : \
-    asmcomp/reg.cmx \
-    asmcomp/printmach.cmx \
-    asmcomp/printcmm.cmx \
-    utils/misc.cmx \
-    asmcomp/mach.cmx \
-    asmcomp/cmm.cmx \
-    asmcomp/arch.cmx \
-    asmcomp/regtype.cmi
-asmcomp/regtype.cmi : \
-    asmcomp/mach.cmi
 asmcomp/reload.cmo : \
     asmcomp/reloadgen.cmi \
     asmcomp/reg.cmi \

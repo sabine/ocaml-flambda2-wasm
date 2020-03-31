@@ -173,6 +173,7 @@ let int_of_float = unary Cmm.Cintoffloat
 let float_of_int = unary Cmm.Cfloatofint
 
 let letin v e body = Cmm.Clet (v, e, body)
+let letin_mut v ty e body = Cmm.Clet_mut (v, ty, e, body)
 
 let ite
     ?(dbg=Debuginfo.none)

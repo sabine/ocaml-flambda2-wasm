@@ -1,3 +1,12 @@
+Working version
+---------------
+
+### Runtime system:
+
+- #9316: Use typing information from Clambda for mutable Cmm variables.
+  (Stephen Dolan, review by Vincent Laviron, Guillaume Bury and Xavier Leroy)
+
+
 OCaml 4.10.0 (21 February 2020)
 -------------------------------
 

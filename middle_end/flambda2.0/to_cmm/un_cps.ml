@@ -776,7 +776,7 @@ and exn_handler handle extra_vars extra_params =
 and wrap_let_cont_exn_body handler extra_vars =
   List.fold_left (fun expr (v, k) ->
       let v = Backend_var.With_provenance.create v in
-      C.letin v (default_of_kind k) expr
+      C.letin_mut v (machtype_of_kind k) (default_of_kind k) expr
     ) handler extra_vars
 
 and let_cont_rec env conts body =

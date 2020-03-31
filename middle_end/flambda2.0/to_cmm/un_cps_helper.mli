@@ -198,6 +198,12 @@ val letin :
   Cmm.expression -> Cmm.expression -> Cmm.expression
 (** [letin v e body] binds [v] to [e] in [body]. *)
 
+val letin_mut :
+  Backend_var.With_provenance.t -> Cmm.machtype ->
+  Cmm.expression -> Cmm.expression -> Cmm.expression
+(** [letin_mut v ty e body] binds a mutable variable [v]
+    of machtype [ty] to [e] in [body]. *)
+
 val ite :
   ?dbg:Debuginfo.t ->
   ?then_dbg:Debuginfo.t -> then_:Cmm.expression ->
