@@ -270,7 +270,7 @@ let add_function env r ~params_and_body code_id p =
     Linkage_name.to_string (Symbol.linkage_name fun_symbol)
   in
   (* CR vlaviron: fix debug info *)
-  let func = params_and_body env fun_name Debuginfo.none p in
+  let func = params_and_body env fun_name p in
   let fundecl = C.cfunction func in
   R.add_function r fundecl
 
