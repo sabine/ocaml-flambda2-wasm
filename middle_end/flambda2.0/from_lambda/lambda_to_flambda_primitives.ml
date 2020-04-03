@@ -174,11 +174,75 @@ let bigarray_unbox_value_to_store kind =
       "Don't know how to unbox a fabricated expression to \
        store it in a bigarray"
 
-let bigarray_indexing kind layout b args =
-  let aux ((checks, offset) as acc) idx =
-    assert false
+let bigarray_dim_bound b dimension =
+  H.Prim (Unary (Bigarray_length { dimension }, b))
+
+let bigarray_check_bound idx bound =
+  H.Binary (Int_comp (I.Naked_immediate, Unsigned, Lt), idx, bound)
+
+let bigarray_indexing layout b args =
+  let num_dim = List.length args in
+  let rec aux dim delta_dim = function
+    | [] -> assert false
+    | [idx] ->
+      let bound = bigarray_dim_bound b dim in
+      let idxn = untag_int idx in
+      let check = bigarray_check_bound idxn bound in
+      [check], idx
+    | idx :: r ->
+      let checks, rem = aux (dim + delta_dim) delta_dim r in
+      let bound = bigarray_dim_bound b dim in
+      let idxn = untag_int idx in
+      let check = bigarray_check_bound idxn bound in
+      (* CR gbury: because we tag bound, and the tagged multiplication
+         untags it, we might be left with a needless zero-extend here. *)
+      let tmp =
+        H.Prim (Binary (Int_arith(I.Tagged_immediate, Mul), rem,
+                        Prim (Unary (Box_number Untagged_immediate, bound))))
+      in
+      let offset =
+        H.Prim (Binary (Int_arith(I.Tagged_immediate, Add), tmp, idx))
+      in
+      check :: checks, offset
   in
-  List.fold_left aux ([], 0) args
+  match layout with
+  | P.C ->
+    aux num_dim (-1) (List.rev args)
+  | P.Fortran ->
+    aux 1 1 (List.map (fun idx ->
+      H.Prim (Binary (Int_arith (I.Tagged_immediate, Sub), idx,
+                      H.Simple (Simple.const_int Targetint.OCaml.one)))
+    ) args)
+
+let bigarray_ref ~dbg ~unsafe kind layout b indexes =
+  let num_dim = List.length indexes in
+  let checks, offset = bigarray_indexing layout b indexes in
+  let primitive =
+    H.Binary (Bigarray_load (num_dim, kind, layout), b, offset)
+  in
+  if unsafe then
+    primitive
+  else
+    H.Checked {
+      validity_conditions = checks;
+      failure = Index_out_of_bounds;
+      primitive; dbg;
+    }
+
+let bigarray_set ~dbg ~unsafe kind layout b indexes value =
+  let num_dim = List.length indexes in
+  let checks, offset = bigarray_indexing layout b indexes in
+  let primitive =
+    H.Ternary (Bigarray_set (num_dim, kind, layout), b, offset, value)
+  in
+  if unsafe then
+    primitive
+  else
+    H.Checked {
+      validity_conditions = checks;
+      failure = Index_out_of_bounds;
+      primitive; dbg;
+    }
 
 let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       (dbg : Debuginfo.t) : H.expr_primitive =
@@ -817,9 +881,16 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
     begin match C.convert_bigarray_kind kind,
                 C.convert_bigarray_layout layout with
     | Some kind, Some layout ->
-      let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
+      let b, indexes =
+        match args with
+        | b :: indexes ->
+          if num_dimensions <> List.length indexes then
+            Misc.fatal_errorf "Bad typing for Pbigarrayref";
+          b, indexes
+        | [] -> Misc.fatal_errorf "Wrong arity for Pbigarrayref"
+      in
       let box = bigarray_box_raw_value_read kind in
-      box (Variadic (Bigarray_load (is_safe, num_dimensions, kind, layout), args))
+      box (bigarray_ref ~dbg ~unsafe kind layout b indexes)
     | None, _ ->
       Misc.fatal_errorf
         "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
@@ -833,11 +904,17 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
     begin match C.convert_bigarray_kind kind,
                 C.convert_bigarray_layout layout with
     | Some kind, Some layout ->
-      let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
+      let b, indexes, value =
+        match args with
+        | b :: args ->
+          let indexes, value = Misc.split_last args in
+          if num_dimensions <> List.length indexes then
+            Misc.fatal_errorf "Bad typing for Pbigarrayset";
+          b, indexes, value
+        | [] -> Misc.fatal_errorf "Wrong arity for Pbigarrayset"
+      in
       let unbox = bigarray_unbox_value_to_store kind in
-      let indexes, value_to_store = Misc.split_last args in
-      Variadic (Bigarray_set (is_safe, num_dimensions, kind, layout),
-                indexes @ [unbox value_to_store])
+      bigarray_set ~dbg ~unsafe kind layout b indexes (unbox value)
     | None, _ ->
       Misc.fatal_errorf
         "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
