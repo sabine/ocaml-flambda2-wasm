@@ -249,6 +249,8 @@ module type Optcomp_options = sig
   val _afl_instrument : unit -> unit
   val _afl_inst_ratio : int -> unit
   val _function_sections : unit -> unit
+
+  val _wasm : unit -> unit
 end;;
 
 module type Opttop_options = sig

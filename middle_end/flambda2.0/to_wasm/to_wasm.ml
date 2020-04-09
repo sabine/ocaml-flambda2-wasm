@@ -20,9 +20,9 @@
 open! Flambda.Import
 *)
 
-open Wasm.Ast
+open Wasm.Wasm_ast
 (*open Wasm.Values*)
-open Wasm.Types
+open Wasm.Wasm_types
 
 (*module Env = To_wasm_env*)
 module Ece = Effects_and_coeffects

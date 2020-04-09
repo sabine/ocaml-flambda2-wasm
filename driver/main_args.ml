@@ -662,6 +662,11 @@ let mk_error_style f =
     \  be set through the OCAML_ERROR_STYLE environment variable."
 ;;
 
+
+let mk_wasm f =
+  "-wasm", Arg.Unit f, " Compile to WebAssembly"
+;;
+
 let mk_where f =
   "-where", Arg.Unit f, " Print location of standard library and exit"
 ;;
@@ -1173,6 +1178,7 @@ module type Optcomp_options = sig
   val _afl_instrument : unit -> unit
   val _afl_inst_ratio : int -> unit
   val _function_sections : unit -> unit
+  val _wasm : unit -> unit
 end;;
 
 module type Opttop_options = sig
@@ -1543,6 +1549,8 @@ struct
 
     mk_args F._args;
     mk_args0 F._args0;
+
+    mk_wasm F._wasm;
   ]
 end;;
 
@@ -2050,6 +2058,8 @@ module Default = struct
          OCaml 4.08.0"
     let _shared () = shared := true; dlcode := true
     let _v () = print_version_and_library "native-code compiler"
+
+    let _wasm () = wasm := true
   end
 
   module Odoc_args = struct
