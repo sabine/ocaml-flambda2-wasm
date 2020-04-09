@@ -1,3 +1,13 @@
+```
+opam switch create --empty flambda2.0-first-stage
+opam pin add ocaml-variants https://github.com/ocaml-flambda/ocaml.git#flambda2.0-first-stage-build-4.10-memprof
+```
+
+```
+./configure --enable-flambda
+dune build @world --profile release
+```
+
 |=====
 | Branch `trunk` | Branch  `4.08`  | Branch  `4.07`  | Branch `4.06` | Branch `4.05`
 
