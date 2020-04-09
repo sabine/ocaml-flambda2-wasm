@@ -1000,61 +1000,65 @@ let main () =
         exit 2
       end
     end;
-    readenv ppf Before_link;
-    if
-      List.length (List.filter (fun x -> !x)
-                     [make_package; make_archive; shared;
-                      compile_only; output_c_object]) > 1
-    then
-      fatal "Please specify at most one of -pack, -a, -shared, -c, \
-             -output-obj";
-    if !make_archive then begin
-      Compmisc.init_path ();
-      let target = extract_output !output_name in
-      Asmlibrarian.create_archive
-        (get_objfiles ~with_ocamlparam:false) target;
-      Warnings.check_fatal ();
-    end
-    else if !make_package then begin
-      Compmisc.init_path ();
-      let target = extract_output !output_name in
-      Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
-        Asmpackager.package_files ~ppf_dump (Compmisc.initial_env ())
-          (get_objfiles ~with_ocamlparam:false) target ~backend);
-      Warnings.check_fatal ();
-    end
-    else if !shared then begin
-      Compmisc.init_path ();
-      let target = extract_output !output_name in
-      Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
-        Asmlink.link_shared ~ppf_dump
-          (get_objfiles ~with_ocamlparam:false) target);
-      Warnings.check_fatal ();
-    end
-    else if not !compile_only && !objfiles <> [] then begin
-      let target =
-        if !output_c_object then
-          let s = extract_output !output_name in
-          if (Filename.check_suffix s Config.ext_obj
-            || Filename.check_suffix s Config.ext_dll)
-          then s
+
+    match !Clflags.wasm with
+      | true -> ()
+      | false ->
+      readenv ppf Before_link;
+      if
+        List.length (List.filter (fun x -> !x)
+                      [make_package; make_archive; shared;
+                        compile_only; output_c_object]) > 1
+      then
+        fatal "Please specify at most one of -pack, -a, -shared, -c, \
+              -output-obj";
+      if !make_archive then begin
+        Compmisc.init_path ();
+        let target = extract_output !output_name in
+        Asmlibrarian.create_archive
+          (get_objfiles ~with_ocamlparam:false) target;
+        Warnings.check_fatal ();
+      end
+      else if !make_package then begin
+        Compmisc.init_path ();
+        let target = extract_output !output_name in
+        Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
+          Asmpackager.package_files ~ppf_dump (Compmisc.initial_env ())
+            (get_objfiles ~with_ocamlparam:false) target ~backend);
+        Warnings.check_fatal ();
+      end
+      else if !shared then begin
+        Compmisc.init_path ();
+        let target = extract_output !output_name in
+        Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
+          Asmlink.link_shared ~ppf_dump
+            (get_objfiles ~with_ocamlparam:false) target);
+        Warnings.check_fatal ();
+      end
+      else if not !compile_only && !objfiles <> [] then begin
+        let target =
+          if !output_c_object then
+            let s = extract_output !output_name in
+            if (Filename.check_suffix s Config.ext_obj
+              || Filename.check_suffix s Config.ext_dll)
+            then s
+            else
+              fatal
+                (Printf.sprintf
+                  "The extension of the output file must be %s or %s"
+                  Config.ext_obj Config.ext_dll
+                )
           else
-            fatal
-              (Printf.sprintf
-                 "The extension of the output file must be %s or %s"
-                 Config.ext_obj Config.ext_dll
-              )
-        else
-          default_output !output_name
-      in
-      Compmisc.init_path ();
-      Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
-        Asmlink.link ~ppf_dump (get_objfiles ~with_ocamlparam:true) target);
-      Warnings.check_fatal ();
-    end;
-  with x ->
-      Location.report_exception ppf x;
-      exit 2
+            default_output !output_name
+        in
+        Compmisc.init_path ();
+        Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
+          Asmlink.link ~ppf_dump (get_objfiles ~with_ocamlparam:true) target);
+        Warnings.check_fatal ();
+      end;
+    with x ->
+        Location.report_exception ppf x;
+        exit 2
 
 let () =
   main ();
