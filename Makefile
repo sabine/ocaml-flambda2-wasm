@@ -39,7 +39,7 @@ include stdlib/StdlibModules
 CAMLC=$(BOOT_OCAMLC) -g -nostdlib -I boot -use-prims runtime/primitives
 CAMLOPT=$(CAMLRUN) ./ocamlopt -g -nostdlib -I stdlib -I otherlibs/dynlink
 ARCHES=amd64 i386 arm arm64 power s390x
-INCLUDES=-I utils -I parsing -I typing -I bytecomp -I file_formats \
+INCLUDES=-I wasm -I utils -I parsing -I typing -I bytecomp -I file_formats \
         -I lambda -I middle_end -I middle_end/closure \
         -I middle_end/flambda2.0/compilenv_deps \
         -I middle_end/flambda2.0 \
@@ -55,6 +55,7 @@ INCLUDES=-I utils -I parsing -I typing -I bytecomp -I file_formats \
         -I middle_end/flambda2.0/simplify/typing_helpers \
         -I middle_end/flambda2.0/terms \
         -I middle_end/flambda2.0/to_cmm \
+        -I middle_end/flambda2.0/to_wasm \
         -I middle_end/flambda2.0/types \
         -I middle_end/flambda2.0/types/basic \
         -I middle_end/flambda2.0/types/env \
@@ -127,8 +128,8 @@ TYPING=typing/ident.cmo typing/path.cmo \
   typing/rec_check.cmo typing/typecore.cmo typing/typeclass.cmo \
   typing/typemod.cmo
 
-LAMBDA=lambda/tag.cmo lambda/lambda.cmo \
-  lambda/debuginfo.cmo lambda/printlambda.cmo \
+LAMBDA=lambda/debuginfo.cmo lambda/tag.cmo \
+  lambda/lambda.cmo lambda/printlambda.cmo \
   lambda/switch.cmo lambda/matching.cmo \
   lambda/translobj.cmo lambda/translattribute.cmo \
   lambda/translprim.cmo lambda/translcore.cmo \
@@ -176,7 +177,8 @@ ASMCOMP_FLAMBDA2=\
   middle_end/flambda2.0/to_cmm/un_cps_closure.cmo \
   middle_end/flambda2.0/to_cmm/un_cps_env.cmo \
   middle_end/flambda2.0/to_cmm/un_cps_static.cmo \
-  middle_end/flambda2.0/to_cmm/un_cps.cmo
+  middle_end/flambda2.0/to_cmm/un_cps.cmo \
+  middle_end/flambda2.0/to_wasm/to_wasm.cmo
 
 ASMCOMP=\
   $(ARCH_SPECIFIC_ASMCOMP) \
@@ -232,7 +234,14 @@ MIDDLE_END_FLAMBDA2_COMPILENV_DEPS=\
   middle_end/flambda2.0/compilenv_deps/reg_width_things.cmo \
   middle_end/flambda2.0/compilenv_deps/symbol.cmo \
   middle_end/flambda2.0/compilenv_deps/variable.cmo \
-  middle_end/flambda2.0/compilenv_deps/flambda_features.cmo
+  middle_end/flambda2.0/compilenv_deps/flambda_features.cmo \
+  wasm/wasm_numeric_error.cmo \
+	wasm/wasm_int.cmo wasm/wasm_i32.cmo wasm/wasm_i64.cmo \
+	wasm/wasm_float.cmo wasm/wasm_f32.cmo wasm/wasm_f64.cmo \
+  wasm/wasm_lib.cmo wasm/wasm_types.cmo wasm/wasm_values.cmo wasm/wasm_ast.cmo \
+  wasm/wasm_script.cmo wasm/wasm_utf8.cmo wasm/wasm_encode.cmo wasm/wasm_operators.cmo \
+  wasm/wasm_sexpr.cmo wasm/wasm_arrange.cmo wasm/wasm_print_wat.cmo \
+  wasm/wasm.cmo
 
 MIDDLE_END_FLAMBDA2_BASIC=\
   middle_end/flambda2.0/types/kinds/flambda_kind.cmo \
@@ -290,6 +299,7 @@ MIDDLE_END_FLAMBDA2_TYPES=\
   middle_end/flambda2.0/types/basic/var_within_closure_set.cmo \
   middle_end/flambda2.0/types/kinds/flambda_arity.cmo \
   middle_end/flambda2.0/types/env/binding_time.cmo \
+  middle_end/flambda2.0/types/env/alias.cmo \
   middle_end/flambda2.0/types/env/aliases.cmo \
   middle_end/flambda2.0/types/basic/meet_or_join_op.cmo \
   middle_end/flambda2.0/types/basic/or_bottom.cmo \
@@ -1513,7 +1523,7 @@ endif
 	$(CAMLOPT) $(COMPFLAGS) $(OPTCOMPFLAGS) -c $<
 
 partialclean::
-	for d in utils parsing typing bytecomp asmcomp middle_end file_formats \
+	for d in wasm utils parsing typing bytecomp asmcomp middle_end file_formats \
            lambda middle_end/closure middle_end/flambda \
            middle_end/flambda/base_types asmcomp/debug \
            middle_end/flambda2.0/compilenv_deps \
@@ -1529,6 +1539,7 @@ partialclean::
            middle_end/flambda2.0/simplify/typing_helpers \
            middle_end/flambda2.0/terms \
            middle_end/flambda2.0/to_cmm \
+           middle_end/flambda2.0/to_wasm \
            middle_end/flambda2.0/types \
            middle_end/flambda2.0/types/basic \
            middle_end/flambda2.0/types/env \
@@ -1544,7 +1555,7 @@ partialclean::
 
 .PHONY: depend
 depend: beforedepend
-	(for d in utils parsing typing bytecomp asmcomp middle_end \
+	(for d in wasm utils parsing typing bytecomp asmcomp middle_end \
          lambda file_formats middle_end/closure middle_end/flambda \
          middle_end/flambda/base_types asmcomp/debug \
          middle_end/flambda2.0/compilenv_deps \
@@ -1561,6 +1572,7 @@ depend: beforedepend
          middle_end/flambda2.0/simplify/typing_helpers \
          middle_end/flambda2.0/terms \
          middle_end/flambda2.0/to_cmm \
+         middle_end/flambda2.0/to_wasm \
          middle_end/flambda2.0/types \
          middle_end/flambda2.0/types/basic \
          middle_end/flambda2.0/types/env \

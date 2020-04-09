@@ -201,6 +201,12 @@ let compile_implementation2 ?toplevel ~backend ~filename ~prefixname
         (middle_end : middle_end2) ~backend ~module_block_size_in_words
           ~filename ~prefixname ~ppf_dump ~module_ident ~module_initializer
       in
+(*
+      let wasm_module = To_wasm.unit translated_program in
+      let oc = open_out (prefixname ^ ".wat") in
+      Wasm_print_wat.module_ oc 80 wasm_module;
+      close_out oc;
+*)
       end_gen_implementation ?toplevel ~ppf_dump Un_cps.unit
         translated_program)
 
