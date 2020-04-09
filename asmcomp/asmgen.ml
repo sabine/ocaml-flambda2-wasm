@@ -186,29 +186,30 @@ type middle_end2 =
   -> module_initializer:Lambda.lambda
   -> Flambda_unit.t
 
-let compile_implementation2 ?toplevel ~backend ~filename ~prefixname
+let compile_implementation2 ?(wasm=false) ?toplevel ~backend ~filename ~prefixname
     ~size:module_block_size_in_words ~module_ident ~module_initializer
     ~middle_end ~ppf_dump required_globals =
-  let asmfile =
-    if !keep_asm_file || !Emitaux.binary_backend_available
-    then prefixname ^ ext_asm
-    else Filename.temp_file "camlasm" ext_asm
-  in
-  compile_unit asmfile !keep_asm_file (prefixname ^ ext_obj)
-    (fun () ->
-      Ident.Set.iter Compilenv.require_global required_globals;
-      let translated_program =
-        (middle_end : middle_end2) ~backend ~module_block_size_in_words
-          ~filename ~prefixname ~ppf_dump ~module_ident ~module_initializer
-      in
-(*
-      let wasm_module = To_wasm.unit translated_program in
-      let oc = open_out (prefixname ^ ".wat") in
-      Wasm_print_wat.module_ oc 80 wasm_module;
-      close_out oc;
-*)
-      end_gen_implementation ?toplevel ~ppf_dump Un_cps.unit
-        translated_program)
+  if wasm then
+    let wasm_module = To_wasm.unit translated_program in
+    let oc = open_out (prefixname ^ ".wat") in
+    Wasm_print_wat.module_ oc 80 wasm_module;
+    close_out oc;
+  else
+    let asmfile =
+      if !keep_asm_file || !Emitaux.binary_backend_available
+      then prefixname ^ ext_asm
+      else Filename.temp_file "camlasm" ext_asm
+    in
+    compile_unit asmfile !keep_asm_file (prefixname ^ ext_obj)
+      (fun () ->
+        Ident.Set.iter Compilenv.require_global required_globals;
+        let translated_program =
+          (middle_end : middle_end2) ~backend ~module_block_size_in_words
+            ~filename ~prefixname ~ppf_dump ~module_ident ~module_initializer
+        in
+  
+        end_gen_implementation ?toplevel ~ppf_dump Un_cps.unit
+          translated_program)
 
 let compile_implementation_flambda ?toplevel ~prefixname
     ~ppf_dump ~required_globals program =

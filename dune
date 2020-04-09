@@ -145,7 +145,7 @@
  (wrapped false)
  (flags (:standard -principal -nostdlib -open Flambda2 -open Flambda2_to_cmm))
  (libraries stdlib ocamlcommon ocamlmiddleend ocamloptcommon flambda2deps
-            flambda2 flambda2_to_cmm)
+            flambda2 flambda2_to_cmm flambda2_to_wasm)
  (modules
    ;; asmcomp/
    afl_instrument asmgen asmlibrarian asmlink asmpackager branch_relaxation
