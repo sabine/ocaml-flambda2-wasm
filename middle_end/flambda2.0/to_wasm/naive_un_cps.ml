@@ -45,4 +45,4 @@ let wasm_module = ref {
   symbols = [];
 }
 
-let unit _flambda = !wasm_module
+let unit (flambda : Flambda_unit.t) = !wasm_module
