@@ -213,28 +213,6 @@ type data_part = {
   detail: data_part_detail list
 }
 
-type sym_info_function = {
-  index: var;
-  name: string; (* to length and bytes *)
-}
-
-type sym_info_data = {
-  name: string; (* to length and bytes *)
-  index: var;
-  offset: var;
-  size: var;
-}
-
-type sym_info_details =
-  | Function of sym_info_function
-  | Import of var
-  | Global of sym_info_function
-  | Data of sym_info_data
-
-type sym_info = {
-  flags: var;
-  details: sym_info_details;
-}
 
 type module_ =
 {
@@ -248,7 +226,6 @@ type module_ =
   data : data_part segment list;
   imports : import list;
   exports : export list;
-  symbols : sym_info list;
 }
 
 
@@ -266,7 +243,6 @@ let empty_module =
   data = [];
   imports = [];
   exports = [];
-  symbols = [];
 }
 
 let func_type_for (m : module_) (x : var) : func_type =

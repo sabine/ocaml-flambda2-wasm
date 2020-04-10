@@ -26,7 +26,7 @@ module Ece = Effects_and_coeffects
 
 let todo () = failwith "Not yet implemented"
 
-let unit (unit : Flambda_unit.t) = 
+let unit (_unit : Flambda_unit.t) = 
   Profile.record_call "flambda2_to_wasm" (fun () ->
     (*let (functions, instructions) = expr env (Flambda_unit.body unit) in*)
     let start_function_type = FuncType ([],[]) in

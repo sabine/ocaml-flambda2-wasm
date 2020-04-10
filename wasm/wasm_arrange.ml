@@ -21,7 +21,6 @@ open Wasm_values
 open Wasm_types
 open Wasm_sexpr
 module Utf8 = Wasm_utf8
-module Encode = Wasm_encode
 
 (* Generic formatting *)
 
