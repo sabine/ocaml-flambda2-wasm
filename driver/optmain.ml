@@ -1003,7 +1003,7 @@ let main () =
 
     match !Clflags.wasm with
       | true -> ()
-      | false ->
+      | false -> begin
       readenv ppf Before_link;
       if
         List.length (List.filter (fun x -> !x)
@@ -1055,6 +1055,7 @@ let main () =
         Compmisc.with_ppf_dump ~file_prefix:target (fun ppf_dump ->
           Asmlink.link ~ppf_dump (get_objfiles ~with_ocamlparam:true) target);
         Warnings.check_fatal ();
+      end;
       end;
     with x ->
         Location.report_exception ppf x;
