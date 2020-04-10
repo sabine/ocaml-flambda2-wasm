@@ -26,23 +26,22 @@ module Ece = Effects_and_coeffects
 
 let todo () = failwith "Not yet implemented"
 
+let unit (unit : Flambda_unit.t) = 
+  Profile.record_call "flambda2_to_wasm" (fun () ->
+    (*let (functions, instructions) = expr env (Flambda_unit.body unit) in*)
+    let start_function_type = FuncType ([],[]) in
+    let start_function_type_index = 0l in
+    let start_function = {
+      name = "__module_init";
+      ftype = start_function_type_index;
+      locals = [];
+      body = [];
+    } in
+    let start_function_index = 0l in (*add_function (start_function) in*)
 
-let wasm_module = ref {
-  types = [];
-  globals = [];
-  tables = [{
-    ttype = TableType ({min = 0l; max = Some 0l}, AnyFuncType)
-  }];
-  memories = [{
-    mtype = MemoryType {min = 100l; max = Some 100l}
-  }];
-  funcs = [];
-  start = None;
-  elems = [];
-  data = [];
-  imports = [];
-  exports = [];
-  symbols = [];
-}
-
-let unit _flambda = !wasm_module
+    { empty_module with
+      types = [start_function_type];
+      funcs = [start_function];
+      start = Some start_function_index;
+    }
+  )
