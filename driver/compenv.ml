@@ -449,6 +449,22 @@ let read_one_param ppf position name v =
 
   | "flambda2-context-on-error" ->
     set "flambda2-context-on-error" [ flambda2_context_on_error ] v
+  | "flambda2-join-points" ->
+    set "flambda2-join-points" [ Flambda_2.join_points ] v
+  | "flambda2-unbox-along-intra-function-control-flow" ->
+    set "flambda2-unbox-along-intra-function-control-flow"
+      [ Flambda_2.unbox_along_intra_function_control_flow ] v
+  | "flambda2-lift-inconstants" ->
+    set "flambda2-lift-inconstants" [ Flambda_2.lift_inconstants ] v
+  | "flambda2-backend-cse-at-toplevel" ->
+    set "flambda2-backend-cse-at-toplevel"
+      [ Flambda_2.backend_cse_at_toplevel ] v
+  | "flambda2-expert-denest-at-toplevel" ->
+    set "flambda2-expert-denest-at-toplevel"
+      [ Flambda_2.Expert.denest_at_toplevel ] v
+  | "flambda2-expert-code-id-and-symbol-scoping-checks" ->
+    set "flambda2-expert-code-id-and-symbol-scoping-checks"
+      [ Flambda_2.Expert.code_id_and_symbol_scoping_checks ] v
 
   | _ ->
     if not (List.mem name !can_discard) then begin

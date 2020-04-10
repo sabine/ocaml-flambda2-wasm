@@ -196,7 +196,7 @@ let rounds () =
   | None -> !default_simplify_rounds
   | Some r -> r
 
-let default_inline_threshold = if Config.flambda then 10. else 10. /. 8.
+let default_inline_threshold = if Config.flambda then 1. /. 2. else 10. /. 8.
 let inline_toplevel_multiplier = 16
 let default_inline_toplevel_threshold =
   int_of_float ((float inline_toplevel_multiplier) *. default_inline_threshold)
@@ -428,6 +428,7 @@ module Flambda_2 = struct
   let join_points = ref true
   let unbox_along_intra_function_control_flow = ref true
   let lift_inconstants = ref true
+  let backend_cse_at_toplevel = ref false
 
   module Expert = struct
     let denest_at_toplevel = ref false
