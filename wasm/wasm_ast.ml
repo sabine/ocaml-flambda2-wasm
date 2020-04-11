@@ -86,14 +86,18 @@ type storeop = mem_size memop
 
 (* Expressions *)
 
-type var = int32
+(*type var = int32*)
+type idx = { index: int32; name: string option}
+type typeidx = idx
+type funcidx = idx
+type tableidx = idx
+type memidx = idx
+type globalidx = idx
+type localidx = idx
+type labelidx = idx
+
 type literal = Values.value
 type name = int list
-
-type call = {
-  index: var;
-  name: string;
-}
 
 type instr =
   | Unreachable                       (* trap unconditionally *)
@@ -101,20 +105,20 @@ type instr =
   | Block of stack_type * instr list  (* execute in sequence *)
   | Loop of stack_type * instr list   (* loop header *)
   | If of stack_type * instr list * instr list  (* conditional *)
-  | Br of var                         (* break to n-th surrounding label *)
-  | BrIf of var                       (* conditional break *)
-  | BrTable of var list * var         (* indexed break *)
+  | Br of labelidx                         (* break to n-th surrounding label *)
+  | BrIf of labelidx                       (* conditional break *)
+  | BrTable of labelidx list * labelidx         (* indexed break *)
   | Return                            (* break from function body *)
-  | Call of call                      (* call function *)
+  | Call of funcidx                      (* call function *)
   | Link of string                    (* used to link later on *)
-  | CallIndirect of var               (* call function through table *)
+  | CallIndirect of typeidx               (* call function through table *)
   | Drop                              (* forget a value *)
   | Select                            (* branchless conditional *)
-  | GetLocal of var                   (* read local variable *)
-  | SetLocal of var                   (* write local variable *)
-  | TeeLocal of var                   (* write local variable and keep value *)
-  | GetGlobal of var                  (* read global variable *)
-  | SetGlobal of var                  (* write global variable *)
+  | GetLocal of localidx                   (* read local variable *)
+  | SetLocal of localidx                   (* write local variable *)
+  | TeeLocal of localidx                   (* write local variable and keep value *)
+  | GetGlobal of globalidx                  (* read global variable *)
+  | SetGlobal of globalidx                  (* write global variable *)
   | Load of loadop                    (* read memory at address *)
   | Store of storeop                  (* write memory at address *)
   | CurrentMemory                     (* size of linear memory *)
@@ -142,7 +146,7 @@ type global =
 type func =
 {
   name: string;
-  ftype : var;
+  ftype : typeidx;
   locals : value_type list;
   body : instr list;
 }
@@ -162,12 +166,12 @@ type memory =
 
 type 'data segment =
 {
-  index : var;
+  index : idx;
   offset : const;
   init : 'data;
 }
 
-type table_segment = var list segment
+type table_segment = funcidx list segment
 type memory_segment = string segment
 
 
@@ -176,10 +180,10 @@ type memory_segment = string segment
 type type_ = func_type
 
 type export_desc =
-  | FuncExport of var
-  | TableExport of var
-  | MemoryExport of var
-  | GlobalExport of var
+  | FuncExport of funcidx
+  | TableExport of tableidx
+  | MemoryExport of memidx
+  | GlobalExport of globalidx
 
 type export =
 {
@@ -188,7 +192,7 @@ type export =
 }
 
 type import_desc =
-  | FuncImport of var
+  | FuncImport of typeidx
   | TableImport of table_type
   | MemoryImport of memory_type
   | GlobalImport of global_type
@@ -221,8 +225,8 @@ type module_ =
   tables : table list;
   memories : memory list;
   funcs : func list;
-  start : var option;
-  elems : var list segment list;
+  start : funcidx option;
+  elems : table_segment list;
   data : data_part segment list;
   imports : import list;
   exports : export list;
@@ -245,8 +249,8 @@ let empty_module =
   exports = [];
 }
 
-let func_type_for (m : module_) (x : var) : func_type =
-  (Lib.List32.nth m.types x)
+let func_type_for (m : module_) (x : idx) : func_type =
+  (Lib.List32.nth m.types x.index)
 
 let import_type (m : module_) (im : import) : extern_type =
   let {idesc; _} = im in
@@ -264,16 +268,16 @@ let export_type (m : module_) (ex : export) : extern_type =
   | FuncExport x ->
     let fts =
       funcs its @ List.map (fun f -> func_type_for m f.ftype) m.funcs
-    in ExternFuncType (nth fts x)
+    in ExternFuncType (nth fts x.index)
   | TableExport x ->
     let tts = tables its @ List.map (fun t -> t.ttype) m.tables in
-    ExternTableType (nth tts x)
+    ExternTableType (nth tts x.index)
   | MemoryExport x ->
     let mts = memories its @ List.map (fun m -> m.mtype) m.memories in
-    ExternMemoryType (nth mts x)
+    ExternMemoryType (nth mts x.index)
   | GlobalExport x ->
     let gts = globals its @ List.map (fun g -> g.gtype) m.globals in
-    ExternGlobalType (nth gts x)
+    ExternGlobalType (nth gts x.index)
 
 let string_of_name n =
   let b = Buffer.create 16 in

@@ -23,25 +23,29 @@ open Wasm.Wasm_types
 
 module Ece = Effects_and_coeffects
 
-
 let todo () = failwith "Not yet implemented"
 
 let unit (_unit : Flambda_unit.t) = 
   Profile.record_call "flambda2_to_wasm" (fun () ->
     (*let (functions, instructions) = expr env (Flambda_unit.body unit) in*)
-    let start_function_type = FuncType ([],[]) in
-    let start_function_type_index = 0l in
+    let start_function_type_name = "_t__module_init" in
+    let start_function_type = FuncType {
+      name = Some start_function_type_name;
+      t = ([I32Type],[])
+    } in
+    let start_function_type_index = {index = 0l; name = Some start_function_type_name} in
+    let start_function_name = "__module_init" in
+    let start_function_index = {index = 0l; name = Some start_function_name} in
     let start_function = {
-      name = "__module_init";
+      name = start_function_name;
       ftype = start_function_type_index;
       locals = [];
-      body = [];
+      body = [Call start_function_index];
     } in
-    let start_function_index = 0l in (*add_function (start_function) in*)
 
     { empty_module with
       types = [start_function_type];
       funcs = [start_function];
-      start = Some start_function_index;
+      start = None;
     }
   )

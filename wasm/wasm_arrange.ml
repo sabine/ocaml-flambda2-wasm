@@ -79,7 +79,8 @@ let decls kind ts = tab kind (atom value_type) ts
 
 let stack_type ts = decls "result" ts
 
-let func_type (FuncType (ins, out)) =
+let func_type (FuncType ft) =
+  let (ins, out) = ft.t in
   Node ("func", decls "param" ins @ decls "result" out)
 
 let struct_type = func_type
@@ -230,7 +231,10 @@ let storeop op =
 
 (* Expressions *)
 
-let var x = nat32 x
+let var (x : idx) = match x.name with
+  | None -> nat32 x.index
+  | Some n -> "$" ^ n
+
 let value v = string_of_value v
 let constop v = value_type (type_of v) ^ ".const"
 
@@ -249,7 +253,7 @@ let rec instr e =
     | BrTable (xs, x) ->
       "br_table " ^ String.concat " " (list var (xs @ [x])), []
     | Return -> "return", []
-    | Call x -> "call " ^ var x.index, []
+    | Call x -> "call " ^ var x, []
     | CallIndirect x -> "call_indirect " ^ var x, []
     | Drop -> "drop", []
     | Select -> "select", []
@@ -328,7 +332,12 @@ let data seg =
 (* Modules *)
 
 let typedef i ty =
-  Node ("type $" ^ nat i, [struct_type ty])
+  let FuncType ft = ty in
+  let n = match ft.name with
+    | None -> "$" ^ nat i
+    | Some name -> "$" ^ name
+  in
+  Node ("type " ^ n, [struct_type ty])
 
 let import_desc i d =
   match d with

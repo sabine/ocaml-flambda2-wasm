@@ -24,7 +24,7 @@ module F64 = Wasm_f64
 type value_type = I32Type | I64Type | F32Type | F64Type
 type elem_type = AnyFuncType
 type stack_type = value_type list
-type func_type = FuncType of stack_type * stack_type
+type func_type = FuncType of { name: string option; t: stack_type * stack_type }
 
 type 'a limits = {min : 'a; max : 'a option}
 type mutability = Immutable | Mutable
@@ -119,7 +119,8 @@ let string_of_global_type = function
 let string_of_stack_type ts =
   "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
 
-let string_of_func_type (FuncType (ins, out)) =
+let string_of_func_type (FuncType ft) =
+  let (ins, out) = ft.t in
   string_of_stack_type ins ^ " -> " ^ string_of_stack_type out
 
 let string_of_extern_type = function
