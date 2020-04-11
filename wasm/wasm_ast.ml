@@ -97,7 +97,7 @@ type localidx = idx
 type labelidx = idx
 
 type literal = Values.value
-type name = int list
+type name = string
 
 type instr =
   | Unreachable                       (* trap unconditionally *)

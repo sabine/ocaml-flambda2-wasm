@@ -49,7 +49,7 @@ let string_with iter add_char s =
 
 let bytes = string_with String.iter add_hex_char
 let string = string_with String.iter add_char
-let name = string_with List.iter add_unicode_char
+let name = string
 
 let list_of_opt = function None -> [] | Some x -> [x]
 
@@ -286,15 +286,15 @@ let name_ n = string (Utf8.encode n);;
 
 let func_with_name n f =
   let {ftype; locals; body; name} = f in
-  let n = n ^ " ;;" ^ name ^ "\n" in
-  Node ("func" ^ n,
+  Node ("func " ^ n,
     [Node ("type " ^ var ftype, [])] @
     decls "local" locals @
     list instr body
   )
 
-let func_with_index off i f =
-  func_with_name (" $" ^ nat (off + i)) f
+let func_with_index off i (f : func) =
+  let n = "$" ^ f.name in
+  func_with_name n f
 
 let func f =
   func_with_name "" f
