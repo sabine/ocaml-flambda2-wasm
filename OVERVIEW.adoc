@@ -1,0 +1,33 @@
+# Notes
+:toc:
+:toclevels: 5
+
+Goals:::
+* bring the OCaml ecosystem to WASM
+* interoperate with some deliberately chosen other languages that compile to WASM (C would be a likely candidate, since interoperating with C seems to be common for OCaml code. However, Rust may be an even stronger candidate in the long run, as more libraries are ported to Rust)
+
+Targets:::
+* Web browsers
+* WASM->native compilers
+* WASM PaaS
+
+Compilation output:::
+* Per-module compilation, every .ml file turns into one .wat file
+* Rely on existing tools to transform .wat into .wasm
+* Linking is done in a separate step. Initially, use JavaScript to dynamically link modules, while waiting for linking standards for WebAssembly to emerge.
+
+Source language:::
+* Flambda 2.0
+
+Tools:::
+* wat2wasm
+
+Garbage collection will be one of (what turns out simplest):::
+* WASM GC 
+* JavaScript GC
+* shipping our own GC as part of the runtime
+
+Exceptions:::
+* I'm translating Flambda 2.0 which is already in CPS style with explicit exception continuations, so exceptions can trivially turn into WebAssembly functions
+
+
