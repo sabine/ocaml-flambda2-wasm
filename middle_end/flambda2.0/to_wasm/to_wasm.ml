@@ -25,9 +25,92 @@ module Ece = Effects_and_coeffects
 
 let todo () = failwith "Not yet implemented"
 
-let unit (_unit : Flambda_unit.t) = 
+
+
+type cont =
+  | Jump of { t: func_type; cont: funcidx; }
+  | Inline of { handler_params: Kinded_parameter.t list;
+                handler_body: Flambda.Expr.t; }
+
+type env = {
+  k_return : Continuation.t;
+  k_exn : Continuation.t;
+  used_closure_vars : Var_within_closure.Set.t;
+
+  function_needs_closure: bool Code_id.Map.t;
+
+  vars  : instr Variable.Map.t;
+  conts : cont Continuation.Map.t;
+  (* Map from continuations to handlers (i.e variables bound by the
+     continuation and expression of the continuation handler). *)
+
+  names_in_scope : Code_id_or_symbol.Set.t;
+  (* Code ids and symbols bound in this scope, for invariant checking *)
+}
+
+let static_const
+      env
+      (bound_symbols : Flambda.Let_symbol_expr.Bound_symbols.t)
+      (static_const : Flambda.Static_const.t) =
+  match bound_symbols, static_const with
+  | Singleton s, Block (tag, _mut, fields) ->
+    env, []
+  | _ ->
+    todo ()
+
+let rec expr env e =
+  match (Flambda.Expr.descr e : Flambda.Expr.descr) with
+  | Let e' -> lexpr env e'
+  | Let_symbol e' -> lsymbol env e'
+  | Let_cont e' -> lcont env e'
+  | Apply e' -> apply_expr env e'
+  | Apply_cont e' -> apply_cont env e'
+  | Switch e' -> switch env e'
+  | Invalid e' -> invalid env e'
+
+and lexpr _env _t = todo ()
+
+and lsymbol env let_sym =
+  let body = Flambda.Let_symbol_expr.body let_sym in
+  let bound_symbols = Flambda.Let_symbol_expr.bound_symbols let_sym in
+  let env' = {env with 
+    names_in_scope = Code_id_or_symbol.Set.union
+      env.names_in_scope
+      (Flambda.Let_symbol_expr.Bound_symbols.everything_being_defined bound_symbols)}
+  in
+  let env'', update_opt =
+    static_const
+      env
+      (Flambda.Let_symbol_expr.bound_symbols let_sym)
+      (Flambda.Let_symbol_expr.defining_expr let_sym)
+  in
+  (*let vars' = Variable.Map.add (expr env) in*)
+  expr env'' body
+  todo ()
+
+and lcont _env _t = todo ()
+and apply_expr _env _t = todo ()
+and apply_cont _env _t = todo ()
+and switch _env _t = todo ()
+and invalid _env _t = todo ()
+  
+
+let unit (unit : Flambda_unit.t) = 
+  let _ = Flambda.Expr.print Format.std_formatter (Flambda_unit.body unit) in
+
   Profile.record_call "flambda2_to_wasm" (fun () ->
-    (*let (functions, instructions) = expr env (Flambda_unit.body unit) in*)
+    let used_closure_vars = Flambda_unit.used_closure_vars unit in
+    let env = {
+      k_return = Flambda_unit.return_continuation unit;
+      k_exn = Flambda_unit.exn_continuation unit;
+      used_closure_vars = used_closure_vars;
+      function_needs_closure = Code_id.Map.empty;
+      vars = Variable.Map.empty;
+      conts = Continuation.Map.empty;
+    } in
+
+    let (functions, instructions) = expr env (Flambda_unit.body unit) in
+
     let module_init_function_type_name = "_t__module_init" in
     let module_init_function_type = FuncType {
       name = Some module_init_function_type_name;
@@ -40,7 +123,7 @@ let unit (_unit : Flambda_unit.t) =
       name = module_init_function_name;
       ftype = module_init_function_type_index;
       locals = [];
-      body = [];
+      body = instructions;
     } in
     let module_init_function_export = {
       name = module_init_function_name;
@@ -50,7 +133,7 @@ let unit (_unit : Flambda_unit.t) =
     { empty_module with
       imports = [];
       types = [module_init_function_type];
-      funcs = [module_init_function];
+      funcs = [module_init_function] @ functions;
       start = None;
       exports = [module_init_function_export]
     }

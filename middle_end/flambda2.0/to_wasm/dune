@@ -4,5 +4,5 @@
   (name flambda2_to_wasm)
   (flags (:standard -principal -nostdlib -open Flambda2))
   (libraries stdlib ocamlcommon ocamlbytecomp ocamlmiddleend ocamloptcommon
-             flambda2deps flambda2 wasm)
+             flambda2deps flambda2 flambda2_to_cmm wasm)
 )
