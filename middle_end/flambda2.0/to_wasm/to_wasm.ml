@@ -33,8 +33,8 @@ type cont =
                 handler_body: Flambda.Expr.t; }
 
 type env = {
-  k_return : Continuation.t;
-  k_exn : Continuation.t;
+  k_return : Continuation.t; (* int *)
+  k_exn : Continuation.t; (* int *)
   used_closure_vars : Var_within_closure.Set.t;
 
   function_needs_closure: bool Code_id.Map.t;
@@ -60,7 +60,7 @@ let static_const
 
   match bound_symbols, static_const with
   | Singleton s, Block (tag, _mut, fields) ->
-    env, []
+    env, [], []
   | _ ->
     failwith "static_const not implemented for this"
 
@@ -83,15 +83,17 @@ and lsymbol env let_sym =
     names_in_scope = Code_id_or_symbol.Set.union
       env.names_in_scope
       (Flambda.Let_symbol_expr.Bound_symbols.everything_being_defined bound_symbols)}
+      (* All bound symbols are allowed to appear in each other's definition,
+       so they're added to the environment first *)
   in
-  let env'', update_opt =
+  let env'', globals, instructions =
     static_const
-      env
+      env'
       (Flambda.Let_symbol_expr.bound_symbols let_sym)
       (Flambda.Let_symbol_expr.defining_expr let_sym)
   in
-  (*let vars' = Variable.Map.add (expr env) in*)
-  expr env'' body
+  let globals', functions, instructions' = expr env'' body in
+  globals @ globals', functions, instructions @ instructions'
 
 and lcont _env _t = todo ()
 and apply_expr _env _t = 
@@ -119,13 +121,18 @@ let unit (unit : Flambda_unit.t) =
       names_in_scope = Code_id_or_symbol.Set.empty;
     } in
 
-    let (functions, instructions) = expr env (Flambda_unit.body unit) in
+(*
+    let (global_variables, functions, module_init_function_instructions) = expr env (Flambda_unit.body unit) in
+*)
+    let global_variables = [] in
+    let functions = [] in
+    let module_init_function_instructions = [] in
 
     let module_init_function_type_name = "_t__module_init" in
-    let module_init_function_type = FuncType {
+    let module_init_function_type = TypeFunc (FuncType {
       name = Some module_init_function_type_name;
-      t = ([I32Type],[])
-    } in
+      t = ([NumValueType I32Type],[])
+    }) in
     let module_init_function_type_index = {index = 0l; name = Some module_init_function_type_name} in
     let module_init_function_name = "__module_init" in
     let module_init_function_index = {index = 0l; name = Some module_init_function_name} in
@@ -133,16 +140,23 @@ let unit (unit : Flambda_unit.t) =
       name = module_init_function_name;
       ftype = module_init_function_type_index;
       locals = [];
-      body = instructions;
+      body = module_init_function_instructions;
     } in
     let module_init_function_export = {
       name = module_init_function_name;
       edesc = FuncExport module_init_function_index
     } in
 
+    let test_array_type = TypeArray (ArrayType {
+          name = Some "testarray";
+          t = FieldType (Mutable, StorageTypeValue (NumValueType I32Type))
+        })
+    in
+
     { empty_module with
       imports = [];
-      types = [module_init_function_type];
+      globals = global_variables;
+      types = [module_init_function_type; test_array_type];
       funcs = [module_init_function] @ functions;
       start = None;
       exports = [module_init_function_export]

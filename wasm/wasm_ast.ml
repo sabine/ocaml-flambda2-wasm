@@ -79,22 +79,12 @@ type mem_size = Mem8 | Mem16 | Mem32
 type extension = SX | ZX
 
 type 'a memop =
-  {ty : value_type; align : int; offset : int32; sz : 'a option}
+  {ty : num_type; align : int; offset : int32; sz : 'a option}
 type loadop = (mem_size * extension) memop
 type storeop = mem_size memop
 
 
 (* Expressions *)
-
-(*type var = int32*)
-type idx = { index: int32; name: string option}
-type typeidx = idx
-type funcidx = idx
-type tableidx = idx
-type memidx = idx
-type globalidx = idx
-type localidx = idx
-type labelidx = idx
 
 type literal = Values.value
 type name = string
@@ -131,6 +121,21 @@ type instr =
   | Binary of binop                   (* binary numeric operator *)
   | Convert of cvtop                  (* conversion *)
 
+  (*GC reference types proposal *)
+  (*GC*)| RefNull
+  (*GC*)| RefIsNull
+  (*GC*)| RefFunc of funcidx
+  (*GC*)| RefEq
+
+  (*GC struct types *)
+  (*GC*)| StructNew of typeidx
+  (*GC*)| StructGet of typeidx * fieldidx
+  (*GC*)| StructSet of typeidx * fieldidx
+  (*GC*)| ArrayNew of typeidx
+  (*GC*)| ArrayGet of typeidx
+  (*GC*)| ArraySet of typeidx
+  (*GC*)| ArrayLen of typeidx
+  
 
 (* Globals & Functions *)
 
@@ -177,7 +182,10 @@ type memory_segment = string segment
 
 (* Modules *)
 
-type type_ = func_type
+type type_ =
+  | TypeFunc of func_type
+  | TypeStruct of struct_type
+  | TypeArray of array_type
 
 type export_desc =
   | FuncExport of funcidx
@@ -250,7 +258,10 @@ let empty_module =
 }
 
 let func_type_for (m : module_) (x : idx) : func_type =
-  (Lib.List32.nth m.types x.index)
+  match (Lib.List32.nth m.types x.index) with
+    | TypeFunc f -> f
+    | TypeStruct _ -> failwith (I32.to_string_u x.index ^ " is a struct type, not a func type!")
+    | TypeArray _ -> failwith (I32.to_string_u x.index ^ " is an array type, not a func type!")
 
 let import_type (m : module_) (im : import) : extern_type =
   let {idesc; _} = im in

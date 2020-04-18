@@ -70,11 +70,74 @@ let break_string s =
 
 
 (* Types *)
+let var (x : idx) = match x.name with
+  | None -> nat32 x.index
+  | Some n -> "$" ^ n
 
-let value_type t = string_of_value_type t
+let num_value_type = function 
+  | I32Type -> "i32"
+  | I64Type -> "i64"
+  | F32Type -> "f32"
+  | F64Type -> "f64"
 
-let elem_type t = string_of_elem_type t
+let cons_type = function
+  | Func -> "func"
+  | Any -> "any"
+  | Null -> "null"
+  | Opt (typeidx) -> "opt? " ^ var typeidx
+  | I31 -> "i31"
+  | Eq -> "eq"
+  | Rtt (typeidx) -> "rtt " ^ var typeidx
 
+let ref_value_type = function
+  | Ref (ct) -> "ref " ^ cons_type ct
+  | AnyRef -> "anyref"
+  | NullRef -> "nullref"
+  | OptRef (typeidx) -> "optref " ^ var typeidx
+
+let value_type = function
+  | NumValueType n -> num_value_type n
+  | RefValueType r -> ref_value_type r
+
+let value_types = function
+  | [t] -> value_type t
+  | ts -> "[" ^ String.concat " " (List.map value_type ts) ^ "]"
+
+let elem_type = function
+  | AnyFuncType -> "anyfunc"
+
+let limits {min; max} =
+  I32.to_string_u min ^
+  (match max with None -> "" | Some n -> " " ^ I32.to_string_u n)
+
+let memory_type = function
+  | MemoryType lim -> limits lim
+
+let table_type = function
+  | TableType (lim, t) -> limits lim ^ " " ^ elem_type t
+
+(* data type declarations *)
+let packed_type = function
+  | I8Type -> "i8"
+  | I16Type -> "i16"
+
+let storage_type = function
+  | StorageTypeValue valt -> value_type valt
+  | StorageTypePacked packt -> packed_type packt
+
+let field_type = function
+  | FieldType (Immutable, st) -> storage_type st
+  | FieldType (Mutable, st) -> "(mut " ^ storage_type st ^ ")"
+
+let field_decls kind ts = tab kind (atom field_type) ts
+
+let struct_type (StructType st) =
+  Node ("struct", field_decls "field" st.t)
+
+let array_type (ArrayType ft) =
+    Node ("array", [Atom (field_type ft.t)])
+
+(* function type decls *)
 let decls kind ts = tab kind (atom value_type) ts
 
 let stack_type ts = decls "result" ts
@@ -83,14 +146,13 @@ let func_type (FuncType ft) =
   let (ins, out) = ft.t in
   Node ("func", decls "param" ins @ decls "result" out)
 
-let struct_type = func_type
-
 let limits nat {min; max} =
   String.concat " " (nat min :: opt nat max)
 
 let global_type = function
-  | GlobalType (t, Immutable) -> atom string_of_value_type t
-  | GlobalType (t, Mutable) -> Node ("mut", [atom string_of_value_type t])
+  | GlobalType (t, Immutable) -> atom value_type t
+  | GlobalType (t, Mutable) -> Node ("mut", [atom value_type t])
+
 
 
 (* Operators *)
@@ -190,7 +252,7 @@ struct
 end
 
 let oper (intop, floatop) op =
-  value_type (type_of op) ^ "." ^
+  num_value_type (type_of op) ^ "." ^
   (match op with
   | I32 o -> intop "32" o
   | I64 o -> intop "64" o
@@ -214,7 +276,7 @@ let extension = function
   | Ast.ZX -> "_u"
 
 let memop name {ty; align; offset; _} =
-  value_type ty ^ "." ^ name ^
+  num_value_type ty ^ "." ^ name ^
   (if offset = 0l then "" else " offset=" ^ nat32 offset) ^
   (if 1 lsl align = size ty then "" else " align=" ^ nat (1 lsl align))
 
@@ -229,14 +291,22 @@ let storeop op =
   | Some sz -> memop ("store" ^ mem_size sz) op
 
 
+(* Values *)
+
+let value = function
+  | I32 i -> I32.to_string_s i
+  | I64 i -> I64.to_string_s i
+  | F32 z -> F32.to_string z
+  | F64 z -> F64.to_string z
+
+let values = function
+  | [v] -> value v
+  | vs -> "[" ^ String.concat " " (List.map value vs) ^ "]"
+
+
 (* Expressions *)
 
-let var (x : idx) = match x.name with
-  | None -> nat32 x.index
-  | Some n -> "$" ^ n
-
-let value v = string_of_value v
-let constop v = value_type (type_of v) ^ ".const"
+let constop v = num_value_type (type_of v) ^ ".const"
 
 let rec instr e =
   let head, inner =
@@ -274,6 +344,19 @@ let rec instr e =
     | Unary op -> unop op, []
     | Binary op -> binop op, []
     | Convert op -> cvtop op, []
+
+  (*GC*)| RefNull -> "ref.null", []
+  (*GC*)| RefIsNull -> "ref.is_null", []
+  (*GC*)| RefFunc funcidx -> "ref.func " ^ var funcidx, []
+  (*GC*)| RefEq -> "ref.eq", []
+
+  (*GC*)| StructNew typeidx -> "struct.new " ^ var typeidx, []
+  (*GC*)| StructGet (typeidx, fieldidx) -> "struct.get " ^ var typeidx ^ " " ^ var fieldidx, []
+  (*GC*)| StructSet (typeidx, fieldidx) -> "struct.set " ^ var typeidx ^ " " ^ var fieldidx, []
+  (*GC*)| ArrayNew typeidx -> "array.new " ^ var typeidx, []
+  (*GC*)| ArrayGet typeidx -> "array.get " ^ var typeidx, []
+  (*GC*)| ArraySet typeidx -> "array.set " ^ var typeidx, []
+  (*GC*)| ArrayLen typeidx -> "array.len " ^ var typeidx, []
   in Node (head, inner)
 
 let const c =
@@ -331,13 +414,34 @@ let data seg =
 
 (* Modules *)
 
-let typedef i ty =
+let func_typedef i ty =
   let FuncType ft = ty in
   let n = match ft.name with
     | None -> "$" ^ nat i
     | Some name -> "$" ^ name
   in
+  Node ("type " ^ n, [func_type ty])
+
+let struct_typedef i ty =
+  let StructType st = ty in
+  let n = match st.name with
+    | None -> "$" ^ nat i
+    | Some name -> "$" ^ name
+  in
   Node ("type " ^ n, [struct_type ty])
+
+let array_typedef i ty =
+  let ArrayType at = ty in
+  let n = match at.name with
+    | None -> "$" ^ nat i
+    | Some name -> "$" ^ name
+  in
+  Node ("type " ^ n, [array_type ty])
+
+let typedef i = function
+  | TypeFunc f -> func_typedef i f
+  | TypeStruct s -> struct_typedef i s
+  | TypeArray a -> array_typedef i a
 
 let import_desc i d =
   match d with

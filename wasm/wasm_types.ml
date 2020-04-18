@@ -19,15 +19,42 @@ module I64 = Wasm_i64
 module F32 = Wasm_f32
 module F64 = Wasm_f64
 
-(* Types *)
+(* everything marked with GC comes from https://docs.google.com/document/d/1DklC3qVuOdLHSXB5UXghM_syCh-4cMinQ50ICiXnK3Q/edit# *)
 
-type value_type = I32Type | I64Type | F32Type | F64Type
+(* Types *)
+type idx = { index: int32; name: string option}
+type typeidx = idx
+(*GC*)type fieldidx = idx
+type funcidx = idx
+type tableidx = idx
+type memidx = idx
+type globalidx = idx
+type localidx = idx
+type labelidx = idx
+
+type mutability = Immutable | Mutable
+
+type num_type = I32Type | I64Type | F32Type | F64Type
+(*GC*)type cons_type = Func | Any | Null | Opt of typeidx | I31 | Eq | Rtt of typeidx
+(*GC*)type ref_type = 
+  | Ref of cons_type 
+  | AnyRef 
+  | NullRef
+  | OptRef of typeidx
+(*GC*)type packed_type = I8Type | I16Type
+type value_type = NumValueType of num_type | (*GC*)RefValueType of ref_type
+type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
+type field_type = FieldType of mutability * storage_type
+
 type elem_type = AnyFuncType
+
 type stack_type = value_type list
 type func_type = FuncType of { name: string option; t: stack_type * stack_type }
 
+type struct_type = StructType of { name: string option; t: field_type list }
+type array_type = ArrayType of { name: string option; t: field_type }
+
 type 'a limits = {min : 'a; max : 'a option}
-type mutability = Immutable | Mutable
 type table_type = TableType of Int32.t limits * elem_type
 type memory_type = MemoryType of Int32.t limits
 type global_type = GlobalType of value_type * mutability
@@ -85,46 +112,3 @@ let memories =
   Lib.List.map_filter (function ExternMemoryType t -> Some t | _ -> None)
 let globals =
   Lib.List.map_filter (function ExternGlobalType t -> Some t | _ -> None)
-
-
-(* String conversion *)
-
-let string_of_value_type = function
-  | I32Type -> "i32"
-  | I64Type -> "i64"
-  | F32Type -> "f32"
-  | F64Type -> "f64"
-
-let string_of_value_types = function
-  | [t] -> string_of_value_type t
-  | ts -> "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
-
-let string_of_elem_type = function
-  | AnyFuncType -> "anyfunc"
-
-let string_of_limits {min; max} =
-  I32.to_string_u min ^
-  (match max with None -> "" | Some n -> " " ^ I32.to_string_u n)
-
-let string_of_memory_type = function
-  | MemoryType lim -> string_of_limits lim
-
-let string_of_table_type = function
-  | TableType (lim, t) -> string_of_limits lim ^ " " ^ string_of_elem_type t
-
-let string_of_global_type = function
-  | GlobalType (t, Immutable) -> string_of_value_type t
-  | GlobalType (t, Mutable) -> "(mut " ^ string_of_value_type t ^ ")"
-
-let string_of_stack_type ts =
-  "[" ^ String.concat " " (List.map string_of_value_type ts) ^ "]"
-
-let string_of_func_type (FuncType ft) =
-  let (ins, out) = ft.t in
-  string_of_stack_type ins ^ " -> " ^ string_of_stack_type out
-
-let string_of_extern_type = function
-  | ExternFuncType ft -> "func " ^ string_of_func_type ft
-  | ExternTableType tt -> "table " ^ string_of_table_type tt
-  | ExternMemoryType mt -> "memory " ^ string_of_memory_type mt
-  | ExternGlobalType gt -> "global " ^ string_of_global_type gt
