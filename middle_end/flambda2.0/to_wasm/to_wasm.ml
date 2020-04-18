@@ -52,11 +52,17 @@ let static_const
       env
       (bound_symbols : Flambda.Let_symbol_expr.Bound_symbols.t)
       (static_const : Flambda.Static_const.t) =
+  let _ = Format.printf "\nF: static_const" in
+  let _ = Format.printf "\nbound_symbols: " in
+  let _ = Flambda.Let_symbol_expr.Bound_symbols.print Format.std_formatter bound_symbols in
+  let _ = Format.printf "\nstatic_const: " in
+  let _ = Flambda.Static_const.print Format.std_formatter static_const in
+
   match bound_symbols, static_const with
   | Singleton s, Block (tag, _mut, fields) ->
     env, []
   | _ ->
-    todo ()
+    failwith "static_const not implemented for this"
 
 let rec expr env e =
   match (Flambda.Expr.descr e : Flambda.Expr.descr) with
@@ -73,7 +79,7 @@ and lexpr _env _t = todo ()
 and lsymbol env let_sym =
   let body = Flambda.Let_symbol_expr.body let_sym in
   let bound_symbols = Flambda.Let_symbol_expr.bound_symbols let_sym in
-  let env' = {env with 
+  let env' = { env with 
     names_in_scope = Code_id_or_symbol.Set.union
       env.names_in_scope
       (Flambda.Let_symbol_expr.Bound_symbols.everything_being_defined bound_symbols)}
@@ -86,11 +92,14 @@ and lsymbol env let_sym =
   in
   (*let vars' = Variable.Map.add (expr env) in*)
   expr env'' body
-  todo ()
 
 and lcont _env _t = todo ()
-and apply_expr _env _t = todo ()
-and apply_cont _env _t = todo ()
+and apply_expr _env _t = 
+  Apply_expr.print Format.std_formatter _t;
+  todo ()
+and apply_cont _env _t = 
+  Apply_cont_expr.print Format.std_formatter _t;
+  todo ()
 and switch _env _t = todo ()
 and invalid _env _t = todo ()
   
@@ -107,6 +116,7 @@ let unit (unit : Flambda_unit.t) =
       function_needs_closure = Code_id.Map.empty;
       vars = Variable.Map.empty;
       conts = Continuation.Map.empty;
+      names_in_scope = Code_id_or_symbol.Set.empty;
     } in
 
     let (functions, instructions) = expr env (Flambda_unit.body unit) in
