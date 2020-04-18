@@ -375,56 +375,62 @@ let bytes_like_set ?(dbg=Debuginfo.none) kind width block index value =
 
 (* wrappers for bigarrays *)
 
-let lambda_ba_layout layout =
-  match (layout : Flambda_primitive.bigarray_layout) with
-  | C -> Lambda.Pbigarray_c_layout
-  | Fortran -> Lambda.Pbigarray_fortran_layout
-  | Unknown -> Lambda.Pbigarray_unknown_layout
-
-let lambda_ba_kind k =
+let lambda_ba_kind k : Lambda.bigarray_kind =
   match (k : Flambda_primitive.bigarray_kind) with
-  | Unknown -> Lambda.Pbigarray_unknown
-  | Float32 -> Lambda.Pbigarray_float32
-  | Float64 -> Lambda.Pbigarray_float64
-  | Sint8   -> Lambda.Pbigarray_sint8
-  | Uint8   -> Lambda.Pbigarray_uint8
-  | Sint16  -> Lambda.Pbigarray_sint16
-  | Uint16  -> Lambda.Pbigarray_uint16
-  | Int32   -> Lambda.Pbigarray_int32
-  | Int64   -> Lambda.Pbigarray_int64
-  | Int_width_int -> Lambda.Pbigarray_caml_int
-  | Targetint_width_int -> Lambda.Pbigarray_native_int
-  | Complex32 -> Lambda.Pbigarray_complex32
-  | Complex64 -> Lambda.Pbigarray_complex64
+  | Float32 -> Pbigarray_float32
+  | Float64 -> Pbigarray_float64
+  | Sint8   -> Pbigarray_sint8
+  | Uint8   -> Pbigarray_uint8
+  | Sint16  -> Pbigarray_sint16
+  | Uint16  -> Pbigarray_uint16
+  | Int32   -> Pbigarray_int32
+  | Int64   -> Pbigarray_int64
+  | Int_width_int -> Pbigarray_caml_int
+  | Targetint_width_int -> Pbigarray_native_int
+  | Complex32 -> Pbigarray_complex32
+  | Complex64 -> Pbigarray_complex64
 
-let bigarray_load ?(dbg=Debuginfo.none) (is_safe : Flambda_primitive.is_safe)
-      _dims kind layout = function
-  | ba :: args ->
-      assert (List.length args = _dims); (* TODO: correct ? *)
-      let kind = lambda_ba_kind kind in
-      let layout = lambda_ba_layout layout in
-      let is_unsafe =
-        match is_safe with
-        | Safe -> false
-        | Unsafe -> true
-      in
-      bigarray_get is_unsafe kind layout ba args dbg
-  | _ -> assert false
+let bigarray_load ?(dbg=Debuginfo.none) _dims kind _layout ba offset =
+  let elt_kind = lambda_ba_kind kind in
+  let elt_size = bigarray_elt_size_in_bytes elt_kind in
+  let elt_chunk = bigarray_word_kind elt_kind in
+  let ba_data_f = field_address ba 1 dbg in
+  let ba_data_p = load ~dbg Word_int Mutable ba_data_f in
+  let addr =
+    array_indexing ~typ:Addr (Misc.log2 elt_size) ba_data_p offset dbg
+  in
+  match (elt_kind : Lambda.bigarray_kind) with
+  | Pbigarray_complex32
+  | Pbigarray_complex64 ->
+    let addr' = binary Cadda ~dbg addr (int (elt_size / 2)) in
+    box_complex dbg
+      (load ~dbg elt_chunk Mutable addr)
+      (load ~dbg elt_chunk Mutable addr')
+  | _ ->
+    load ~dbg elt_chunk Mutable addr
 
-let bigarray_store ?(dbg=Debuginfo.none) (is_safe : Flambda_primitive.is_safe)
-      _dims kind layout = function
-  | ba :: args ->
-      let indexes, value = Misc.split_last args in
-      let kind = lambda_ba_kind kind in
-      let layout = lambda_ba_layout layout in
-      let is_unsafe =
-        match is_safe with
-        | Safe -> false
-        | Unsafe -> true
-      in
-      return_unit dbg (
-        bigarray_set is_unsafe kind layout ba indexes value dbg)
-  | _ -> assert false
+let bigarray_store ?(dbg=Debuginfo.none) _dims kind _layout ba offset v =
+  let elt_kind = lambda_ba_kind kind in
+  let elt_size = bigarray_elt_size_in_bytes elt_kind in
+  let elt_chunk = bigarray_word_kind elt_kind in
+  let ba_data_f = field_address ba 1 dbg in
+  let ba_data_p = load ~dbg Word_int Mutable ba_data_f in
+  let addr =
+    array_indexing ~typ:Addr (Misc.log2 elt_size) ba_data_p offset dbg
+  in
+  match elt_kind with
+  | Pbigarray_complex32
+  | Pbigarray_complex64 ->
+    let addr' = binary Cadda ~dbg addr (int (elt_size / 2)) in
+    return_unit dbg (
+      sequence
+        (store ~dbg elt_chunk Assignment addr (complex_re v dbg))
+        (store ~dbg elt_chunk Assignment addr' (complex_im v dbg))
+    )
+  | _ ->
+    return_unit dbg
+      (store ~dbg elt_chunk Assignment addr v)
+
 
 (* try-with blocks *)
 

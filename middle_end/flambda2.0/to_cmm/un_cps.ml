@@ -75,7 +75,7 @@ let name env name =
 (* Constants *)
 
 let tag_targetint t = Targetint.(add (shift_left t 1) one)
-let targetint_of_imm i = Targetint.OCaml.to_targetint i.Immediate.value
+let targetint_of_imm i = Targetint.OCaml.to_targetint i.Target_imm.value
 
 let const _env cst =
   match Reg_width_const.descr cst with
@@ -417,6 +417,8 @@ let binary_primitive env dbg f x y =
       C.block_load ~dbg kind x y
   | String_or_bigstring_load (kind, width) ->
       C.string_like_load ~dbg kind width x y
+  | Bigarray_load (dimensions, kind, layout) ->
+      C.bigarray_load ~dbg dimensions kind layout x y
   | Phys_equal (kind, op) ->
       binary_phys_comparison env dbg kind op x y
   | Int_arith (kind, op) ->
@@ -436,23 +438,13 @@ let ternary_primitive _env dbg f x y z =
       C.block_set ~dbg block_access init x y z
   | Bytes_or_bigstring_set (kind, width) ->
       C.bytes_like_set ~dbg kind width x y z
+  | Bigarray_set (dimensions, kind, layout) ->
+      C.bigarray_store ~dbg dimensions kind layout x y z
 
 let variadic_primitive _env dbg f args =
   match (f : Flambda_primitive.variadic_primitive) with
   | Make_block (kind, _mut) ->
       C.make_block ~dbg kind args
-  | Bigarray_load (_is_safe, dimensions, Unknown, _)
-  | Bigarray_load (_is_safe, dimensions, _, Unknown) ->
-      let f = "caml_ba_get_" ^ string_of_int dimensions in
-      C.extcall ~dbg ~alloc:true f typ_val args
-  | Bigarray_set (_is_safe, dimensions, Unknown, _)
-  | Bigarray_set (_is_safe, dimensions, _, Unknown) ->
-      let f = "caml_ba_set_" ^ string_of_int dimensions in
-      C.extcall ~dbg ~alloc:true f typ_val args
-  | Bigarray_load (is_safe, dimensions, kind, layout) ->
-      C.bigarray_load ~dbg is_safe dimensions kind layout args
-  | Bigarray_set (is_safe, dimensions, kind, layout) ->
-      C.bigarray_store ~dbg is_safe dimensions kind layout args
 
 let arg_list env l =
   let aux (list, env, effs) x =
@@ -1061,8 +1053,8 @@ and switch env s =
   let e, env, _ = simple env (Switch.scrutinee s) in
   let wrap, env = Env.flush_delayed_lets env in
   let ints, exprs =
-    Immediate.Map.fold (fun d action (ints, exprs) ->
-      let i = Targetint.OCaml.to_int (Immediate.to_targetint d) in
+    Target_imm.Map.fold (fun d action (ints, exprs) ->
+      let i = Targetint.OCaml.to_int (Target_imm.to_targetint d) in
       let e = apply_cont env action in
       (i :: ints, e :: exprs)
       ) (Switch.arms s) ([], [])
@@ -1090,8 +1082,8 @@ and switch env s =
         (* The transl_switch_clambda expects an index array such that
            index.(i) is the index in [cases] of the expression to
            execute when [e] matches [i]. *)
-        let d, _ = Immediate.Map.max_binding (Switch.arms s) in
-        let n = Targetint.OCaml.to_int (Immediate.to_targetint d) in
+        let d, _ = Target_imm.Map.max_binding (Switch.arms s) in
+        let n = Targetint.OCaml.to_int (Target_imm.to_targetint d) in
         let index = Array.make (n + 2) c in
         Array.iteri (fun i j -> index.(j) <- i) ints;
         wrap (C.transl_switch_clambda Location.none e index cases)

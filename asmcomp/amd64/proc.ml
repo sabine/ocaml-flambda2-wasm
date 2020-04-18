@@ -310,6 +310,11 @@ let destroyed_at_alloc =
   in
   Array.concat [regs; destroyed_by_plt_stub]
 
+let rec has_push_traps = function
+  | [] -> false
+  | Pop :: traps -> has_push_traps traps
+  | Push _ :: _ -> true
+
 let destroyed_at_oper = function
     Iop(Icall_ind _ | Icall_imm _ | Iextcall { alloc = true; }) ->
     all_phys_regs
@@ -326,6 +331,7 @@ let destroyed_at_oper = function
       [| loc_spacetime_node_hole |]
   | Iswitch(_, _) -> [| rax; rdx |]
   | Itrywith _ -> [| r11 |]
+  | Iexit (_, traps) when has_push_traps traps -> [| r11 |]
   | _ ->
     if fp then
 (* prevent any use of the frame pointer ! *)

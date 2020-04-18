@@ -78,56 +78,38 @@ let compile_staticfail ~(continuation : Continuation.t) ~args =
   assert (Continuation.Set.subset
     (Continuation.Set.of_list try_stack_at_handler)
     (Continuation.Set.of_list try_stack_now));
-  let outer_wrapper_cont = Continuation.create () in
-  let rec add_pop_traps ~prev_cont ~body ~try_stack_now ~try_stack_at_handler =
-    let add_pop cont ~try_stack_now =
+  let rec add_pop_traps ~try_stack_now ~try_stack_at_handler =
+    let add_pop cont ~try_stack_now after_pop =
+      let mk_remaining_traps =
+        add_pop_traps ~try_stack_now ~try_stack_at_handler
+      in
       let wrapper_cont = Continuation.create () in
       let trap_action : I.trap_action =
         Pop { exn_handler = cont; }
       in
-      let body =
-        match body with
-        | Some body -> body
-        | None -> I.Apply_cont (wrapper_cont, None, [])
-      in
-      let body =
-        I.Let_cont {
-          name = wrapper_cont;
-          is_exn_handler = false;
-          params = [];
-          recursive = Nonrecursive;
-          body;
-          handler = Apply_cont (prev_cont, Some trap_action, []);
-        }
-      in
-      add_pop_traps ~prev_cont:wrapper_cont ~body:(Some body)
-        ~try_stack_now ~try_stack_at_handler
+      let body = I.Apply_cont (wrapper_cont, Some trap_action, []) in
+      I.Let_cont {
+        name = wrapper_cont;
+        is_exn_handler = false;
+        params = [];
+        recursive = Nonrecursive;
+        body;
+        handler = mk_remaining_traps after_pop;
+      }
     in
+    let no_pop after_pop = after_pop in
     match try_stack_now, try_stack_at_handler with
-    | [], [] -> body
+    | [], [] -> no_pop
     | cont1 :: try_stack_now, cont2 :: _ ->
-      if Continuation.equal cont1 cont2 then body
+      if Continuation.equal cont1 cont2 then no_pop
       else add_pop cont1 ~try_stack_now
     | cont :: try_stack_now, [] -> add_pop cont ~try_stack_now
     | [], _ :: _ -> assert false  (* see above *)
   in
-  let body =
-    add_pop_traps ~prev_cont:outer_wrapper_cont
-      ~body:None
-      ~try_stack_now
-      ~try_stack_at_handler
+  let mk_poptraps =
+    add_pop_traps ~try_stack_now ~try_stack_at_handler
   in
-  match body with
-  | None -> I.Apply_cont (continuation, None, args)
-  | Some body ->
-    I.Let_cont {
-      name = outer_wrapper_cont;
-      is_exn_handler = false;
-      params = [];
-      recursive = Nonrecursive;
-      body;
-      handler = Apply_cont (continuation, None, args);
-    }
+  mk_poptraps (I.Apply_cont (continuation, None, args))
 
 let rec cps_non_tail (lam : L.lambda) (k : Ident.t -> Ilambda.t)
           (k_exn : Continuation.t) : Ilambda.t =

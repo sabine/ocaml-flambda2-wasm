@@ -200,6 +200,11 @@ let regs_are_volatile rs =
 let destroyed_at_c_call =               (* ebx, esi, edi, ebp preserved *)
   [|eax; ecx; edx|]
 
+let rec has_push_traps = function
+  | [] -> false
+  | Pop :: traps -> has_push_traps traps
+  | Push _ :: _ -> true
+
 let destroyed_at_oper = function
     Iop(Icall_ind _ | Icall_imm _ | Iextcall { alloc = true; _}) ->
     all_phys_regs
@@ -211,6 +216,7 @@ let destroyed_at_oper = function
   | Iop(Iintoffloat) -> [| eax |]
   | Iifthenelse(Ifloattest _, _, _) -> [| eax |]
   | Itrywith _ -> [| edx |]
+  | Iexit (_, traps) when has_push_traps traps -> [| edx |]
   | _ -> [||]
 
 let destroyed_at_raise = all_phys_regs

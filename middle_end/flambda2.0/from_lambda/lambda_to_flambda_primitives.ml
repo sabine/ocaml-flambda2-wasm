@@ -62,7 +62,7 @@ let length_offset_of_size size =
     | Thirty_two -> 3
     | Sixty_four -> 7
   in
-  Immediate.int (Targetint.OCaml.of_int offset)
+  Target_imm.int (Targetint.OCaml.of_int offset)
 
 (* This computes the maximum of a given value [x] with zero,
    in an optimized way. It takes as named argument the size (in bytes)
@@ -71,7 +71,7 @@ let length_offset_of_size size =
 let max_with_zero ~size_int x =
   let register_bitsize_minus_one =
     H.Simple (Simple.const (Reg_width_const.naked_immediate (
-        Immediate.int (Targetint.OCaml.of_int (size_int * 8 - 1)))))
+        Target_imm.int (Targetint.OCaml.of_int (size_int * 8 - 1)))))
   in
   let sign =
     H.Prim (Binary (Int_shift (Naked_nativeint, Asr),
@@ -173,6 +173,81 @@ let bigarray_unbox_value_to_store kind =
     Misc.fatal_errorf
       "Don't know how to unbox a fabricated expression to \
        store it in a bigarray"
+
+let bigarray_dim_bound b dimension =
+  H.Prim (Unary (Bigarray_length { dimension }, b))
+
+let bigarray_check_bound idx bound =
+  H.Binary (Int_comp (I.Naked_immediate, Unsigned, Lt), idx, bound)
+
+(* CR Gbury: this function in effect duplicates the bigarray_length access:
+             one is done in the validity check, and one in the final offset
+             computation, whereas cmmgen let-binds this access. It might
+             matter for the performance, although the processor cache might
+             make it not matter at all. *)
+let bigarray_indexing layout b args =
+  let num_dim = List.length args in
+  let rec aux dim delta_dim = function
+    | [] -> assert false
+    | [idx] ->
+      let bound = bigarray_dim_bound b dim in
+      let idxn = untag_int idx in
+      let check = bigarray_check_bound idxn bound in
+      [check], idx
+    | idx :: r ->
+      let checks, rem = aux (dim + delta_dim) delta_dim r in
+      let bound = bigarray_dim_bound b dim in
+      let idxn = untag_int idx in
+      let check = bigarray_check_bound idxn bound in
+      (* CR gbury: because we tag bound, and the tagged multiplication
+         untags it, we might be left with a needless zero-extend here. *)
+      let tmp =
+        H.Prim (Binary (Int_arith(I.Tagged_immediate, Mul), rem,
+                        Prim (Unary (Box_number Untagged_immediate, bound))))
+      in
+      let offset =
+        H.Prim (Binary (Int_arith(I.Tagged_immediate, Add), tmp, idx))
+      in
+      check :: checks, offset
+  in
+  match (layout : P.bigarray_layout) with
+  | C ->
+    aux num_dim (-1) (List.rev args)
+  | Fortran ->
+    aux 1 1 (List.map (fun idx ->
+      H.Prim (Binary (Int_arith (I.Tagged_immediate, Sub), idx,
+                      H.Simple (Simple.const_int Targetint.OCaml.one)))
+    ) args)
+
+let bigarray_ref ~dbg ~unsafe kind layout b indexes =
+  let num_dim = List.length indexes in
+  let checks, offset = bigarray_indexing layout b indexes in
+  let primitive =
+    H.Binary (Bigarray_load (num_dim, kind, layout), b, offset)
+  in
+  if unsafe then
+    primitive
+  else
+    H.Checked {
+      validity_conditions = checks;
+      failure = Index_out_of_bounds;
+      primitive; dbg;
+    }
+
+let bigarray_set ~dbg ~unsafe kind layout b indexes value =
+  let num_dim = List.length indexes in
+  let checks, offset = bigarray_indexing layout b indexes in
+  let primitive =
+    H.Ternary (Bigarray_set (num_dim, kind, layout), b, offset, value)
+  in
+  if unsafe then
+    primitive
+  else
+    H.Checked {
+      validity_conditions = checks;
+      failure = Index_out_of_bounds;
+      primitive; dbg;
+    }
 
 let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       (dbg : Debuginfo.t) : H.expr_primitive =
@@ -500,13 +575,13 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
     let const =
       Simple.const
         (Reg_width_const.tagged_immediate
-           (Immediate.int (Targetint.OCaml.of_int n)))
+           (Target_imm.int (Targetint.OCaml.of_int n)))
     in
     Binary (Int_arith (I.Tagged_immediate, Add), arg, Simple const)
   | Pfield ({ index; block_info = { tag; size; }; }, sem), [arg] ->
     (* CR mshinwell: Cause fatal error if the field value is < 0.
        We can't do this once we convert to Flambda *)
-    let imm = Immediate.int (Targetint.OCaml.of_int index) in
+    let imm = Target_imm.int (Targetint.OCaml.of_int index) in
     let field = Simple.const (Reg_width_const.tagged_immediate imm) in
     let mutability = C.convert_field_read_semantics sem in
     let block_access : P.Block_access_kind.t =
@@ -515,7 +590,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
     Binary (Block_load (block_access, mutability), arg,
       Simple field)
   | Pfloatfield (field, sem), [arg] ->
-    let imm = Immediate.int (Targetint.OCaml.of_int field) in
+    let imm = Target_imm.int (Targetint.OCaml.of_int field) in
     let field = Simple.const (Reg_width_const.tagged_immediate imm) in
     let mutability = C.convert_field_read_semantics sem in
     let block_access : P.Block_access_kind.t =
@@ -528,7 +603,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
     [block; value] ->
     let { index; block_info = { tag; size; }; } : Lambda.field_info = fi in
     let access_kind = C.convert_access_kind immediate_or_pointer in
-    let imm = Immediate.int (Targetint.OCaml.of_int index) in
+    let imm = Target_imm.int (Targetint.OCaml.of_int index) in
     let field = Simple.const (Reg_width_const.tagged_immediate imm) in
     let block_access : P.Block_access_kind.t =
       Block { elt_kind = access_kind; tag = Tag.create_exn tag; size; }
@@ -537,7 +612,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
          C.convert_init_or_assign initialization_or_assignment),
        block, Simple field, value)
   | Psetfloatfield (field, init_or_assign), [block; value] ->
-    let imm = Immediate.int (Targetint.OCaml.of_int field) in
+    let imm = Target_imm.int (Targetint.OCaml.of_int field) in
     let field = Simple.const (Reg_width_const.tagged_immediate imm) in
     let block_access : P.Block_access_kind.t =
       Block { elt_kind = Naked_float; tag = Tag.double_array_tag;
@@ -557,7 +632,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
                 Simple
                   (Simple.const
                      (Reg_width_const.tagged_immediate
-                        (Immediate.int (Targetint.OCaml.zero)))));
+                        (Target_imm.int (Targetint.OCaml.zero)))));
       ];
       failure = Division_by_zero;
       dbg;
@@ -571,7 +646,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
                 Simple
                   (Simple.const
                      (Reg_width_const.tagged_immediate
-                        (Immediate.int (Targetint.OCaml.zero)))));
+                        (Target_imm.int (Targetint.OCaml.zero)))));
       ];
       failure = Division_by_zero;
       dbg;
@@ -682,7 +757,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       validity_conditions = [
         Binary (Int_comp (Tagged_immediate, Signed, Ge), index,
           Simple (Simple.const (Reg_width_const.tagged_immediate
-            (Immediate.int (Targetint.OCaml.zero)))));
+            (Target_imm.int (Targetint.OCaml.zero)))));
         Binary (Int_comp (Tagged_immediate, Signed, Lt), index,
           Prim (Unary (Array_length (Array (Value Anything)), array)));
       ];
@@ -697,7 +772,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       validity_conditions = [
         Binary (Int_comp (Tagged_immediate, Signed, Ge), index,
           Simple (Simple.const (Reg_width_const.tagged_immediate
-            (Immediate.int (Targetint.OCaml.zero)))));
+            (Target_imm.int (Targetint.OCaml.zero)))));
         Binary (Int_comp (Tagged_immediate, Signed, Lt), index,
           Prim (Unary (Array_length (Array Naked_float), array)));
       ];
@@ -720,7 +795,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       validity_conditions = [
         Binary (Int_comp (Tagged_immediate, Signed, Ge), index,
           Simple (Simple.const (Reg_width_const.tagged_immediate
-            (Immediate.int (Targetint.OCaml.zero)))));
+            (Target_imm.int (Targetint.OCaml.zero)))));
         Binary (Int_comp (Tagged_immediate, Signed, Lt), index,
           Prim (Unary (Array_length (Array (Value Anything)), array)));
       ];
@@ -735,7 +810,7 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
       validity_conditions = [
         Binary (Int_comp (Tagged_immediate, Signed, Ge), index,
           Simple (Simple.const (Reg_width_const.tagged_immediate
-            (Immediate.int (Targetint.OCaml.zero)))));
+            (Target_imm.int (Targetint.OCaml.zero)))));
         Binary (Int_comp (Tagged_immediate, Signed, Lt), index,
           Prim (Unary (Array_length (Array Naked_float), array)));
       ];
@@ -808,21 +883,52 @@ let convert_lprim ~backend (prim : L.primitive) (args : Simple.t list)
         Prim (Unary (Unbox_number Naked_nativeint, arg)))))
   | Pint_as_pointer, [arg] -> Unary (Int_as_pointer, arg)
   | Pbigarrayref (unsafe, num_dimensions, kind, layout), args ->
-    (* CR mshinwell: When num_dimensions = 1 then we could actually
-       put the bounds check in Flambda. *)
-    let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
-    let kind = C.convert_bigarray_kind kind in
-    let layout = C.convert_bigarray_layout layout in
-    let box = bigarray_box_raw_value_read kind in
-    box (Variadic (Bigarray_load (is_safe, num_dimensions, kind, layout), args))
+    begin match C.convert_bigarray_kind kind,
+                C.convert_bigarray_layout layout with
+    | Some kind, Some layout ->
+      let b, indexes =
+        match args with
+        | b :: indexes ->
+          if List.compare_length_with indexes num_dimensions <> 0 then
+            Misc.fatal_errorf "Bad index arity for Pbigarrayref";
+          b, indexes
+        | [] -> Misc.fatal_errorf "Pbigarrayref is missing its arguments"
+      in
+      let box = bigarray_box_raw_value_read kind in
+      box (bigarray_ref ~dbg ~unsafe kind layout b indexes)
+    | None, _ ->
+      Misc.fatal_errorf
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
+         with an unknown kind should have been removed by Prepare_lambda."
+    | _, None ->
+      Misc.fatal_errorf
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
+         with an unknown layout should have been removed by Prepare_lambda."
+    end
   | Pbigarrayset (unsafe, num_dimensions, kind, layout), args ->
-    let is_safe : P.is_safe = if unsafe then Unsafe else Safe in
-    let kind = C.convert_bigarray_kind kind in
-    let layout = C.convert_bigarray_layout layout in
-    let unbox = bigarray_unbox_value_to_store kind in
-    let indexes, value_to_store = Misc.split_last args in
-    Variadic (Bigarray_set (is_safe, num_dimensions, kind, layout),
-              indexes @ [unbox value_to_store])
+    begin match C.convert_bigarray_kind kind,
+                C.convert_bigarray_layout layout with
+    | Some kind, Some layout ->
+      let b, indexes, value =
+        match args with
+        | b :: args ->
+          let indexes, value = Misc.split_last args in
+          if List.compare_length_with indexes num_dimensions <> 0 then
+            Misc.fatal_errorf "Bad index arity for Pbigarrayset";
+          b, indexes, value
+        | [] -> Misc.fatal_errorf "Pbigarrayset is missing its arguments"
+      in
+      let unbox = bigarray_unbox_value_to_store kind in
+      bigarray_set ~dbg ~unsafe kind layout b indexes (unbox value)
+    | None, _ ->
+      Misc.fatal_errorf
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
+         with an unknown kind should have been removed by Prepare_lambda."
+    | _, None ->
+      Misc.fatal_errorf
+        "Lambda_to_flambda_primitives.convert_lprim: Pbigarrayref primitives \
+         with an unknown layout should have been removed by Prepare_lambda."
+    end
   | Pbigarraydim dimension, [arg] ->
     tag_int (Unary (Bigarray_length { dimension; }, arg))
   | Pbigstring_load_16 true, [arg1; arg2] ->

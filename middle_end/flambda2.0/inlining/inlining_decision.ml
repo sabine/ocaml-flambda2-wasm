@@ -41,7 +41,8 @@ let make_decision_for_function_declaration denv function_decl
      first examining call sites. *)
   match Function_declaration.inline function_decl with
   | Never_inline -> Never_inline_attribute
-  | Always_inline | Default_inline | Unroll _ ->
+  | Always_inline -> Inline
+  | Default_inline | Unroll _ ->
     if Function_declaration.stub function_decl then Stub
     else
       let code_id = Function_declaration.code_id function_decl in

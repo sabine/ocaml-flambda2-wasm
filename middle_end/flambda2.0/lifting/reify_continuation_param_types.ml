@@ -55,6 +55,9 @@ let lift_non_closure_discovered_via_reified_continuation_param_types dacc
     dacc, reified_continuation_params_to_symbols, reified_definitions,
       closure_symbols_by_set
 
+(* CR mshinwell: Can the following work on non-inlinable functions if we
+   know enough about them? *)
+
 let lift_set_of_closures_discovered_via_reified_continuation_param_types dacc
       var closure_id function_decls ~closure_vars
       ~reified_continuation_params_to_symbols
@@ -293,7 +296,7 @@ let lift_via_reification_of_continuation_param_types0 dacc ~params
         Format.eprintf "Creating Let_symbol for:@ %a\n%!"
           Bound_symbols.print bound_symbols;
         *)
-        Let_symbol.create bound_symbols defining_expr handler
+        Let_symbol.create Dominator bound_symbols defining_expr handler
         |> Expr.create_let_symbol)
       handler
       reified_definitions.bindings_outermost_last

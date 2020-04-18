@@ -110,14 +110,14 @@ module rec Expr : sig
       to [Invalid], and one-arm switches to [Apply_cont]. *)
   val create_switch0
      : scrutinee:Simple.t
-    -> arms:Apply_cont_expr.t Immediate.Map.t
+    -> arms:Apply_cont_expr.t Target_imm.Map.t
     -> Expr.t * switch_creation_result
 
   (** Like [create_switch0], but for use when the caller isn't interested in
       whether something got deleted. *)
   val create_switch
      : scrutinee:Simple.t
-    -> arms:Apply_cont_expr.t Immediate.Map.t
+    -> arms:Apply_cont_expr.t Target_imm.Map.t
     -> Expr.t
 
   (** Build a [Switch] corresponding to a traditional if-then-else. *)
@@ -248,9 +248,22 @@ end and Let_symbol_expr : sig
     include Expr_std.S with type t := t
   end
 
+  module Scoping_rule : sig
+    type t =
+      | Syntactic
+      | Dominator
+  end
+
   type t
 
-  val create : Bound_symbols.t -> Static_const.t -> Expr.t -> t
+  val create
+     : Scoping_rule.t
+    -> Bound_symbols.t
+    -> Static_const.t
+    -> Expr.t
+    -> t
+
+  val scoping_rule : t -> Scoping_rule.t
 
   val bound_symbols : t -> Bound_symbols.t
 
@@ -498,7 +511,7 @@ end and Static_const : sig
     type t =
       | Symbol of Symbol.t
         (** The address of the given symbol. *)
-      | Tagged_immediate of Immediate.t
+      | Tagged_immediate of Target_imm.t
         (** The given tagged immediate. *)
       | Dynamically_computed of Variable.t
         (** The value of the given variable. *)

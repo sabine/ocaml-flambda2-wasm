@@ -75,21 +75,27 @@ let initial_reload_env fundecl =
   }
 
 type reload_cache_entry =
-  { at_exit_restricted : Reg.Set.t Numbers.Int.Map.t; (* last seen inputs *)
+  { before : Reg.Set.t; (* last seen input *)
     result : instruction * Reg.Set.t; (* last computed result *)
+    at_exit_result : Reg.Set.t Numbers.Int.Map.t;
+      (* reload_at_exit after computing the handler, for free handlers *)
   }
 
 let reload_cache : reload_cache_entry Numbers.Int.Map.t ref =
   ref Numbers.Int.Map.empty
 
-let cache_reload_result nfail env handler after_handler =
-  let at_exit_restricted =
+let cache_reload_result nfail before handler after_handler env =
+  let at_exit_result =
     Numbers.Int.Map.filter (fun n _at_exit ->
         Numbers.Int.Set.mem n
           (Numbers.Int.Map.find nfail env.free_conts_for_handlers))
       env.reload_at_exit
   in
-  let entry = { at_exit_restricted; result = (handler, after_handler); } in
+  let entry =
+    { before;
+      result = (handler, after_handler);
+      at_exit_result; }
+  in
   reload_cache := Numbers.Int.Map.add nfail entry !reload_cache
 
 let reset_cache () =
@@ -187,13 +193,11 @@ let find_reload_at_exit env k =
 
 let find_in_reload_cache nfail env =
   try
-    let { at_exit_restricted; result; } =
+    let { before; result; at_exit_result; } =
       Numbers.Int.Map.find nfail !reload_cache
     in
-    if Numbers.Int.Map.for_all (fun n at_exit ->
-        Reg.Set.equal at_exit (find_reload_at_exit env n))
-      at_exit_restricted
-    then Some result
+    if Reg.Set.subset (find_reload_at_exit env nfail) before
+    then Some (result, at_exit_result)
     else None
   with Not_found -> None
 
@@ -299,13 +303,21 @@ let rec reload env i before =
                let handler, after_handler, env =
                  match find_in_reload_cache nfail env with
                  | None ->
+                   let before_handler = find_reload_at_exit env nfail in
                    let handler, after_handler, env =
-                     reload env handler (find_reload_at_exit env nfail)
+                     reload env handler before_handler
                    in
-                   cache_reload_result nfail env handler after_handler;
+                   cache_reload_result nfail before_handler
+                     handler after_handler env;
                    handler, after_handler, env
-                 | Some (handler, after_handler) ->
-                   handler, after_handler, env
+                 | Some ((handler, after_handler), at_exit_result) ->
+                   let reload_at_exit =
+                     Numbers.Int.Map.union (fun _nfail from_env from_result ->
+                         Some (Reg.Set.union from_env from_result))
+                       env.reload_at_exit
+                       at_exit_result
+                   in
+                   handler, after_handler, { env with reload_at_exit }
                in
                ((nfail, ts, handler) :: handlers,
                 Reg.Set.union after_union after_handler,
@@ -450,7 +462,7 @@ let find_in_spill_cache nfail env =
       Numbers.Int.Map.find nfail !spill_cache
     in
     if List.for_all (fun (n, at_exit) ->
-        Reg.Set.equal at_exit (find_spill_at_exit env n))
+        Reg.Set.subset (find_spill_at_exit env n) at_exit)
       at_exit_restricted
     then Some result
     else None
