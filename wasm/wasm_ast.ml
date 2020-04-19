@@ -4,7 +4,7 @@
 (*                                                                        *)
 (*   original code by Andreas Rossberg from WebAssembly/spec/interpreter  *)
 (*   adapted for use in the OCaml compiler by Sander Spies                *)
-(*   modified slightly by Sabine Schmaltz, Tarides                        *)
+(*   modified by Sabine Schmaltz, Tarides                                 *)
 (*                                                                        *)
 (*   Licensed under the Apache License, Version 2.0 (the "License");      *)
 (*   you may not use this file except in compliance with the License.     *)
@@ -182,11 +182,6 @@ type memory_segment = string segment
 
 (* Modules *)
 
-type type_ =
-  | TypeFunc of func_type
-  | TypeStruct of struct_type
-  | TypeArray of array_type
-
 type export_desc =
   | FuncExport of funcidx
   | TableExport of tableidx
@@ -228,7 +223,7 @@ type data_part = {
 
 type module_ =
 {
-  types : type_ list;
+  types : deftype list;
   globals : global list;
   tables : table list;
   memories : memory list;

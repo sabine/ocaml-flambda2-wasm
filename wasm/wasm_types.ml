@@ -4,7 +4,7 @@
 (*                                                                        *)
 (*   original code by Andreas Rossberg from WebAssembly/spec/interpreter  *)
 (*   adapted for use in the OCaml compiler by Sander Spies                *)
-(*   modified slightly by Sabine Schmaltz, Tarides                        *)
+(*   modified by Sabine Schmaltz, Tarides                                 *)
 (*                                                                        *)
 (*   Licensed under the Apache License, Version 2.0 (the "License");      *)
 (*   you may not use this file except in compliance with the License.     *)
@@ -43,16 +43,21 @@ type num_type = I32Type | I64Type | F32Type | F64Type
   | OptRef of typeidx
 (*GC*)type packed_type = I8Type | I16Type
 type value_type = NumValueType of num_type | (*GC*)RefValueType of ref_type
-type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
-type field_type = FieldType of mutability * storage_type
+(*GC*)type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
+(*GC*)type field_type = FieldType of mutability * storage_type
 
 type elem_type = AnyFuncType
-
 type stack_type = value_type list
-type func_type = FuncType of { name: string option; t: stack_type * stack_type }
 
-type struct_type = StructType of { name: string option; t: field_type list }
-type array_type = ArrayType of { name: string option; t: field_type }
+type func_type = FuncType of { name: string option; t: stack_type * stack_type }
+(*GC*)type struct_type = StructType of { name: string option; t: field_type list }
+(*GC*)type array_type = ArrayType of { name: string option; t: field_type }
+
+type deftype =
+  | TypeFunc of func_type
+  (*GC*)| TypeStruct of struct_type
+  (*GC*)| TypeArray of array_type
+
 
 type 'a limits = {min : 'a; max : 'a option}
 type table_type = TableType of Int32.t limits * elem_type
