@@ -18,6 +18,7 @@
 open! Flambda.Import
 *)
 
+open Wmm
 open Wasm.Wasm_ast
 open Wasm.Wasm_types
 
