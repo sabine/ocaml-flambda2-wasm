@@ -80,20 +80,15 @@ let num_value_type = function
   | F32Type -> "f32"
   | F64Type -> "f64"
 
-let cons_type = function
-  | Func -> "func"
-  | Any -> "any"
-  | Null -> "null"
-  | Opt (typeidx) -> "opt? " ^ var typeidx
-  | I31 -> "i31"
-  | Eq -> "eq"
-  | Rtt (typeidx) -> "rtt " ^ var typeidx
 
 let ref_value_type = function
-  | Ref (ct) -> "ref " ^ cons_type ct
-  | AnyRef -> "anyref"
-  | NullRef -> "nullref"
-  | OptRef (typeidx) -> "optref " ^ var typeidx
+  | FuncRef -> "ref func"
+  | AnyRef -> "ref any"
+  | NullRef -> "ref null"
+  | OptRef (typeidx) -> "ref opt? " ^ var typeidx
+  | I31Ref -> "ref i31"
+  | EqRef -> "ref eq"
+  | RttRef (typeidx) -> "ref rtt " ^ var typeidx
 
 let value_type = function
   | NumValueType n -> num_value_type n

@@ -35,12 +35,14 @@ type labelidx = idx
 type mutability = Immutable | Mutable
 
 type num_type = I32Type | I64Type | F32Type | F64Type
-(*GC*)type cons_type = Func | Any | Null | Opt of typeidx | I31 | Eq | Rtt of typeidx
 (*GC*)type ref_type = 
-  | Ref of cons_type 
-  | AnyRef 
+  | AnyRef
+  | FuncRef
   | NullRef
   | OptRef of typeidx
+  | I31Ref
+  | EqRef
+  | RttRef of typeidx
 (*GC*)type packed_type = I8Type | I16Type
 type value_type = NumValueType of num_type | (*GC*)RefValueType of ref_type
 (*GC*)type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
