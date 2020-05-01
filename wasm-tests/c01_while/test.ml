@@ -1,10 +1,7 @@
-let b = ref 10
+let a = ref 10
 
-let _ = while !b > 0 do
-  b := !b - 1
+let _ = while !a > 0 do
+  a := !a - 1
 done
 
-let a = while !b > 0 do
-  b := !b - 1
-done
-
+let b = !a

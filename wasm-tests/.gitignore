@@ -4,11 +4,13 @@
 *.cmi
 *.a
 *.o
+*.s
 *.cmx
 *.cmxs
 *.cmxa
 *.swp
 *.flambda
 *.wat
+*.wasm
 *.out
-
+wabt

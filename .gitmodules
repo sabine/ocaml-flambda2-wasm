@@ -1,3 +1,6 @@
 [submodule "flexdll"]
     path = flexdll
     url = https://github.com/alainfrisch/flexdll.git
+[submodule "wasm-tests/wabt"]
+	path = wasm-tests/wabt
+	url = https://github.com/WebAssembly/wabt.git
