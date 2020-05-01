@@ -207,6 +207,8 @@ let compile_implementation2 ?toplevel ~backend ~filename ~prefixname
         let oc = open_out (prefixname ^ ".wat") in
         Wasm.Wasm_print_wat.module_ oc 80 wasm_module;
         close_out oc;
+        end_gen_implementation ?toplevel ~ppf_dump Un_cps.unit
+          translated_program
       else
         end_gen_implementation ?toplevel ~ppf_dump Un_cps.unit
           translated_program)

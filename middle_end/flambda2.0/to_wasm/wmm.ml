@@ -16,7 +16,7 @@ module Wasm_types = Wasm.Wasm_types
 
 type wasmtype_component =
   | Val
-  | Ref
+  | Anyref
   | I32
   | F64
 
@@ -24,7 +24,7 @@ type wasmtype = wasmtype_component array
 
 let typ_void = ([||] : wasmtype)
 let typ_val = [|Val|]
-let typ_ref = [|Ref|]
+let typ_anyref = [|Anyref|]
 let typ_i32 = [|I32|]
 let typ_f64 = [|F64|]
 
@@ -46,8 +46,7 @@ let swap_float_comparison = Lambda.swap_float_comparison
 
 
 
-(* TODO: probably unnecessary to go to Cmm's control flow just to go to WASM's later on.
-Instead try to go to a WASM-style control flow *)
+(* TODO: try to keep a Flambda 2.0-style control flow where inlining has already been performed *)
 type label = int
 
 let label_counter = ref 99
@@ -67,6 +66,7 @@ type trap_action =
 type trywith_kind =
   | Regular
   | Delayed of trywith_shared_label
+
 
 
 
@@ -149,21 +149,21 @@ type fundecl =
     fun_dbg : Debuginfo.t;
   }
 
-(* TODO: instead of this asm-like dumping of data_items, we want to have a more abstract notion of data items *)
-type data_item =
-    Wdefine_symbol of string
-  | Wglobal_symbol of string
+type data_item_value =
+  | Wnullref (* for uninitialized global variables of type anyref *)
   | Wint8 of Wasm_types.I32.t
   | Wint16 of Wasm_types.I32.t
   | Wint32 of Wasm_types.I32.t
   | Wint64 of Wasm_types.I64.t
   | Wsingle of Wasm_types.F32.t
   | Wdouble of Wasm_types.F64.t
-  | Wsymbol_address of string
+  | Wsymbol_ref of string
   | Wstring of string
-  (* TODO: I do not know what this is *)
-  | Wskip of int
-  | Walign of int
+
+type data_item =
+    Wdefine_local_symbol of string * data_item_value list
+  | Wdefine_global_symbol of string * data_item_value list
+  | Wunnamed_data_block of data_item_value list
 
 type phrase =
     Wfunction of fundecl
