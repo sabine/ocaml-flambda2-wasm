@@ -63,6 +63,7 @@
   tests/lib-fun
   tests/lib-hashtbl
   tests/lib-int
+  tests/lib-int32
   tests/lib-int64
   tests/lib-internalformat
   tests/lib-list
@@ -91,6 +92,7 @@
   tests/link-test
   tests/locale
   tests/local-functions
+  tests/loops
   tests/manual-intf-c
   tests/match-exception
   tests/match-exception-warnings
