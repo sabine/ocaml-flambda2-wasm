@@ -1,5 +1,5 @@
 cd ..
-./optcompile.sh wasm-tests/$1/test.ml
+./optcompile.sh -dcmm wasm-tests/$1/test.ml
 cd wasm-tests
 cd $1
 printf "\n\nwat2wasm:\n"

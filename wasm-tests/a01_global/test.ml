@@ -1,3 +1,2 @@
-let a = 13
-let array_ = [|1;2;3;4;5|]
-let list_ = [6;7;8;9;10]
+(* 1792 = block size 1, color 11, tag 0 *)
+let x = 13
