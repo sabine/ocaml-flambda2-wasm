@@ -1641,7 +1641,7 @@ let make_constr_matching p def ctx = function
           | Cstr_extension (_, true) -> argl
           | Cstr_extension (_, false) ->
               let block_info = {
-                  tag = Obj.object_tag;
+                  tag = 0;
                   size = Known (cstr.cstr_arity + 1);
                 }
               in

@@ -154,10 +154,11 @@ let tupled_function_call_stub
         let defining_expr =
           let pos = Target_imm.int (Targetint.OCaml.of_int pos) in
           let block_access : P.Block_access_kind.t =
-            Block { elt_kind = Value Anything;
-                    tag = Tag.zero;
-                    size = Known (List.length params);
-                  }
+            Values {
+              tag = Tag.Scannable.zero;
+              size = Known (Targetint.OCaml.of_int (List.length params));
+              field_kind = Any_value;
+            }
           in
           Named.create_prim
             (Binary (
@@ -253,8 +254,14 @@ let rec declare_const t (const : Lambda.structured_constant)
     register_const t (Boxed_nativeint (Const c)) "nativeint"
   | Const_immstring c ->
     register_const t (Immutable_string c) "immstring"
+  | Const_float_block c ->
+    register_const t
+      (Immutable_float_block
+         (List.map (fun s ->
+           let f = Numbers.Float_by_bit_pattern.create (float_of_string s) in
+           Or_variable.Const f) c))
+      "float_block"
   | Const_float_array c ->
-    (* CR mshinwell: check that Const_float_array is always immutable *)
     register_const t
       (Immutable_float_array
          (List.map (fun s ->
@@ -1089,10 +1096,11 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
       |> Flambda.Expr.create_let_symbol
     in
     let block_access : P.Block_access_kind.t =
-      Block { elt_kind = Value Anything;
-              tag = Tag.zero;
-              size = Known module_block_size_in_words;
-            }
+      Values {
+        tag = Tag.Scannable.zero;
+        size = Known (Targetint.OCaml.of_int module_block_size_in_words);
+        field_kind = Any_value;
+      }
     in
     List.fold_left (fun body (pos, var) ->
         let var = VB.create var Name_mode.normal in
@@ -1152,7 +1160,7 @@ let ilambda_to_flambda ~backend ~module_ident ~module_block_size_in_words
           in
           Sets_of_closures [{
             code = Code_id.Map.singleton code_id code;
-            set_of_closures = Set_of_closures.empty; 
+            set_of_closures = Set_of_closures.empty;
           }]
         in
         Let_symbol.create Syntactic bound_symbols static_const body

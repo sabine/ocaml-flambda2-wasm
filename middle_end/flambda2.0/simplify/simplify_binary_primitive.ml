@@ -824,8 +824,14 @@ module Binary_int_eq_comp_int64 =
 module Binary_int_eq_comp_nativeint =
   Binary_arith_like (Int_ops_for_binary_eq_comp_nativeint)
 
-let simplify_immutable_block_load ~result_kind dacc ~original_term _dbg
+let simplify_immutable_block_load (access_kind : P.Block_access_kind.t)
+      dacc ~original_term _dbg
       ~arg1:_ ~arg1_ty:block_ty ~arg2:_ ~arg2_ty:index_ty ~result_var =
+  let result_kind =
+    match access_kind with
+    | Values _ -> K.value
+    | Naked_floats _ -> K.naked_float
+  in
   let result_var' = Var_in_binding_pos.var result_var in
   let unchanged () =
     let ty = T.unknown result_kind in
@@ -845,9 +851,27 @@ let simplify_immutable_block_load ~result_kind dacc ~original_term _dbg
     let n =
       Targetint.OCaml.add (Target_imm.to_targetint index) Targetint.OCaml.one
     in
+    (* CR mshinwell: We should be able to use the size in the [access_kind]
+       to constrain the type of the block *)
+    let tag : _ Or_unknown.t =
+      match access_kind with
+      | Values { tag; _ } -> Known (Tag.Scannable.to_tag tag)
+      | Naked_floats { size; } ->
+        match size with
+        | Known size ->
+          (* We don't expect blocks of naked floats of size zero (it doesn't
+             seem that the frontend currently emits code to create such blocks)
+             and so it isn't clear whether such blocks should have tag zero
+             (like zero-sized naked float arrays) or another tag. *)
+          if Targetint.OCaml.equal size Targetint.OCaml.zero then
+            Unknown
+          else
+            Known Tag.double_array_tag
+        | Unknown -> Unknown
+    in
     Simplify_common.simplify_projection
       dacc ~original_term ~deconstructing:block_ty
-      ~shape:(T.immutable_block_with_size_at_least ~tag:Unknown ~n
+      ~shape:(T.immutable_block_with_size_at_least ~tag ~n
         ~field_kind:result_kind ~field_n_minus_one:result_var')
       ~result_var ~result_kind
 
@@ -988,10 +1012,8 @@ let simplify_binary_primitive dacc (prim : P.binary_primitive)
         let original_term = Named.create_prim original_prim dbg in
         let simplifier =
           match prim with
-          | Block_load (Block { elt_kind = Value _; _ }, Immutable) ->
-            simplify_immutable_block_load ~result_kind:K.value
-          | Block_load (Block { elt_kind = Naked_float; _ }, Immutable) ->
-            simplify_immutable_block_load ~result_kind:K.naked_float
+          | Block_load (access_kind, Immutable) ->
+            simplify_immutable_block_load access_kind
           | Int_arith (kind, op) ->
             begin match kind with
             | Tagged_immediate -> Binary_int_arith_tagged_immediate.simplify op
@@ -1030,6 +1052,7 @@ let simplify_binary_primitive dacc (prim : P.binary_primitive)
           | Float_comp op -> Binary_float_comp.simplify op
           | Phys_equal (kind, op) -> simplify_phys_equal op kind
           | Block_load _
+          | Array_load _
           | String_or_bigstring_load _
           | Bigarray_load _ ->
             fun dacc ~original_term:_ dbg ~arg1 ~arg1_ty:_ ~arg2 ~arg2_ty:_

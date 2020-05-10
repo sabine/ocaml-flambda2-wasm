@@ -75,6 +75,7 @@ type primitive =
   | Psetglobal of Ident.t
   (* Operations on heap blocks *)
   | Pmakeblock of int * mutable_flag * block_shape
+  | Pmakefloatblock of mutable_flag
   | Pfield of field_info * field_read_semantics
   | Pfield_computed of field_read_semantics
   | Psetfield of field_info * immediate_or_pointer * initialization_or_assignment
@@ -226,6 +227,7 @@ type structured_constant =
   | Const_block of int * structured_constant list
   | Const_float_array of string list
   | Const_immstring of string
+  | Const_float_block of string list
 
 type inline_attribute =
   | Always_inline (* [@inline] or [@inline always] *)

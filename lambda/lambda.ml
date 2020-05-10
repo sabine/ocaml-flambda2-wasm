@@ -69,6 +69,7 @@ type primitive =
   | Psetglobal of Ident.t
   (* Operations on heap blocks *)
   | Pmakeblock of int * mutable_flag * block_shape
+  | Pmakefloatblock of mutable_flag
   | Pfield of field_info * field_read_semantics
   | Pfield_computed of field_read_semantics
   | Psetfield of field_info * immediate_or_pointer * initialization_or_assignment
@@ -269,6 +270,7 @@ let primitive_can_raise = function
   | Pgetglobal _
   | Psetglobal _
   | Pmakeblock _
+  | Pmakefloatblock _
   | Pfield _
   | Pfield_computed _
   | Psetfield _
@@ -344,6 +346,7 @@ type structured_constant =
   | Const_block of int * structured_constant list
   | Const_float_array of string list
   | Const_immstring of string
+  | Const_float_block of string list
 
 type inline_attribute =
   | Always_inline (* [@inline] or [@inline always] *)
@@ -1121,7 +1124,8 @@ let rec size_of_lambda' env = function
   | Lprim(Pmakeblock _, args, _) -> RHS_block (List.length args)
   | Lprim (Pmakearray ((Paddrarray|Pintarray), _), args, _) ->
       RHS_block (List.length args)
-  | Lprim (Pmakearray (Pfloatarray, _), args, _) ->
+  | Lprim (Pmakearray (Pfloatarray, _), args, _)
+  | Lprim (Pmakefloatblock _, args, _) ->
       RHS_floatblock (List.length args)
   | Lprim (Pmakearray (Pgenarray, _), _, _) ->
      (* Pgenarray is excluded from recursive bindings by the
