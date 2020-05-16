@@ -25,4 +25,6 @@ module Expert = struct
   let denest_at_toplevel () = !Clflags.Flambda_2.Expert.denest_at_toplevel
   let code_id_and_symbol_scoping_checks () =
     !Clflags.Flambda_2.Expert.code_id_and_symbol_scoping_checks
+  let fallback_inlining_heuristic () =
+    !Clflags.Flambda_2.Expert.fallback_inlining_heuristic
 end

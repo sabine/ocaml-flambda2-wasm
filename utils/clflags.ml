@@ -434,6 +434,7 @@ module Flambda_2 = struct
   module Expert = struct
     let denest_at_toplevel = ref true
     let code_id_and_symbol_scoping_checks = ref false
+    let fallback_inlining_heuristic = ref false
   end
 end
 

@@ -465,6 +465,9 @@ let read_one_param ppf position name v =
   | "flambda2-expert-code-id-and-symbol-scoping-checks" ->
     set "flambda2-expert-code-id-and-symbol-scoping-checks"
       [ Flambda_2.Expert.code_id_and_symbol_scoping_checks ] v
+  | "flambda2-expert-fallback-inlining-heuristic" ->
+    set "flambda2-expert-fallback-inlining-heuristic"
+      [ Flambda_2.Expert.fallback_inlining_heuristic ] v
 
   | _ ->
     if not (List.mem name !can_discard) then begin

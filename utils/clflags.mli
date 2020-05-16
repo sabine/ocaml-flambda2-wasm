@@ -254,6 +254,7 @@ module Flambda_2 : sig
   module Expert : sig
     val denest_at_toplevel : bool ref
     val code_id_and_symbol_scoping_checks : bool ref
+    val fallback_inlining_heuristic : bool ref
   end
 end
 

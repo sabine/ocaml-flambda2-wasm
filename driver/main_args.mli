@@ -233,6 +233,8 @@ module type Optcommon_options = sig
   val _no_flambda2_expert_denest_at_toplevel : unit -> unit
   val _flambda2_expert_code_id_and_symbol_scoping_checks : unit -> unit
   val _no_flambda2_expert_code_id_and_symbol_scoping_checks : unit -> unit
+  val _flambda2_expert_fallback_inlining_heuristic : unit -> unit
+  val _no_flambda2_expert_fallback_inlining_heuristic : unit -> unit
 
   (** Flambda 2 debugging flags *)
   val _dprepared_lambda : unit -> unit

@@ -23,6 +23,14 @@ type cont =
   | Inline of { handler_params: Kinded_parameter.t list;
                 handler_body: Flambda.Expr.t; }
 
+(* Extra information about bound variables. These extra information
+   help keep track of some extra semantics that are useful to
+   implement some optimization in the translation to cmm. *)
+
+type extra_info =
+  | Untag of Cmm.expression
+
+
 (* Delayed let-bindings. Let bindings are delayed in stages in order
    to allow for potential reordering and inlining of variables that are bound
    and used exactly once, (without changing semantics), in order to optimize
@@ -77,26 +85,57 @@ type function_info = {
 }
 
 type t = {
+
+  (* Global information.
+
+     Those are computed once and valid for a whole unit.*)
+
+  offsets : Un_cps_closure.env;
+  (* Offsets for closure_ids and var_within_closures. *)
+  used_closure_vars : Var_within_closure.Set.t;
+  (* Closure variables that are used by the context begin translated.
+     (used to remove unused closure variables). *)
+
+
+  (* Semi-global information.
+
+     Those are relative to the unit being translated, and are dependant
+     on the scope inside the unit being translated. *)
+
+  names_in_scope : Code_id_or_symbol.Set.t;
+  (* Code ids and symbols bound in this scope, for invariant checking *)
+  functions_info: function_info Code_id.Map.t;
+  (* Information about known functions *)
+  deleted : Code_id.Set.t;
+  used_code_ids : Code_id.Set.t;
+  (* Code ids marked as deleted are only allowed in the newer_version_of
+     field of code definitions.
+     Due to the order in which the checks are made, it is possible that
+     a code id is checked before we know whether it is deleted or not,
+     so the used_code_ids records all code ids that were checked.*)
+
+
+  (* Local information.
+
+     These are relative to the flambda2 expression being currently
+     translated, i.e. either the unit initialization code, or the
+     body of a function.
+     Thus they are reset when entering a new function. *)
+
   k_return : Continuation.t;
   (* The continuation of the current context
        (used to determine which calls are tail-calls) *)
   k_exn : Continuation.t;
   (* The exception continuation of the current context
      (used to determine where to insert try-with blocks) *)
-  used_closure_vars : Var_within_closure.Set.t;
-  (* Closure variables that are used by the context begin translated.
-     (used to remove unused closure variables). *)
-
-  functions_info: function_info Code_id.Map.t;
-  (* Information about known functions *)
 
   vars  : Cmm.expression Variable.Map.t;
-  (* Map from flambda2 variables to backend_variables *)
+  (* Map from flambda2 variables to cmm expressions *)
+  vars_extra : extra_info Variable.Map.t;
+  (* Map from flambda2 variables to extra info *)
   conts : cont Continuation.Map.t;
   (* Map from continuations to handlers (i.e variables bound by the
      continuation and expression of the continuation handler). *)
-  offsets : Un_cps_closure.env;
-  (* Offsets for closure_ids and var_within_closures. *)
   exn_conts_extra_args : Backend_var.t list Continuation.Map.t;
   (* Mutable variables used for compiling extra arguments to
      exception handlers *)
@@ -106,17 +145,6 @@ type t = {
   stages : stage list;
   (* archived stages, in reverse chronological order. *)
 
-  names_in_scope : Code_id_or_symbol.Set.t;
-  (* Code ids and symbols bound in this scope, for invariant checking *)
-
-  deleted : Code_id.Set.t;
-  used_code_ids : Code_id.Set.t;
-  (* Code ids marked as deleted are only allowed in the newer_version_of
-     field of code definitions.
-     Due to the order in which the checks are made, it is possible that
-     a code id is checked before we know whether it is deleted or not,
-     so the used_code_ids records all code ids that were checked.
-  *)
 }
 
 let mk offsets k_return k_exn used_closure_vars = {
@@ -125,6 +153,7 @@ let mk offsets k_return k_exn used_closure_vars = {
   stages = [];
   pures = Variable.Map.empty;
   vars = Variable.Map.empty;
+  vars_extra = Variable.Map.empty;
   conts = Continuation.Map.empty;
   exn_conts_extra_args = Continuation.Map.empty;
   names_in_scope = Code_id_or_symbol.Set.empty;
@@ -133,18 +162,22 @@ let mk offsets k_return k_exn used_closure_vars = {
 }
 
 let enter_function_def env k_return k_exn = {
-  k_return; k_exn;
-  used_closure_vars = env.used_closure_vars;
+  (* global info *)
   offsets = env.offsets;
+  used_closure_vars = env.used_closure_vars;
+  (* semi-global info *)
+  names_in_scope = env.names_in_scope;
   functions_info = env.functions_info;
+  deleted = env.deleted;
+  used_code_ids = env.used_code_ids;
+  (* local info *)
+  k_return; k_exn;
   stages = [];
   pures = Variable.Map.empty;
   vars = Variable.Map.empty;
+  vars_extra = Variable.Map.empty;
   conts = Continuation.Map.empty;
   exn_conts_extra_args = Continuation.Map.empty;
-  names_in_scope = env.names_in_scope;
-  deleted = env.deleted;
-  used_code_ids = env.used_code_ids;
 }
 
 let dummy offsets used_closure_vars =
@@ -199,6 +232,10 @@ let get_variable env v =
   try Variable.Map.find v env.vars
   with Not_found ->
     Misc.fatal_errorf "Variable %a not found in env" Variable.print v
+
+let extra_info env v =
+  try Some (Variable.Map.find v env.vars_extra)
+  with Not_found -> None
 
 
 (* Continuations *)
@@ -282,7 +319,8 @@ let print_binding_list fmt l =
   Format.fprintf fmt "@]"
 *)
 
-(* Variable binding (for potential inlinging) *)
+
+(* Variable binding (for potential inlining) *)
 
 let next_order =
   let r = ref 0 in
@@ -296,13 +334,18 @@ let classify effs =
   else
     Pure
 
-let mk_binding env inline effs var cmm_expr =
+let mk_binding ?extra env inline effs var cmm_expr =
   let order = next_order () in
   let cmm_var = gen_variable var in
   let b = { order; inline; effs; cmm_var; cmm_expr; } in
   let v = Backend_var.With_provenance.var cmm_var in
   let e = Un_cps_helper.var v in
   let env = { env with vars = Variable.Map.add var e env.vars; } in
+  let env = match extra with
+    | None -> env
+    | Some info ->
+      { env with vars_extra = Variable.Map.add var info env.vars_extra; }
+  in
   env, b
 
 let bind_pure env var b =
@@ -321,8 +364,8 @@ let bind_coeff env var b =
       let m = Variable.Map.singleton var b in
       { env with stages = Coeff m :: r }
 
-let bind_variable env var effs inline cmm_expr =
-  let env, b = mk_binding env inline effs var cmm_expr in
+let bind_variable env var ?extra effs inline cmm_expr =
+  let env, b = mk_binding ?extra env inline effs var cmm_expr in
   match classify effs with
   | Pure -> bind_pure env var b
   | Effect -> bind_eff env var b
@@ -388,6 +431,9 @@ let inline_variable env var =
       | Coeff m :: r -> inline_found_coeff env var m r
       end
 
+
+(* Flushing delayed bindings *)
+
 (* Map on integers in descending order *)
 module M = Map.Make(struct
     type t = int
@@ -415,6 +461,9 @@ let flush_delayed_lets env =
   let wrap e = wrap_aux env.pures env.stages e in
   (* Return a wrapper and a cleared env *)
   wrap, { env with stages = []; pures = Variable.Map.empty; }
+
+
+(* Use and Scoping checks *)
 
 let used_closure_vars t = t.used_closure_vars
 
