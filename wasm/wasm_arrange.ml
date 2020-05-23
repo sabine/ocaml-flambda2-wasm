@@ -352,6 +352,8 @@ let rec instr e =
   (*GC*)| ArrayGet typeidx -> "array.get " ^ var typeidx, []
   (*GC*)| ArraySet typeidx -> "array.set " ^ var typeidx, []
   (*GC*)| ArrayLen typeidx -> "array.len " ^ var typeidx, []
+
+  (*TODO: exception-handling*)
   in Node (head, inner)
 
 let const c =

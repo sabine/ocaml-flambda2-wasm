@@ -31,6 +31,7 @@ type memidx = idx
 type globalidx = idx
 type localidx = idx
 type labelidx = idx
+(*exception-handling*)type eventidx = idx
 
 type mutability = Immutable | Mutable
 
@@ -43,6 +44,7 @@ type num_type = I32Type | I64Type | F32Type | F64Type
   | I31Ref
   | EqRef
   | RttRef of typeidx
+(*exception-handling*)| ExnRef
 (*GC*)type packed_type = I8Type | I16Type
 type value_type = NumValueType of num_type | (*GC*)RefValueType of ref_type
 (*GC*)type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
@@ -71,6 +73,9 @@ type extern_type =
   | ExternMemoryType of memory_type
   | ExternGlobalType of global_type
 
+type event_attribute =
+  | Exception
+(*exception-handling*)type event_type = {attribute : event_attribute; ty : typeidx }
 
 (* Attributes *)
 

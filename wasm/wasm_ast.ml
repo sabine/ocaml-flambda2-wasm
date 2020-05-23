@@ -135,6 +135,11 @@ type instr =
   (*GC*)| ArrayGet of typeidx
   (*GC*)| ArraySet of typeidx
   (*GC*)| ArrayLen of typeidx
+
+  (*exception-handling*)| Try of instr list * instr list
+  (*exception-handling*)| Throw of eventidx
+  (*exception-handling*)| Rethrow
+  (*exception-handling*)| Br_on_exn of labelidx * eventidx
   
 
 (* Globals & Functions *)
@@ -187,6 +192,7 @@ type export_desc =
   | TableExport of tableidx
   | MemoryExport of memidx
   | GlobalExport of globalidx
+(*exception-handling*)| EventExport of eventidx
 
 type export =
 {
@@ -199,6 +205,7 @@ type import_desc =
   | TableImport of table_type
   | MemoryImport of memory_type
   | GlobalImport of global_type
+(*exception-handling*)| EventImport of event_type
 
 type import =
 {
@@ -227,6 +234,7 @@ type module_ =
   globals : global list;
   tables : table list;
   memories : memory list;
+(*exception-handling*)events : event_type list;
   funcs : func list;
   start : funcidx option;
   elems : table_segment list;
@@ -244,6 +252,7 @@ let empty_module =
   globals = [];
   tables = [];
   memories = [];
+  events = [];
   funcs = [];
   start = None;
   elems  = [];
