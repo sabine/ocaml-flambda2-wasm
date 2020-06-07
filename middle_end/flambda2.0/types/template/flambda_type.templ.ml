@@ -303,7 +303,20 @@ let prove_tags_must_be_a_block env t : Tag.Set.t proof =
     | Unknown -> Unknown
     | Known imms ->
       if not (is_bottom env imms) then
-        Invalid
+        (* CR vlaviron: This case could be completely ignored if we're
+           only interested in the set of tags this type can have.
+           It is there because this function used to return Invalid
+           when it couldn't definitively prove that this type represents
+           a block, but this caused a number of problems so this was
+           switched to Unknown (which, unlike Invalid, is always sound).
+           There remain a question of whether we actually want two
+           different variants of this function, one for simplification
+           of the get_tag primitive which may reasonably expect to error
+           if its argument cannot be proved to be a block, and one for
+           simplification of CSE parameters containing a get_tag equation,
+           which can occur at places where the type is not known to be a block.
+        *)
+        Unknown
       else
         match blocks_imms.blocks with
         | Unknown -> Unknown
@@ -353,6 +366,9 @@ let prove_naked_immediates env t : Target_imm.Set.t proof =
     | Invalid -> Invalid
     end
   | Naked_immediate (Ok (Get_tag block_ty)) ->
+    (* CR vlaviron: see the comment in prove_tags_must_be_a_block.
+       See also prove_equals_tagged_immediates below, which returns Unknown
+       when the blocks part is not bottom. *)
     begin match prove_tags_must_be_a_block env block_ty with
     | Proved tags ->
       let is =
@@ -362,11 +378,8 @@ let prove_naked_immediates env t : Target_imm.Set.t proof =
           Target_imm.Set.empty
       in
       Proved is
-    | Unknown | Invalid ->
-      (* We must not return [Invalid] here even if [block_ty] doesn't
-         correspond to a block -- that might happen if we lose precision
-         for some reason, which should be harmless. *)
-      Unknown
+    | Unknown -> Unknown
+    | Invalid -> Invalid
     end
   | Naked_immediate Unknown -> Unknown
   | Naked_immediate Bottom -> Invalid
