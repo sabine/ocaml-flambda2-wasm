@@ -31,7 +31,7 @@ type memidx = idx
 type globalidx = idx
 type localidx = idx
 type labelidx = idx
-(*exception-handling*)type eventidx = idx
+(*exception-handling type eventidx = idx*)
 
 type mutability = Immutable | Mutable
 
@@ -44,16 +44,18 @@ type num_type = I32Type | I64Type | F32Type | F64Type
   | I31Ref
   | EqRef
   | RttRef of typeidx
-(*exception-handling*)| ExnRef
+(*exception-handling| ExnRef*)
 (*GC*)type packed_type = I8Type | I16Type
 type value_type = NumValueType of num_type | (*GC*)RefValueType of ref_type
 (*GC*)type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
 (*GC*)type field_type = FieldType of mutability * storage_type
 
 type elem_type = AnyFuncType
-type stack_type = value_type list
+type named_value_type = NamedValueType of {name: string option; t: value_type }
+type param_stack_type = named_value_type list
+type result_stack_type = value_type list
 
-type func_type = FuncType of { name: string option; t: stack_type * stack_type }
+type func_type = FuncType of { name: string option; t: param_stack_type * result_stack_type }
 (*GC*)type struct_type = StructType of { name: string option; t: field_type list }
 (*GC*)type array_type = ArrayType of { name: string option; t: field_type }
 
@@ -75,7 +77,7 @@ type extern_type =
 
 type event_attribute =
   | Exception
-(*exception-handling*)type event_type = {attribute : event_attribute; ty : typeidx }
+(*exception-handlingtype event_type = {attribute : event_attribute; ty : typeidx }*)
 
 (* Attributes *)
 

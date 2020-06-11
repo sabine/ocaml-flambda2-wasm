@@ -94,6 +94,10 @@ let value_type = function
   | NumValueType n -> num_value_type n
   | RefValueType r -> ref_value_type r
 
+let named_value_type (NamedValueType t) = match t.name with
+  | None  -> value_type t.t
+  | Some (n) -> "$" ^ n ^ " " ^ value_type t.t
+
 let value_types = function
   | [t] -> value_type t
   | ts -> "[" ^ String.concat " " (List.map value_type ts) ^ "]"
@@ -133,13 +137,22 @@ let array_type (ArrayType ft) =
     Node ("array", [Atom (field_type ft.t)])
 
 (* function type decls *)
-let decls kind ts = tab kind (atom value_type) ts
+let result_type_decls kind ts =
+  tab kind (atom value_type) ts
 
-let stack_type ts = decls "result" ts
+
+let named_type_decls kind ts =
+  tab kind (atom named_value_type) ts
+
+let param_type_decls kind ts =
+  named_type_decls kind ts
+
+
+let stack_type ts = result_type_decls "result" ts
 
 let func_type (FuncType ft) =
   let (ins, out) = ft.t in
-  Node ("func", decls "param" ins @ decls "result" out)
+  Node ("func", param_type_decls "param" ins @ result_type_decls "result" out)
 
 let limits nat {min; max} =
   String.concat " " (nat min :: opt nat max)
@@ -364,13 +377,17 @@ let const c =
 
 let name_ n = string (Utf8.encode n);;
 
-let func_with_name n f =
-  let {ftype; locals; body; name} = f in
-  Node ("func " ^ n,
-    [Node ("type " ^ var ftype, [])] @
-    decls "local" locals @
+let named_func_decl name (FuncType ftype) locals body =
+  let (ins, out) = ftype.t in
+  Node ("func " ^ name,
+    param_type_decls "param" ins @ result_type_decls "result" out @
+    named_type_decls "local" locals @
     list instr body
   )
+
+let func_with_name n f =
+  let {ftype; locals; body; name} = f in
+  named_func_decl n ftype locals body
 
 let func_with_index off i (f : func) =
   let n = "$" ^ f.name in
@@ -459,7 +476,7 @@ let export_desc d =
   | FuncExport x -> Node ("func", [atom var x])
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
-  | GlobalExport x -> Node ("global", [atom var x])
+    | GlobalExport x -> Node ("global", [atom var x])
 
 let export ex =
   let {name = n; edesc} = ex in

@@ -24,9 +24,8 @@ open Wasm.Wasm_types
 
 module Ece = Effects_and_coeffects
 
-let todo () = failwith "Not yet implemented"
 
-
+let todo () = failwith "Not implemented yet!"
 
 type cont =
   | Jump of { t: func_type; cont: funcidx; }
@@ -58,6 +57,7 @@ let static_const
   let _ = Flambda.Let_symbol_expr.Bound_symbols.print Format.std_formatter bound_symbols in
   let _ = Format.printf "\nstatic_const: " in
   let _ = Flambda.Static_const.print Format.std_formatter static_const in
+  let _ = Format.printf "\n" in
 
   match bound_symbols, static_const with
   | Singleton s, Block (tag, _mut, fields) ->
@@ -75,9 +75,17 @@ let rec expr env e =
   | Switch e' -> switch env e'
   | Invalid e' -> invalid env e'
 
-and lexpr _env _t = todo ()
+and lexpr _env t = 
+  let _ = Format.printf "\nTrying to compile let_expr:" in
+  let _ = Flambda.Let_expr.print Format.std_formatter t in
+  let _ = Format.printf "\n" in
+  todo ()
 
 and lsymbol env let_sym =
+  let _ = Format.printf "\nTrying to compile let_symbol_expr:" in
+  let _ = Flambda.Let_symbol_expr.print Format.std_formatter let_sym in
+  let _ = Format.printf "\n" in
+
   let body = Flambda.Let_symbol_expr.body let_sym in
   let bound_symbols = Flambda.Let_symbol_expr.bound_symbols let_sym in
   let env' = { env with 
@@ -96,15 +104,75 @@ and lsymbol env let_sym =
   let globals', functions, instructions' = expr env'' body in
   globals @ globals', functions, instructions @ instructions'
 
-and lcont _env _t = todo ()
-and apply_expr _env _t = 
-  Apply_expr.print Format.std_formatter _t;
+and lcont _env t = 
+  let _ = Format.printf "\nTrying to compile let_cont:" in
+  let _ = Flambda.Let_cont_expr.print Format.std_formatter t in
+  let _ = Format.printf "\n" in
   todo ()
-and apply_cont _env _t = 
-  Apply_cont_expr.print Format.std_formatter _t;
+
+and apply_expr _env t = 
+  let _ = Format.printf "\nTrying to compile apply_expr:" in
+  let _ = Apply_expr.print Format.std_formatter t in
+  let _ = Format.printf "\n" in
   todo ()
-and switch _env _t = todo ()
-and invalid _env _t = todo ()
+
+and apply_cont env expr = 
+  let _ = Format.printf "\nTrying to compile apply_cont:" in
+  let _ = Apply_cont_expr.print Format.std_formatter expr in
+  let _ = Format.printf "\n" in
+
+  match Continuation.sort (Apply_cont_expr.continuation expr), Apply_cont_expr.trap_action expr, Apply_cont_expr.args expr with
+  (*
+      | Normal, None, [] -> "goto", None
+      | Normal, None, _::_ -> "apply_cont", None
+      | Normal, Some trap_action, [] -> "goto", Some trap_action
+      | Normal, Some trap_action, _::_ -> "apply_cont", Some trap_action
+      | Return, None, [] -> "return", None
+      | Return, None, _::_ -> "return", None
+      | Return, Some trap_action, [] -> "return", Some trap_action
+      | Return, Some trap_action, _::_ -> "return", Some trap_action
+      | Define_root_symbol, None, [] ->
+        "apply_cont", None
+      | Define_root_symbol, None, _::_ ->
+        "apply_cont", None
+      | Define_root_symbol, Some trap_action, [] ->
+        "apply_cont", Some trap_action
+      | Define_root_symbol, Some trap_action, _::_ ->
+        "apply_cont", Some trap_action *)
+      | Toplevel_return, None, [] ->
+        [], [], []
+      | Toplevel_return, None, _::_ ->
+        let _ = Format.printf "\nthis is a top-level return with arguments" in
+        [], [], [GetLocal {index = 0l; name = Some "in"}]
+          (* Const (I64 (I64.of_int_u 0)) *)
+          (** Sabine: for now, this is the same address that the module initialization function got passed in.
+              With the reftypes proposal, the initialization function could take as parameter the index in a shared function table
+              where we have to place the module's global data.
+              With a GC on linear memory, we return the address of the start of the data region, which I think is the same as
+              the traditional OCaml compiler does.
+              *)
+      (*
+      | Toplevel_return, Some trap_action, [] ->
+        "module_init_end", Some trap_action
+      | Toplevel_return, Some trap_action, _::_ ->
+        "module_init_end", Some trap_action
+      (* CR mshinwell: See CR on [create], below. *)
+      | Exn, (None | Some (Push _)), []
+      | Exn, (None | Some (Push _)), _::_ ->
+        "apply_cont", trap_action (*assert false*)
+      | Exn, Some (Pop _), [] -> "raise", None
+      | Exn, Some (Pop _), _::_ -> "raise", None
+      *)
+      
+      | _ -> todo ()
+
+and switch _env t = 
+  let _ = Format.printf "\nTrying to compile switch_expr:" in
+  let _ = Switch_expr.print Format.std_formatter t in
+  let _ = Format.printf "\n" in
+  todo ()
+and invalid _env _t =
+  failwith "Invalid expression from Flambda2.0 encountered"
   
 
 let unit (unit : Flambda_unit.t) = 
@@ -122,24 +190,29 @@ let unit (unit : Flambda_unit.t) =
       names_in_scope = Code_id_or_symbol.Set.empty;
     } in
 
-(*
     let (global_variables, functions, module_init_function_instructions) = expr env (Flambda_unit.body unit) in
-*)
+
+(*
     let global_variables = [] in
     let functions = [] in
     let module_init_function_instructions = [] in
+*)
 
     let module_init_function_type_name = "_t__module_init" in
-    let module_init_function_type = TypeFunc (FuncType {
+    let module_init_function_type = FuncType {
       name = Some module_init_function_type_name;
-      t = ([NumValueType I32Type],[])
-    }) in
-    let module_init_function_type_index = {index = 0l; name = Some module_init_function_type_name} in
+      t = ([
+        NamedValueType {
+          name = Some "in";
+          t = NumValueType I64Type;
+        }
+        ],[NumValueType I64Type]);
+    } in
     let module_init_function_name = "__module_init" in
     let module_init_function_index = {index = 0l; name = Some module_init_function_name} in
     let module_init_function = {
       name = module_init_function_name;
-      ftype = module_init_function_type_index;
+      ftype = module_init_function_type;
       locals = [];
       body = module_init_function_instructions;
     } in
@@ -148,17 +221,11 @@ let unit (unit : Flambda_unit.t) =
       edesc = FuncExport module_init_function_index
     } in
 
-    let test_array_type = TypeArray (ArrayType {
-          name = Some "testarray";
-          t = FieldType (Mutable, StorageTypeValue (NumValueType I32Type))
-        })
-    in
-
     { empty_module with
       imports = [];
       globals = global_variables;
-      types = [module_init_function_type; test_array_type];
-      funcs = [module_init_function] @ functions;
+      types = [];
+      funcs = functions @ [module_init_function];
       start = None;
       exports = [module_init_function_export]
     }

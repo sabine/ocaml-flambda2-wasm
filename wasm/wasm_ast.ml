@@ -92,9 +92,9 @@ type name = string
 type instr =
   | Unreachable                       (* trap unconditionally *)
   | Nop                               (* do nothing *)
-  | Block of stack_type * instr list  (* execute in sequence *)
-  | Loop of stack_type * instr list   (* loop header *)
-  | If of stack_type * instr list * instr list  (* conditional *)
+  | Block of result_stack_type * instr list  (* execute in sequence *)
+  | Loop of result_stack_type * instr list   (* loop header *)
+  | If of result_stack_type * instr list * instr list  (* conditional *)
   | Br of labelidx                         (* break to n-th surrounding label *)
   | BrIf of labelidx                       (* conditional break *)
   | BrTable of labelidx list * labelidx         (* indexed break *)
@@ -136,10 +136,10 @@ type instr =
   (*GC*)| ArraySet of typeidx
   (*GC*)| ArrayLen of typeidx
 
-  (*exception-handling*)| Try of instr list * instr list
+  (*exception-handling| Try of instr list * instr list
   (*exception-handling*)| Throw of eventidx
   (*exception-handling*)| Rethrow
-  (*exception-handling*)| Br_on_exn of labelidx * eventidx
+  (*exception-handling*)| Br_on_exn of labelidx * eventidx*)
   
 
 (* Globals & Functions *)
@@ -156,8 +156,8 @@ type global =
 type func =
 {
   name: string;
-  ftype : typeidx;
-  locals : value_type list;
+  ftype : func_type;
+  locals : named_value_type list;
   body : instr list;
 }
 
@@ -192,7 +192,7 @@ type export_desc =
   | TableExport of tableidx
   | MemoryExport of memidx
   | GlobalExport of globalidx
-(*exception-handling*)| EventExport of eventidx
+(*exception-handling| EventExport of eventidx *)
 
 type export =
 {
@@ -205,7 +205,7 @@ type import_desc =
   | TableImport of table_type
   | MemoryImport of memory_type
   | GlobalImport of global_type
-(*exception-handling*)| EventImport of event_type
+(*exception-handling | EventImport of event_type*)
 
 type import =
 {
@@ -234,7 +234,7 @@ type module_ =
   globals : global list;
   tables : table list;
   memories : memory list;
-(*exception-handling*)events : event_type list;
+(*exception-handling events : event_type list;*)
   funcs : func list;
   start : funcidx option;
   elems : table_segment list;
@@ -252,7 +252,7 @@ let empty_module =
   globals = [];
   tables = [];
   memories = [];
-  events = [];
+  (*exception-handling events = [];*)
   funcs = [];
   start = None;
   elems  = [];
@@ -282,7 +282,7 @@ let export_type (m : module_) (ex : export) : extern_type =
   match edesc with
   | FuncExport x ->
     let fts =
-      funcs its @ List.map (fun f -> func_type_for m f.ftype) m.funcs
+      funcs its @ List.map (fun f -> f.ftype) m.funcs
     in ExternFuncType (nth fts x.index)
   | TableExport x ->
     let tts = tables its @ List.map (fun t -> t.ttype) m.tables in
