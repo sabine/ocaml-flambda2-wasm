@@ -148,7 +148,7 @@ type const = instr list
 
 type global =
 {
-  name : string;
+  name : string option;
   gtype : global_type;
   value : const;
 }
@@ -214,20 +214,6 @@ type import =
   idesc : import_desc;
 }
 
-type data_part_detail =
-| String of string
-| Int32 of int32
-| Nativeint of nativeint
-| Int16 of int
-| Int8 of int
-| Float32 of F32.t
-
-type data_part = {
-  name: string;
-  detail: data_part_detail list
-}
-
-
 type module_ =
 {
   types : deftype list;
@@ -238,7 +224,7 @@ type module_ =
   funcs : func list;
   start : funcidx option;
   elems : table_segment list;
-  data : data_part segment list;
+  data : string segment list;
   imports : import list;
   exports : export list;
 }

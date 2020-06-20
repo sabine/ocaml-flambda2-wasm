@@ -418,13 +418,8 @@ let segment head dat seg =
 let elems seg =
   segment "elem" (list (atom var)) seg
 
-let foo (f:data_part) =
-  (* let r = List.fold_left (fun acc add -> acc ^ "hi" ) "" f in *)
-  []
-
-
 let data seg =
-  segment "data" foo seg
+  segment "data" break_bytes seg
 
 (* Modules *)
 
@@ -482,9 +477,12 @@ let export ex =
   let {name = n; edesc} = ex in
   Node ("export", [atom name n; export_desc edesc])
 
-let global off i g =
-  let {gtype; value} = g in
-  Node ("global $" ^ nat (off + i), global_type gtype :: const value)
+let global off i {name; gtype; value} =
+  let global_name = match name with
+    | None -> "$" ^ nat (off + i) 
+    | Some (n) -> "$" ^ n
+  in
+  Node ("global " ^ global_name, global_type gtype :: const value)
 
 
 (* Modules *)
