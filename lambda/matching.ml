@@ -1920,7 +1920,9 @@ let inline_lazy_force arg loc =
         ap_inlined = Default_inline;
         ap_specialised = Default_specialise
       }
-  else if !Clflags.native_code then
+  else if !Clflags.native_code && not Config.flambda then
+    (* CR vlaviron: Find a way for Flambda 2 to avoid both the call to
+       caml_obj_tag and the switch on arbitrary tags *)
     (* Lswitch generates compact and efficient native code *)
     inline_lazy_force_switch arg loc
   else
@@ -2813,6 +2815,7 @@ let combine_constructor loc arg ex_pat cstr partial ctx def
       in
       let tag_lambda_list = fails @ tag_lambda_list in
       let consts, nonconsts = split_cases tag_lambda_list in
+      let flambda = !Clflags.native_code && Config.flambda in
       let lambda1 =
         match (fail_opt, same_actions tag_lambda_list) with
         | None, Some act -> act (* Identical actions, no failure *)
@@ -2821,9 +2824,9 @@ let combine_constructor loc arg ex_pat cstr partial ctx def
               (cstr.cstr_consts, cstr.cstr_nonconsts, consts, nonconsts)
             with
             | 1, 1, [ (0, act1) ], [{ sw_tag = 0; sw_size = _; }, act2]
-              when not Config.flambda ->
+              when not flambda ->
                 (* Typically, match on lists, will avoid isint primitive in that
-              case *)
+                   case *)
                 Lifthenelse (arg, act2, act1)
             | n, 0, _, [] ->
                 (* The type defines constant constructors only *)
@@ -2841,15 +2844,15 @@ let combine_constructor loc arg ex_pat cstr partial ctx def
                   | None, _ -> same_actions nonconsts
                 in
                 match act0 with
-                (* CR mshinwell: This condition should be "when not Flambda2" *)
-                | Some act when not !Clflags.native_code ->
+                | Some act when not flambda ->
                     Lifthenelse
                       ( Lprim (Pisint, [ arg ], loc),
                         call_switcher loc fail_opt arg 0 (n - 1) consts,
                         act )
                 | Some _ | None ->
                     (* Emit a switch, as bytecode implements this sophisticated
-                      instruction *)
+                       instruction (and Flambda 2.0 should optimise it
+                       correctly). *)
                     let sw =
                       { sw_numconsts = cstr.cstr_consts;
                         sw_consts = consts;

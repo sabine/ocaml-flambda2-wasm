@@ -2,7 +2,7 @@
 
 (library
   (name wasm)
-  (flags (:standard -principal -nostdlib -open Flambda2))
+  (flags (:standard -principal -nostdlib -open Flambda))
   (libraries stdlib ocamlcommon ocamlbytecomp ocamlmiddleend ocamloptcommon
-             flambda2deps flambda2)
+             )
 )

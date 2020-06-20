@@ -61,7 +61,8 @@ let structured_constants = ref structured_constants_empty
 let exported_constants = Hashtbl.create 17
 
 let default_ui_export_info =
-  Cmx_format.Clambda Value_unknown
+  if Config.flambda then Cmx_format.Flambda None
+  else Cmx_format.Clambda Value_unknown
 
 let current_unit =
   { ui_name = "";
@@ -208,6 +209,7 @@ let get_clambda_approx ui =
   assert(not Config.flambda);
   match ui.ui_export_info with
   | Clambda approx -> approx
+  | Flambda _ -> Misc.fatal_error "Not a Closure approx"
 
 let toplevel_approx :
   (string, Clambda.value_approximation) Hashtbl.t = Hashtbl.create 16
@@ -261,9 +263,17 @@ let symbol_for_global' id =
   else
     Symbol.create (unit_for_global id) sym_label
 
+let get_global_info' id =
+  match get_global_info id with
+  | None -> None
+  | Some ui -> Some ui.ui_export_info
+
+let set_global_info info =
+  current_unit.ui_export_info <- info
+
 let set_global_approx approx =
   assert(not Config.flambda);
-  current_unit.ui_export_info <- Clambda approx
+  set_global_info (Clambda approx)
 
 (* Exporting and importing cross module information *)
 

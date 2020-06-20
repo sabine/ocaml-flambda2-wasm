@@ -104,8 +104,7 @@ and dump_rawlambda = ref false          (* -drawlambda *)
 and dump_lambda = ref false             (* -dlambda *)
 and dump_rawclambda = ref false         (* -drawclambda *)
 and dump_clambda = ref false            (* -dclambda *)
-and dump_rawflambda = ref false         (* -drawflambda *)
-and dump_rawflambda2 = ref false        (* -drawflambda2 *)
+and dump_rawflambda = ref false        (* -drawflambda *)
 and dump_flambda = ref false            (* -dflambda *)
 and dump_flambda_let = ref (None : int option) (* -dflambda-let=... *)
 and dump_flambda_verbose = ref false    (* -dflambda-verbose *)
@@ -196,7 +195,7 @@ let rounds () =
   | None -> !default_simplify_rounds
   | Some r -> r
 
-let default_inline_threshold = if Config.flambda then 1. /. 2. else 10. /. 8.
+let default_inline_threshold = 10. /. 8.
 let inline_toplevel_multiplier = 16
 let default_inline_toplevel_threshold =
   int_of_float ((float inline_toplevel_multiplier) *. default_inline_threshold)
@@ -362,8 +361,8 @@ let o3_arguments = {
   inline_toplevel_threshold = Some (50 * inline_toplevel_multiplier);
 }
 
-let flambda2_unicode = ref true
-let flambda2_context_on_error = ref false
+let flambda_unicode = ref true
+let flambda_context_on_error = ref false
 
 let all_passes = ref []
 let dumped_passes_list = ref []
@@ -424,7 +423,7 @@ let error_style_reader = {
 
 let unboxed_types = ref false
 
-module Flambda_2 = struct
+module Flambda = struct
   let join_points = ref true
   let unbox_along_intra_function_control_flow = ref true
   let lift_inconstants = ref true

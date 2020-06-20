@@ -1,0 +1,8 @@
+(include_subdirs no)
+
+(library
+  (name flambda_to_wasm)
+  (flags (:standard -principal -nostdlib -open Flambda))
+  (libraries stdlib ocamlcommon ocamlbytecomp ocamlmiddleend ocamloptcommon
+             flambdadeps flambda flambda_to_cmm wasm)
+)

@@ -118,11 +118,11 @@ let make_package_object ~ppf_dump members targetobj targetname coercion
     in
     let () =
       if Config.flambda then begin
-        let middle_end = Flambda2_middle_end.middle_end in
         let backend =
-          (module Asmgen.Flambda2_backend : Flambda2_backend_intf.S)
+          (module Asmgen.Flambda_backend : Flambda_backend_intf.S)
         in
-        Asmgen.compile_implementation2 program.required_globals
+        Asmgen.compile_implementation_flambda
+          ~required_globals:program.required_globals
           ~backend
           ~prefixname
           ~size:program.main_module_block_size
@@ -130,13 +130,13 @@ let make_package_object ~ppf_dump members targetobj targetname coercion
           ~module_ident:program.module_ident
           ~module_initializer:program.code
           ~ppf_dump
-          ~middle_end
+          ~middle_end:Flambda_middle_end.middle_end
+          ()
       end else begin
-        let middle_end = Closure_middle_end.lambda_to_clambda in
         Asmgen.compile_implementation ~backend
           ~filename:targetname
           ~prefixname
-          ~middle_end
+          ~middle_end:Closure_middle_end.lambda_to_clambda
           ~ppf_dump
           program
       end
@@ -154,10 +154,17 @@ let make_package_object ~ppf_dump members targetobj targetname coercion
 
 (* Make the .cmx file for the package *)
 
+let get_export_info ui =
+  assert(Config.flambda);
+  match ui.ui_export_info with
+  | Clambda _ -> assert false
+  | Flambda info -> info
+
 let get_approx ui =
   assert(not Config.flambda);
   match ui.ui_export_info with
   | Clambda info -> info
+  | Flambda _ -> assert false
 
 let build_package_cmx members cmxfile =
   let unit_names =
@@ -174,10 +181,29 @@ let build_package_cmx members cmxfile =
       (fun m accu ->
         match m.pm_kind with PM_intf -> accu | PM_impl info -> info :: accu)
       members [] in
+  let pack_units =
+    List.fold_left
+      (fun set info ->
+         let unit_id = Compilenv.unit_id_from_name info.ui_name in
+         Compilation_unit.Set.add
+           (Compilenv.unit_for_global unit_id) set)
+      Compilation_unit.Set.empty units
+  in
   let ui = Compilenv.current_unit_infos() in
   let ui_export_info =
     if Config.flambda then
-      Clambda Value_unknown
+      let pack = Compilenv.current_unit () in
+      let flambda_export_info =
+        List.fold_left (fun acc info ->
+            Flambda_cmx_format.merge
+              (Flambda_cmx_format.update_for_pack ~pack_units ~pack
+                 (get_export_info info))
+              acc)
+          (Flambda_cmx_format.update_for_pack ~pack_units ~pack
+             (get_export_info ui))
+          units
+      in
+      Flambda flambda_export_info
     else
       Clambda (get_approx ui)
   in

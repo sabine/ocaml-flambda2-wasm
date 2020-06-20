@@ -144,6 +144,13 @@ let print_cmx_infos (ui, crc) =
       Format.fprintf Format.std_formatter "  %a@." Printclambda.approx approx
     end else
       Format.printf "Clambda unit@.";
+  | Flambda info ->
+    Format.printf "Flambda unit:@.";
+    match info with
+    | None -> Format.printf " <opaque mode, or non-terminating initialiser>"
+    | Some info ->
+      Format.fprintf Format.std_formatter "@[<hov 2>%a@]"
+        Flambda_cmx_format.print info
   end;
   let pr_funs _ fns =
     List.iter (fun arity -> printf " %d" arity) fns in
