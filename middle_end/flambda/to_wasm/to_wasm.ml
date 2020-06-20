@@ -275,20 +275,25 @@ let rec static_data_to_wasm index = function
     global :: remainder_globals, Bytes.to_string data ^ remainder_data_parts
 
 
-let unit (unit : Flambda_unit.t) = 
+let unit (unit : Flambda_unit.t) (middle_end_result : Flambda_middle_end.middle_end_result) = 
   let _ = Flambda.Expr.print Format.std_formatter (Flambda_unit.body unit) in
 
+  let unit = middle_end_result.unit in
+  let offsets =
+    match middle_end_result.cmx with
+    | None -> Exported_offsets.imported_offsets ()
+    | Some cmx -> Flambda_cmx_format.exported_offsets cmx
+  in
+
   Profile.record_call "flambda2_to_wasm" (fun () ->
+    let offsets = To_wasm_closure.compute_offsets offsets unit in
     let used_closure_vars = Flambda_unit.used_closure_vars unit in
-    let env = {
-      k_return = Flambda_unit.return_continuation unit;
-      k_exn = Flambda_unit.exn_continuation unit;
-      used_closure_vars = used_closure_vars;
-      function_needs_closure = Code_id.Map.empty;
-      vars = Variable.Map.empty;
-      conts = Continuation.Map.empty;
-      names_in_scope = Code_id_or_symbol.Set.empty;
-    } in
+    let dummy_k = Continuation.create () in
+    let env =
+      Env.mk offsets dummy_k
+        (Flambda_unit.exn_continuation unit)
+        used_closure_vars
+    in
 
     let {static_data; fun_decls; instr_list} = expr env (Flambda_unit.body unit) in
 (*

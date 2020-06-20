@@ -72,8 +72,8 @@ type binding = {
   order : int;
   inline : bool;
   effs : Effects_and_coeffects.t;
-  cmm_var : Backend_var.With_provenance.t;
-  cmm_expr : Cmm.expression;
+  wmm_var : Backend_var.With_provenance.t;
+  wmm_expr : Wmm.expression;
 }
 
 type stage =
@@ -87,11 +87,6 @@ type function_info = {
   (* Whether direct calls need to provide a closure or can skip it *)
 }
 
-type to_wasm_closure_env = {
-  closure_offsets : int Closure_id.Map.t;
-  env_var_offsets : int Var_within_closure.Map.t;
-}
-
 type t = {
 
   (* Global information.
@@ -99,7 +94,7 @@ type t = {
      Those are computed once and valid for a whole unit.*)
 
   
-  offsets : to_wasm_closure_env;
+  offsets : Exported_offsets.t;
   (* Offsets for closure_ids and var_within_closures. *)
   used_closure_vars : Var_within_closure.Set.t;
   (* Closure variables that are used by the context begin translated.
@@ -138,7 +133,7 @@ type t = {
   (* The exception continuation of the current context
      (used to determine where to insert try-with blocks) *)
 
-  vars  : Cmm.expression Variable.Map.t;
+  vars  : Wmm.expression Variable.Map.t;
   (* Map from flambda2 variables to cmm expressions *)
   vars_extra : extra_info Variable.Map.t;
   (* Map from flambda2 variables to extra info *)
@@ -302,13 +297,13 @@ let get_exn_extra_args env k =
 (* Offsets *)
 
 let closure_offset env closure =
-  Un_cps_closure.closure_offset env.offsets closure
+  Exported_offsets.closure_offset env.offsets closure
 
 let env_var_offset env env_var =
-  Un_cps_closure.env_var_offset env.offsets env_var
+  Exported_offsets.env_var_offset env.offsets env_var
 
 let layout env closures env_vars =
-  Un_cps_closure.layout env.offsets closures env_vars
+  To_wasm_closure.layout env.offsets closures env_vars
 
 
 (* Printing
@@ -343,12 +338,12 @@ let classify effs =
   else
     Pure
 
-let mk_binding ?extra env inline effs var cmm_expr =
+let mk_binding ?extra env inline effs var wmm_expr =
   let order = next_order () in
-  let cmm_var = gen_variable var in
-  let b = { order; inline; effs; cmm_var; cmm_expr; } in
-  let v = Backend_var.With_provenance.var cmm_var in
-  let e = Un_cps_helper.var v in
+  let wmm_var = gen_variable var in
+  let b = { order; inline; effs; wmm_var; wmm_expr; } in
+  let v = Backend_var.With_provenance.var wmm_var in
+  let e = To_wasm_helper.var v in
   let env = { env with vars = Variable.Map.add var e env.vars; } in
   let env = match extra with
     | None -> env
@@ -384,11 +379,11 @@ let bind_variable env var ?extra effs inline cmm_expr =
 (* Variable lookup (for potential inlining) *)
 
 let inline_res env b =
-  b.cmm_expr, env, b.effs
+  b.wmm_expr, env, b.effs
 
 let inline_not env b =
-  let v' = Backend_var.With_provenance.var b.cmm_var in
-  Un_cps_helper.var v', env, Effects_and_coeffects.pure
+  let v' = Backend_var.With_provenance.var b.wmm_var in
+  To_wasm_helper.var v', env, Effects_and_coeffects.pure
 
 let inline_not_found env v =
   match Variable.Map.find v env.vars with
@@ -464,7 +459,7 @@ let flush_delayed_lets env =
         | Coeff m -> order_add_map m acc
       ) order_map stages in
     M.fold (fun _ b acc ->
-        Un_cps_helper.letin b.cmm_var b.cmm_expr acc
+        To_wasm_helper.letin b.wmm_var b.wmm_expr acc
       ) order_map e
   in
   let wrap e = wrap_aux env.pures env.stages e in
