@@ -49,17 +49,39 @@ let static_const
   let _ = Format.printf "\n" in
 
   match bound_symbols, static_const with
+
+  (* Flambda code:
+
+  | Singleton s, Block (tag, _mut, fields) ->
+      let name = symbol s in
+      let tag = Tag.Scannable.to_int tag in
+      let block_name = name, Cmmgen_state.Global in
+      let header = C.block_header tag (List.length fields) in
+      let env, static_fields =
+        List.fold_right
+          (fun v (env, static_fields) ->
+             let env, static_field = static_value env v in
+             env, static_field :: static_fields)
+          fields (env, [])
+      in
+      let block = C.emit_block block_name header static_fields in
+      let updates = static_block_updates (C.symbol name) env None 0 fields in
+      env, R.set_data r block, updates
+  *)
   | Singleton s, Block (tag, _mut, fields) ->
     let block = Bytes.create (4*(List.length fields + 1)) in
     let rec init_block i = function
       | [] -> ()
       | x::xs -> match x with
-        | Flambda.Static_const.Field_of_block.Symbol (_s) -> failwith "cannot statically allocate symbol"
+        | Flambda.Static_const.Field_of_block.Symbol (_s) -> failwith "cannot statically allocate symbol" (* TODO: this is not true, but we need to update the Env *)
         | Flambda.Static_const.Field_of_block.Tagged_immediate (target_imm) ->
           Bytes.set_int32_ne block (4*i) (Targetint.OCaml.to_int32 (Target_imm.to_targetint target_imm));
           init_block (i+1) xs;
           ()
-        | Flambda.Static_const.Field_of_block.Dynamically_computed (_v) -> failwith "cannot statically allocate variable"
+        | Flambda.Static_const.Field_of_block.Dynamically_computed (_v) ->
+          Bytes.set_int32_ne block (4*i) 1l;
+          init_block (i+1) xs;
+          ()
     in
     let tag = Int32.of_int (Tag.Scannable.to_int tag) in
     let size = (Int32.of_int (List.length fields)) in
@@ -119,7 +141,12 @@ and named env n =
   | Set_of_closures s -> todo ()
     (*let t, env, effs = set_of_closures env s in
     t, None, env, effs*)
-  | Prim (p, dbg) -> todo ()
+  | Prim (p, dbg) -> 
+      match p with
+      | Unary (Duplicate_array {kind; source_mutability; destination_mutability;}, s) ->
+      (* emit a call to the primitive implementation in WebAssembly *)
+        todo ()
+      | _ -> todo ()
     (*let prim_eff = Flambda_primitive.effects_and_coeffects p in
     let t, extra, env, effs = prim env dbg p in
     t, extra, env, Ece.join effs prim_eff*)
@@ -129,11 +156,11 @@ and decide_inline_cont h k num_free_occurrences =
   && (Flambda.Continuation_handler.stub h
       || cont_has_one_occurrence k num_free_occurrences)
 
-and let_expr_bind ?extra body env v cmm_expr effs =
+and let_expr_bind ?extra body env v wmm_expr effs =
   match decide_inline_let effs v body with
   | Skip -> env
-  | Inline -> Env.bind_variable env v ?extra effs true cmm_expr
-  | Regular -> Env.bind_variable env v ?extra effs false cmm_expr
+  | Inline -> Env.bind_variable env v ?extra effs true wmm_expr
+  | Regular -> Env.bind_variable env v ?extra effs false wmm_expr
 
 and lexpr env t = 
   let _ = Format.printf "\nTrying to compile let_expr:" in
@@ -154,8 +181,8 @@ and lexpr env t =
       begin match bound_vars, e with
       | Singleton v, _ ->
         let v = Var_in_binding_pos.var v in
-        let cmm_expr, extra, env, effs = named env e in
-        let env = let_expr_bind ?extra body env v cmm_expr effs in
+        let wmm_expr, extra, env, effs = named env e in
+        let env = let_expr_bind ?extra body env v wmm_expr effs in
         expr env body
       | Set_of_closures { closure_vars; _ }, Set_of_closures soc ->
         todo ()
@@ -275,7 +302,8 @@ let rec static_data_to_wasm index = function
     global :: remainder_globals, Bytes.to_string data ^ remainder_data_parts
 
 
-let unit (unit : Flambda_unit.t) (middle_end_result : Flambda_middle_end.middle_end_result) = 
+let unit (middle_end_result : Flambda_middle_end.middle_end_result) = 
+  let unit = middle_end_result.unit in
   let _ = Flambda.Expr.print Format.std_formatter (Flambda_unit.body unit) in
 
   let unit = middle_end_result.unit in

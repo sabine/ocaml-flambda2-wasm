@@ -203,7 +203,7 @@ let compile_implementation_flambda ?toplevel ~backend ~filename ~prefixname
       in
 
       if !Clflags.wasm then
-        let wasm_module = Flambda2_to_wasm.To_wasm.unit translated_program in
+        let wasm_module = Flambda_to_wasm.To_wasm.unit translated_program in
         let oc = open_out (prefixname ^ ".wat") in
         Wasm.Wasm_print_wat.module_ oc 80 wasm_module;
         close_out oc;
