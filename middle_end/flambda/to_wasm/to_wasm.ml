@@ -112,15 +112,21 @@ type inlining_decision =
   | Inline (* the variable is used once, we can try and inline its use *)
   | Regular (* the variable is used multiple times, do not try and inline it. *)
 
+
 let decide_inline_let effs v body =
-  let free_names = Flambda.Expr.free_names body in
+  let free_names = Expr.free_names body in
   match Name_occurrences.count_variable free_names v with
   | Zero ->
-      if Effects_and_coeffects.has_commuting_effects effs
-      then Regular (* Could be Inline technically, but it's not clear the
-                      code would be better (nor more readable). *)
-      else Skip
-  | One -> Inline
+    begin match Env.classify effs with
+    | Coeffect | Pure -> Skip
+    | Effect -> Regular (* Could be Inline technically, but it doesn't matter
+                           since it can only be flushed by the env. *)
+    end
+  | One ->
+    begin match Env.classify effs with
+    | Effect when not (Flambda_features.Expert.inline_effects_in_cmm ()) -> Regular
+    | _ -> Inline
+    end
   | More_than_one -> Regular
 
 let rec expr env e =
