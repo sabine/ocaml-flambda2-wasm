@@ -456,6 +456,9 @@ let read_one_param ppf position name v =
       [ Flambda.unbox_along_intra_function_control_flow ] v
   | "flambda-lift-inconstants" ->
     set "flambda-lift-inconstants" [ Flambda.lift_inconstants ] v
+  | "flambda-lift-toplevel-inconstants" ->
+    set "flambda-lift-toplevel-inconstants"
+      [ Flambda.lift_toplevel_inconstants ] v
   | "flambda-backend-cse-at-toplevel" ->
     set "flambda-backend-cse-at-toplevel"
       [ Flambda.backend_cse_at_toplevel ] v
@@ -468,6 +471,9 @@ let read_one_param ppf position name v =
   | "flambda-expert-fallback-inlining-heuristic" ->
     set "flambda-expert-fallback-inlining-heuristic"
       [ Flambda.Expert.fallback_inlining_heuristic ] v
+  | "flambda-inline-effects-in-cmm" ->
+    set "flambda-inline-effects-in-cmm"
+      [ Flambda.Expert.inline_effects_in_cmm ] v
   | "flambda-debug-concrete-types-only-on-canonicals" ->
     set "flambda-debug-concrete-types-only-on-canonicals"
       [ Flambda.Debug.concrete_types_only_on_canonicals ] v

@@ -226,6 +226,8 @@ module type Optcommon_options = sig
   val _no_flambda_unbox_along_intra_function_control_flow : unit -> unit
   val _flambda_lift_inconstants : unit -> unit
   val _no_flambda_lift_inconstants : unit -> unit
+  val _flambda_lift_toplevel_inconstants : unit -> unit
+  val _no_flambda_lift_toplevel_inconstants : unit -> unit
   val _flambda_backend_cse_at_toplevel : unit -> unit
   val _no_flambda_backend_cse_at_toplevel : unit -> unit
   val _flambda_cse_depth : int -> unit
@@ -235,6 +237,8 @@ module type Optcommon_options = sig
   val _no_flambda_expert_code_id_and_symbol_scoping_checks : unit -> unit
   val _flambda_expert_fallback_inlining_heuristic : unit -> unit
   val _no_flambda_expert_fallback_inlining_heuristic : unit -> unit
+  val _flambda_expert_inline_effects_in_cmm : unit -> unit
+  val _no_flambda_expert_inline_effects_in_cmm : unit -> unit
   val _flambda_debug_concrete_types_only_on_canonicals : unit -> unit
   val _no_flambda_debug_concrete_types_only_on_canonicals : unit -> unit
 
