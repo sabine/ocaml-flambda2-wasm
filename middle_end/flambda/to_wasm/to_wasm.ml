@@ -73,26 +73,26 @@ let static_const
     let rec init_block i = function
       | [] -> ()
       | x::xs -> match x with
-        | Flambda.Static_const.Field_of_block.Symbol (_s) -> failwith "cannot statically allocate symbol" (* TODO: this is not true, but we need to update the Env *)
+        | Flambda.Static_const.Field_of_block.Symbol (_s) -> failwith "cannot statically allocate symbol" (* TODO: this is not true, but we need to update the Env in order to statically allocate a symbol *)
         | Flambda.Static_const.Field_of_block.Tagged_immediate (target_imm) ->
-          Bytes.set_int32_ne block (4*i) (Targetint.OCaml.to_int32 (Target_imm.to_targetint target_imm));
+          Bytes.set_int64_ne block (4*i) (Targetint.OCaml.to_int64 (Target_imm.to_targetint target_imm));
           init_block (i+1) xs;
           ()
         | Flambda.Static_const.Field_of_block.Dynamically_computed (_v) ->
-          Bytes.set_int32_ne block (4*i) 1l;
+          Bytes.set_int64_ne block (4*i) 1L;
           init_block (i+1) xs;
           ()
     in
-    let tag = Int32.of_int (Tag.Scannable.to_int tag) in
-    let size = (Int32.of_int (List.length fields)) in
-    let gc_bits = (Int32.of_int 3) in
-    let header = Int32.logor tag (Int32.logor (Int32.shift_left size 10) (Int32.shift_left gc_bits 8))in
-    Bytes.set_int32_ne block 0 header;
+    let tag = Int64.of_int (Tag.Scannable.to_int tag) in
+    let size = (Int64.of_int (List.length fields)) in
+    let gc_bits = (Int64.of_int 3) in
+    let header = Int64.logor tag (Int64.logor (Int64.shift_left size 10) (Int64.shift_left gc_bits 8))in
+    Bytes.set_int64_ne block 0 header;
     init_block 1 fields;
-    (* TODO: Change all of this to whatever the block representation on WebAssembly will be. GC bits are useless on WASM, probably.
+    (* TODO: Change all of this to use the GC MVP with anyref. GC bits are useless on WASM, probably.
      * However, GC bits will also not be a problem, so I add them here. This way, I can compare the block rep in the data segment to match 1:1 with
      * the regular OCaml block representation.
-     * I assume 32-bit values here, and I do NOT tag integers currently, as the plan is to work with WASM GC. *)
+     * I assume 64-bit values here, and I do NOT tag integers currently, as the plan is to work with WASM GC. *)
     env, { static_data = [DataItem (Linkage_name.to_string(Symbol.linkage_name s), block)]; fun_decls = []; instr_list = [];}
   | _ ->
     failwith "static_const not implemented for this"
@@ -362,7 +362,7 @@ let unit (middle_end_result : Flambda_middle_end.middle_end_result) =
     let globals, data_parts = static_data_to_wasm 0 static_data in
     let data_segment = {
       index = {name = None; index = 0l};
-      offset = [Const (I32 (I32.of_int_u 0))];
+      offset = [Const (I64 (I64.of_int_u 0))];
       init = data_parts;
     } in
 
