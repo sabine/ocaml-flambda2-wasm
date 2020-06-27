@@ -27,6 +27,34 @@ open! Simplify_import
 
 type 'a k = DA.t -> ('a * UA.t)
 
+let get_and_place_lifted_constants dacc uacc scoping_rule
+      ~prior_lifted_constants ~extra_lifted_constants ~body =
+  let lifted_constants = R.get_lifted_constants (UA.r uacc) in
+  let uacc =
+    UA.map_r uacc ~f:(fun r -> R.set_lifted_constants r prior_lifted_constants)
+  in
+  let all_lifted_constants =
+    extra_lifted_constants
+      @ List.map (fun lifted_constant ->
+          LC.bound_symbols lifted_constant, LC.defining_expr lifted_constant,
+            Name_occurrences.empty)
+        lifted_constants
+  in
+  let sorted_lifted_constants =
+    (* CR mshinwell: [Sort_lifted_constants] should never need dacc here.
+       We should maybe change the interface to make it optional and cause
+       an error if it tries to use it. *)
+    Sort_lifted_constants.sort dacc all_lifted_constants
+  in
+  let body, r =
+    List.fold_left (fun (body, r) (bound_symbols, defining_expr) ->
+        Simplify_common.create_let_symbol r scoping_rule
+          (UA.code_age_relation uacc) bound_symbols defining_expr body)
+      (body, UA.r uacc)
+      sorted_lifted_constants.bindings_outermost_last
+  in
+  body, UA.with_r uacc r
+
 let rec simplify_let
   : 'a. DA.t -> Let.t -> 'a k -> Expr.t * 'a * UA.t
 = fun dacc let_expr k ->
@@ -34,14 +62,61 @@ let rec simplify_let
   let original_dacc = dacc in
   (* CR mshinwell: Find out if we need the special fold function for lets. *)
   L.pattern_match let_expr ~f:(fun ~bound_vars ~body ->
+    let defining_expr = L.defining_expr let_expr in
+    let is_set_of_closures = Named.is_set_of_closures defining_expr in
+    let place_lifted_constants_immediately =
+      (* Simplification of toplevel sets of closures can yield constants
+         that must be placed immediately around the body rather than
+         propagated upwards to the previous enclosing [Let_symbol].  That this
+         is so follows from the fact that such constants may involve
+         variables in their definition.  We cannot follow the pattern of the
+         [Reified] case below as that would cause the bodies of the
+         functions involved to be simplified a second time. *)
+      is_set_of_closures && DE.at_unit_toplevel (DA.denv dacc)
+    in
+    let prior_lifted_constants = R.get_lifted_constants (DA.r dacc) in
+    let dacc =
+      if place_lifted_constants_immediately then
+        DA.map_r dacc ~f:R.clear_lifted_constants
+      else
+        dacc
+    in
     let simplify_named_result =
       Simplify_named.simplify_named dacc ~bound_vars (L.defining_expr let_expr)
     in
     match simplify_named_result with
     | Bindings { bindings_outermost_first = bindings; dacc; } ->
+      let lifted_constants_after_defining_expr =
+        R.get_lifted_constants (DA.r dacc)
+      in
+      let dacc =
+        if not place_lifted_constants_immediately then dacc
+        else DA.map_r dacc ~f:R.clear_lifted_constants
+      in
       let body, user_data, uacc = simplify_expr dacc body k in
-      Simplify_common.bind_let_bound ~bindings ~body, user_data, uacc
+      let body = Simplify_common.bind_let_bound ~bindings ~body in
+      if place_lifted_constants_immediately then
+        let extra_lifted_constants =
+          List.map (fun lifted_const ->
+              LC.bound_symbols lifted_const,
+                LC.defining_expr lifted_const,
+                  Name_occurrences.empty)
+            lifted_constants_after_defining_expr
+        in
+        let expr, uacc =
+          get_and_place_lifted_constants dacc uacc Dominator
+            ~extra_lifted_constants
+            ~prior_lifted_constants ~body
+        in
+        expr, user_data, uacc
+      else
+        body, user_data, uacc
     | Reified { definition; bound_symbol; static_const; dacc; } ->
+      if place_lifted_constants_immediately then begin
+        Misc.fatal_errorf "Did not expect [Simplify_named] to return \
+            [Reified] (bound symbol %a)"
+          Bound_symbols.print bound_symbol
+      end;
       let let_expr =
         Expr.create_pattern_let bound_vars definition body
       in
@@ -54,6 +129,11 @@ let rec simplify_let
       let dacc = DA.with_r original_dacc (DA.r dacc) in
       simplify_expr dacc let_symbol_expr k
     | Shared { symbol; kind; } ->
+      if place_lifted_constants_immediately then begin
+        Misc.fatal_errorf "Did not expect [Simplify_named] to return \
+            [Shared] (symbol %a)"
+          Symbol.print symbol
+      end;
       let var = Bindable_let_bound.must_be_singleton bound_vars in
       let ty = T.alias_type_of kind (Simple.symbol symbol) in
       let dacc =
@@ -162,39 +242,18 @@ and simplify_let_symbol
     | Sets_of_closures _ -> dacc
   in
   let body, user_data, uacc = simplify_expr dacc body k in
-  let lifted_constants = R.get_lifted_constants (UA.r uacc) in
-  let uacc =
-    UA.map_r uacc ~f:(fun r -> R.set_lifted_constants r prior_lifted_constants)
+  let expr, uacc =
+    (* It's valid to use [dacc] to examine each constant during sorting
+       because the constants don't involve variables.  They may involve
+       symbols, but those symbols are either already bound by [dacc], or
+       are in the list of constants being sorted. *)
+    get_and_place_lifted_constants dacc uacc scoping_rule
+      ~prior_lifted_constants
+      ~extra_lifted_constants:
+        [bound_symbols, defining_expr, Name_occurrences.empty]
+      ~body
   in
-  let all_lifted_constants =
-    (bound_symbols, defining_expr, Name_occurrences.empty)
-      :: List.map (fun lifted_constant ->
-          LC.bound_symbols lifted_constant, LC.defining_expr lifted_constant,
-            Name_occurrences.empty)
-        lifted_constants
-  in
-(*
-Format.eprintf "All bindings:@ %a\n%!"
-  (Format.pp_print_list ~pp_sep:Format.pp_print_space
-    (fun ppf (bound_syms, def) ->
-      Format.fprintf ppf "@[(%a@ %a)@]"
-        Bound_symbols.print bound_syms Static_const.print def))
-  all_lifted_constants;
-*)
-  let sorted_lifted_constants =
-    (* CR mshinwell: [Sort_lifted_constants] should never need dacc here.
-       We should maybe change the interface to make it optional and cause
-       an error if it tries to use it. *)
-    Sort_lifted_constants.sort dacc all_lifted_constants
-  in
-  let expr, r =
-    List.fold_left (fun (body, r) (bound_symbols, defining_expr) ->
-        Simplify_common.create_let_symbol r scoping_rule
-          (UA.code_age_relation uacc) bound_symbols defining_expr body)
-      (body, UA.r uacc)
-      sorted_lifted_constants.bindings_outermost_last
-  in
-  expr, user_data, UA.with_r uacc r
+  expr, user_data, uacc
 
 and simplify_one_continuation_handler :
  'a. DA.t
@@ -692,9 +751,15 @@ Format.eprintf "Simplifying inlined body with DE depth delta = %d\n%!"
     simplify_expr dacc inlined k
   | None ->
     let dacc, use_id =
-      DA.record_continuation_use dacc (Apply.continuation apply) Non_inlinable
-        ~typing_env_at_use:(DA.typing_env dacc)
-        ~arg_types:(T.unknown_types_from_arity result_arity)
+      match Apply.continuation apply with
+      | Never_returns -> dacc, None
+      | Return apply_return_continuation ->
+        let dacc, use_id =
+          DA.record_continuation_use dacc apply_return_continuation Non_inlinable
+            ~typing_env_at_use:(DA.typing_env dacc)
+            ~arg_types:(T.unknown_types_from_arity result_arity)
+        in
+        dacc, Some use_id
     in
     let dacc, exn_cont_use_id =
       DA.record_continuation_use dacc
@@ -710,8 +775,11 @@ Format.eprintf "Simplifying inlined body with DE depth delta = %d\n%!"
         apply
     in
     let expr =
-      Simplify_common.add_wrapper_for_fixed_arity_apply uacc ~use_id
-        result_arity apply
+      match use_id with
+      | None -> Expr.create_apply apply
+      | Some use_id ->
+        Simplify_common.add_wrapper_for_fixed_arity_apply uacc ~use_id
+          result_arity apply
     in
     expr, user_data, uacc
 
@@ -730,6 +798,12 @@ and simplify_direct_partial_application
      of type class like thing. *)
   let args = Apply.args apply in
   let dbg = Apply.dbg apply in
+  let apply_continuation =
+    match Apply.continuation apply with
+    | Never_returns ->
+      Misc.fatal_error "cannot simplify a partial application that never returns"
+    | Return continuation -> continuation
+  in
   begin match Apply.inline apply with
   | Always_inline | Never_inline ->
     Location.prerr_warning (Debuginfo.to_location dbg)
@@ -791,7 +865,7 @@ and simplify_direct_partial_application
     let body =
       let full_application =
         Apply.create ~callee:(Apply.callee apply)
-          ~continuation:return_continuation
+          ~continuation:(Return return_continuation)
           exn_continuation
           ~args
           ~call_kind
@@ -845,21 +919,29 @@ and simplify_direct_partial_application
     let closure_elements =
       Var_within_closure.Map.of_list applied_args_with_closure_vars
     in
-    (* CR mshinwell: Factor out this next part into a helper function *)
+    let dummy_code =
+      (* We should not add the real piece of code as a lifted constant.
+         A new piece of code will always be generated when the [Let] we
+         generate below is simplified.  As such we can simply add a lifted
+         constant identifying deleted code.  This will ensure, if for some
+         reason the constant makes it to Cmm stage, that code size is not
+         increased unnecessarily. *)
+      Lifted_constant.create_deleted_piece_of_code (DA.denv dacc) code_id
+    in
     let code =
       Lifted_constant.create_piece_of_code (DA.denv dacc) code_id
         params_and_body
     in
     let dacc =
       dacc
-      |> DA.map_r ~f:(fun r -> R.new_lifted_constant r code)
+      |> DA.map_r ~f:(fun r -> R.new_lifted_constant r dummy_code)
       |> DA.map_denv ~f:(fun denv ->
         DE.add_lifted_constants denv ~lifted:[code])
     in
     Set_of_closures.create function_decls ~closure_elements, dacc
   in
   let apply_cont =
-    Apply_cont.create (Apply.continuation apply)
+    Apply_cont.create apply_continuation
       ~args:[Simple.var wrapper_var] ~dbg
   in
   let expr =
@@ -911,7 +993,7 @@ and simplify_direct_over_application
   in
   let full_apply =
     Apply.with_continuation_callee_and_args apply
-      after_full_application
+      (Return after_full_application)
       ~callee:(Apply.callee apply)
       ~args:full_app_args
   in
@@ -986,7 +1068,12 @@ and simplify_function_call_where_callee's_type_unavailable
     -> args:Simple.t list -> arg_types:T.t list
     -> 'a k -> Expr.t * 'a * UA.t
 = fun dacc apply (call : Call_kind.Function_call.t) ~args:_ ~arg_types k ->
-  let cont = Apply.continuation apply in
+  let cont =
+    match Apply.continuation apply with
+    | Never_returns ->
+      Misc.fatal_error "cannot simplify an application that never returns"
+    | Return continuation -> continuation
+  in
   let denv = DA.denv dacc in
   let typing_env_at_use = DE.typing_env denv in
   let dacc, exn_cont_use_id =
@@ -1015,7 +1102,7 @@ and simplify_function_call_where_callee's_type_unavailable
     match call with
     | Indirect_unknown_arity ->
       let dacc, use_id =
-        DA.record_continuation_use dacc (Apply.continuation apply) Non_inlinable
+        DA.record_continuation_use dacc cont Non_inlinable
           ~typing_env_at_use ~arg_types:[T.any_value ()]
       in
       Call_kind.indirect_function_call_unknown_arity (), use_id, dacc
@@ -1187,6 +1274,12 @@ and simplify_method_call
       K.print callee_kind
       T.print callee_ty
   end;
+  let apply_cont =
+    match Apply.continuation apply with
+    | Never_returns ->
+      Misc.fatal_error "cannot simplify a method call that never returns"
+    | Return continuation -> continuation
+  in
   let denv = DA.denv dacc in
   DE.check_simple_is_bound denv obj;
   let expected_arity = List.map (fun _ -> K.value) arg_types in
@@ -1197,7 +1290,7 @@ and simplify_method_call
       Apply.print apply
   end;
   let dacc, use_id =
-    DA.record_continuation_use dacc (Apply.continuation apply) Non_inlinable
+    DA.record_continuation_use dacc apply_cont Non_inlinable
       ~typing_env_at_use:(DE.typing_env denv)
       ~arg_types:[T.any_value ()]
   in
@@ -1254,9 +1347,16 @@ and simplify_c_call
   end;
 *)
   let dacc, use_id =
-    DA.record_continuation_use dacc (Apply.continuation apply) Non_inlinable
-      ~typing_env_at_use:(DA.typing_env dacc)
-      ~arg_types:(T.unknown_types_from_arity return_arity)
+    match Apply.continuation apply with
+    | Return apply_continuation ->
+      let dacc, use_id =
+        DA.record_continuation_use dacc apply_continuation Non_inlinable
+          ~typing_env_at_use:(DA.typing_env dacc)
+          ~arg_types:(T.unknown_types_from_arity return_arity)
+      in
+      dacc, Some use_id
+    | Never_returns ->
+      dacc, None
   in
   let dacc, exn_cont_use_id =
     (* CR mshinwell: Try to factor out these stanzas, here and above. *)
@@ -1275,8 +1375,12 @@ and simplify_c_call
       apply
   in
   let expr =
-    Simplify_common.add_wrapper_for_fixed_arity_apply uacc ~use_id
-      return_arity apply
+    match use_id with
+    | Some use_id ->
+      Simplify_common.add_wrapper_for_fixed_arity_apply uacc ~use_id
+        return_arity apply
+    | None ->
+      Expr.create_apply apply
   in
   expr, user_data, uacc
 

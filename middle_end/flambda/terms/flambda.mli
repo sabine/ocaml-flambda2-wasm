@@ -196,6 +196,9 @@ end and Named : sig
   (** Return a defining expression for a [Let] which is kind-correct, but not
       necessarily type-correct, at the given kind. *)
   val dummy_value : Flambda_kind.t -> t
+
+  (** Returns [true] iff the given expression is a set of closures. *)
+  val is_set_of_closures : t -> bool
 end and Let_expr : sig
   (** The alpha-equivalence classes of expressions that bind variables. *)
   type t
@@ -287,6 +290,11 @@ end and Let_symbol_expr : sig
      : ?newer_versions_of:Code_id.t Code_id.Map.t
     -> ?set_of_closures:(Symbol.t Closure_id.Map.t * Set_of_closures.t)
     -> Function_params_and_body.t Code_id.Map.t
+    -> Bound_symbols.t * Static_const.t
+
+  val deleted_pieces_of_code
+     : ?newer_versions_of:Code_id.t Code_id.Map.t
+    -> Code_id.Set.t
     -> Bound_symbols.t * Static_const.t
 end and Let_cont_expr : sig
   (** Values of type [t] represent alpha-equivalence classes of the definitions
@@ -465,6 +473,18 @@ end and Recursive_let_cont_handlers : sig
      : t
     -> f:(body:Expr.t -> Continuation_handlers.t -> 'a)
     -> 'a
+
+(** Deconstruct two continuation bindings using the same bound continuations. *)
+  val pattern_match_pair
+   : t
+  -> t
+  -> f:(body1:Expr.t
+    -> body2:Expr.t
+    -> Continuation_handlers.t
+    -> Continuation_handlers.t
+    -> 'a)
+  -> 'a
+
 end and Continuation_handlers : sig
   (** The result of pattern matching on [Recursive_let_cont_handlers]
       (see above). *)

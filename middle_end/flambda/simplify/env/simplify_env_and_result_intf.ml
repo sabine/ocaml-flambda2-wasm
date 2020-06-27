@@ -21,7 +21,7 @@ open! Flambda.Import
 type resolver = Compilation_unit.t -> Flambda_type.Typing_env.t option
 type get_imported_names = unit -> Name.Set.t
 type get_imported_code =
-  unit -> Function_params_and_body.t Code_id.Map.t
+  unit -> Exported_code.t
 
 module type Downwards_env = sig
   type t
@@ -302,7 +302,7 @@ module type Result = sig
     -> Flambda.Function_params_and_body.t Code_id.Map.t
     -> t
 
-  val all_code : t -> Flambda.Function_params_and_body.t Code_id.Map.t
+  val all_code : t -> Exported_code.t
 
   val clear_lifted_constants : t -> t
 
@@ -340,6 +340,12 @@ module type Lifted_constant = sig
      : downwards_env
     -> ?newer_versions_of:Code_id.t Code_id.Map.t
     -> Flambda.Function_params_and_body.t Code_id.Map.t
+    -> t
+
+  val create_deleted_piece_of_code
+     : downwards_env
+    -> ?newer_versions_of:Code_id.t Code_id.Map.t
+    -> Code_id.t
     -> t
 
   val denv_at_definition : t -> downwards_env
