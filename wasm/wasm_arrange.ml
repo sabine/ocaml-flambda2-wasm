@@ -81,14 +81,14 @@ let num_value_type = function
   | F64Type -> "f64"
 
 
-let ref_value_type = function
-  | FuncRef -> "ref func"
-  | AnyRef -> "ref any"
-  | NullRef -> "ref null"
-  | OptRef (typeidx) -> "ref opt? " ^ var typeidx
-  | I31Ref -> "ref i31"
-  | EqRef -> "ref eq"
-  | RttRef (typeidx) -> "ref rtt " ^ var typeidx
+let ref_value_type (t: ref_type) = match t with
+  | FuncRefType -> "ref func"
+  | AnyRefType -> "ref any"
+  | NullRefType typeidx -> "ref null " ^ var typeidx
+  | RefType (typeidx) -> "ref opt? " ^ var typeidx
+  | I31RefType -> "ref i31"
+  | EqRefType -> "ref eq"
+  | RttRefType (n, typeidx) -> "rtt " ^ Int32.to_string n ^ " " ^ var typeidx
 
 let value_type = function
   | NumValueType n -> num_value_type n
@@ -103,7 +103,7 @@ let value_types = function
   | ts -> "[" ^ String.concat " " (List.map value_type ts) ^ "]"
 
 let elem_type = function
-  | AnyFuncType -> "anyfunc"
+  | FuncRefType -> "funcref"
 
 let limits {min; max} =
   I32.to_string_u min ^
@@ -119,6 +119,11 @@ let table_type = function
 let packed_type = function
   | I8Type -> "i8"
   | I16Type -> "i16"
+
+let pack_size = function
+  | Pack8 -> "8"
+  | Pack16 -> "16"
+  | Pack32 -> "32"
 
 let storage_type = function
   | StorageTypeValue valt -> value_type valt
@@ -188,6 +193,7 @@ struct
     | Clz -> "clz"
     | Ctz -> "ctz"
     | Popcnt -> "popcnt"
+    | ExtendS sz -> "extend" ^ pack_size sz ^ "_s"
 
   let binop xx = function
     | Add -> "add"
@@ -207,14 +213,18 @@ struct
     | Rotr -> "rotr"
 
   let cvtop xx = function
-    | ExtendSI32 -> "extend_s/i32"
-    | ExtendUI32 -> "extend_u/i32"
-    | WrapI64 -> "wrap/i64"
-    | TruncSF32 -> "trunc_s/f32"
-    | TruncUF32 -> "trunc_u/f32"
-    | TruncSF64 -> "trunc_s/f64"
-    | TruncUF64 -> "trunc_u/f64"
-    | ReinterpretFloat -> "reinterpret/f" ^ xx
+    | ExtendSI32 -> "extend_i32_s"
+    | ExtendUI32 -> "extend_i32_u"
+    | WrapI64 -> "wrap_i64"
+    | TruncSF32 -> "trunc_f32_s"
+    | TruncUF32 -> "trunc_f32_u"
+    | TruncSF64 -> "trunc_f64_s"
+    | TruncUF64 -> "trunc_f64_u"
+    | TruncSatSF32 -> "trunc_sat_f32_s"
+    | TruncSatUF32 -> "trunc_sat_f32_u"
+    | TruncSatSF64 -> "trunc_sat_f64_s"
+    | TruncSatUF64 -> "trunc_sat_f64_u"
+    | ReinterpretFloat -> "reinterpret_f" ^ xx
 end
 
 module FloatOp =
@@ -275,9 +285,9 @@ let relop = oper (IntOp.relop, FloatOp.relop)
 let cvtop = oper (IntOp.cvtop, FloatOp.cvtop)
 
 let mem_size = function
-  | Ast.Mem8 -> "8"
-  | Ast.Mem16 -> "16"
-  | Ast.Mem32 -> "32"
+  | Ast.Pack8 -> "8"
+  | Ast.Pack16 -> "16"
+  | Ast.Pack32 -> "32"
 
 let extension = function
   | Ast.SX -> "_s"
@@ -316,15 +326,19 @@ let values = function
 
 let constop v = num_value_type (type_of v) ^ ".const"
 
+let block_type = function
+  | VarBlockType x -> [Node ("type " ^ var x, [])]
+  | ValBlockType ts -> stack_type (list_of_opt ts)
+
 let rec instr e =
   let head, inner =
     match e with
     | Unreachable -> "unreachable", []
     | Nop -> "nop", []
-    | Block (ts, es) -> "block", stack_type ts @ list instr es
-    | Loop (ts, es) -> "loop", stack_type ts @ list instr es
+    | Block (ts, es) -> "block", block_type ts @ list instr es
+    | Loop (ts, es) -> "loop", block_type ts @ list instr es
     | If (ts, es1, es2) ->
-      "if", stack_type ts @
+      "if", block_type ts @
         [Node ("then", list instr es1); Node ("else", list instr es2)]
     | Br x -> "br " ^ var x, []
     | BrIf x -> "br_if " ^ var x, []
@@ -335,25 +349,23 @@ let rec instr e =
     | CallIndirect x -> "call_indirect " ^ var x, []
     | Drop -> "drop", []
     | Select -> "select", []
-    | GetLocal x -> "get_local " ^ var x, []
-    | SetLocal x -> "set_local " ^ var x, []
-    | TeeLocal x -> "tee_local " ^ var x, []
-    | GetGlobal x -> "get_global " ^ var x, []
-    | SetGlobal x -> "set_global " ^ var x, []
+    | LocalGet x -> "get_local " ^ var x, []
+    | LocalSet x -> "set_local " ^ var x, []
+    | LocalTee x -> "tee_local " ^ var x, []
+    | GlobalGet x -> "get_global " ^ var x, []
+    | GlobalSet x -> "set_global " ^ var x, []
     | Load op -> loadop op, []
     | Store op -> storeop op, []
-    | CurrentMemory -> "current_memory", []
-    | GrowMemory -> "grow_memory", []
+    | MemorySize -> "memory.size", []
+    | MemoryGrow -> "memory.grow", []
     | Const lit -> constop lit ^ " " ^ value lit, []
-    | DelayedConst s -> print_endline ("Did not resolve:" ^ s); assert false
-    | Link s -> print_endline ("Did not link:" ^ s); assert false
     | Test op -> testop op, []
     | Compare op -> relop op, []
     | Unary op -> unop op, []
     | Binary op -> binop op, []
     | Convert op -> cvtop op, []
 
-  (*GC*)| RefNull -> "ref.null", []
+  (*GC*)| RefNull typeidx -> "ref.null " ^ var typeidx, []
   (*GC*)| RefIsNull -> "ref.is_null", []
   (*GC*)| RefFunc funcidx -> "ref.func " ^ var funcidx, []
   (*GC*)| RefEq -> "ref.eq", []
@@ -377,11 +389,8 @@ let const c =
 
 let name_ n = string (Utf8.encode n);;
 
-let named_func_decl name (FuncType ftype) locals body =
-  let (ins, out) = ftype.t in
-  Node ("func " ^ name,
-    param_type_decls "param" ins @ result_type_decls "result" out @
-    named_type_decls "local" locals @
+let named_func_decl name func locals body =
+  Node ("func " ^ name ^ " " ^ var func,
     list instr body
   )
 

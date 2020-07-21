@@ -263,7 +263,7 @@ and apply_cont env expr =
         { static_data = []; fun_decls = []; instr_list = []}
       | Toplevel_return, None, _::_ ->
         let _ = Format.printf "\nthis is a top-level return with arguments" in
-        { static_data = []; fun_decls = []; instr_list = [GetLocal {index = 0l; name = Some "in"}]}
+        { static_data = []; fun_decls = []; instr_list = [LocalGet {index = 0l; name = Some "in"}]}
           (* Const (I64 (I64.of_int_u 0)) *)
           (** Sabine: for now, this is the same address that the module initialization function got passed in.
               With the reftypes proposal, the initialization function could take as parameter the index in a shared function table
@@ -337,7 +337,7 @@ let unit (middle_end_result : Flambda_middle_end.middle_end_result) =
 *)
 
     let module_init_function_type_name = "_t__module_init" in
-    let module_init_function_type = FuncType {
+    let module_init_function_type = TypeFunc (FuncType {
       name = Some module_init_function_type_name;
       t = ([
         NamedValueType {
@@ -345,12 +345,13 @@ let unit (middle_end_result : Flambda_middle_end.middle_end_result) =
           t = NumValueType I64Type;
         }
         ],[NumValueType I64Type]);
-    } in
+    }) in
+    let module_init_function_type_index = {index = 0l; name = Some "module_init_t"} in
     let module_init_function_name = "__module_init" in
     let module_init_function_index = {index = 0l; name = Some module_init_function_name} in
     let module_init_function = {
       name = module_init_function_name;
-      ftype = module_init_function_type;
+      ftype = module_init_function_type_index;
       locals = [];
       body = instr_list;
     } in
@@ -371,7 +372,7 @@ let unit (middle_end_result : Flambda_middle_end.middle_end_result) =
       memories = [{mtype = MemoryType ({min = 100l; max = None})}];
       globals = globals;
       data = [data_segment];
-      types = [];
+      types = [module_init_function_type];
       funcs = fun_decls @ [module_init_function];
       start = None;
       exports = [module_init_function_export]

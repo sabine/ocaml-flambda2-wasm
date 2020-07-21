@@ -39,17 +39,22 @@ module Values = Wasm_values
 
 open Types
 
+
+type pack_size = Pack8 | Pack16 | Pack32
+type extension = SX | ZX
+
 (* Operators *)
 
 module IntOp =
 struct
-  type unop = Clz | Ctz | Popcnt
+  type unop = Clz | Ctz | Popcnt | ExtendS of pack_size
   type binop = Add | Sub | Mul | DivS | DivU | RemS | RemU
              | And | Or | Xor | Shl | ShrS | ShrU | Rotl | Rotr
   type testop = Eqz
   type relop = Eq | Ne | LtS | LtU | GtS | GtU | LeS | LeU | GeS | GeU
   type cvtop = ExtendSI32 | ExtendUI32 | WrapI64
              | TruncSF32 | TruncUF32 | TruncSF64 | TruncUF64
+             | TruncSatSF32 | TruncSatUF32 | TruncSatSF64 | TruncSatUF64
              | ReinterpretFloat
 end
 
@@ -75,13 +80,10 @@ type testop = (I32Op.testop, I64Op.testop, F32Op.testop, F64Op.testop) Values.op
 type relop = (I32Op.relop, I64Op.relop, F32Op.relop, F64Op.relop) Values.op
 type cvtop = (I32Op.cvtop, I64Op.cvtop, F32Op.cvtop, F64Op.cvtop) Values.op
 
-type mem_size = Mem8 | Mem16 | Mem32
-type extension = SX | ZX
-
 type 'a memop =
   {ty : num_type; align : int; offset : int32; sz : 'a option}
-type loadop = (mem_size * extension) memop
-type storeop = mem_size memop
+type loadop = (pack_size * extension) memop
+type storeop = pack_size memop
 
 
 (* Expressions *)
@@ -89,32 +91,32 @@ type storeop = mem_size memop
 type literal = Values.value
 type name = string
 
+type block_type = VarBlockType of typeidx | ValBlockType of value_type option
+
 type instr =
   | Unreachable                       (* trap unconditionally *)
   | Nop                               (* do nothing *)
-  | Block of result_stack_type * instr list  (* execute in sequence *)
-  | Loop of result_stack_type * instr list   (* loop header *)
-  | If of result_stack_type * instr list * instr list  (* conditional *)
+  | Block of block_type * instr list  (* execute in sequence *)
+  | Loop of block_type * instr list   (* loop header *)
+  | If of block_type * instr list * instr list  (* conditional *)
   | Br of labelidx                         (* break to n-th surrounding label *)
   | BrIf of labelidx                       (* conditional break *)
   | BrTable of labelidx list * labelidx         (* indexed break *)
   | Return                            (* break from function body *)
   | Call of funcidx                      (* call function *)
-  | Link of string                    (* used to link later on *)
   | CallIndirect of typeidx               (* call function through table *)
   | Drop                              (* forget a value *)
   | Select                            (* branchless conditional *)
-  | GetLocal of localidx                   (* read local variable *)
-  | SetLocal of localidx                   (* write local variable *)
-  | TeeLocal of localidx                   (* write local variable and keep value *)
-  | GetGlobal of globalidx                  (* read global variable *)
-  | SetGlobal of globalidx                  (* write global variable *)
+  | LocalGet of localidx                   (* read local variable *)
+  | LocalSet of localidx                   (* write local variable *)
+  | LocalTee of localidx                   (* write local variable and keep value *)
+  | GlobalGet of globalidx                  (* read global variable *)
+  | GlobalSet of globalidx                  (* write global variable *)
   | Load of loadop                    (* read memory at address *)
   | Store of storeop                  (* write memory at address *)
-  | CurrentMemory                     (* size of linear memory *)
-  | GrowMemory                        (* grow linear memory *)
+  | MemorySize                     (* size of linear memory *)
+  | MemoryGrow                        (* grow linear memory *)
   | Const of literal                  (* constant *)
-  | DelayedConst of string            (* a constant that is resolved at a later point *)
   | Test of testop                    (* numeric test *)
   | Compare of relop                  (* numeric comparison *)
   | Unary of unop                     (* unary numeric operator *)
@@ -122,7 +124,7 @@ type instr =
   | Convert of cvtop                  (* conversion *)
 
   (*GC reference types proposal *)
-  (*GC*)| RefNull
+  (*GC*)| RefNull of typeidx
   (*GC*)| RefIsNull
   (*GC*)| RefFunc of funcidx
   (*GC*)| RefEq
@@ -156,7 +158,7 @@ type global =
 type func =
 {
   name: string;
-  ftype : func_type;
+  ftype : typeidx;
   locals : named_value_type list;
   body : instr list;
 }
@@ -268,7 +270,7 @@ let export_type (m : module_) (ex : export) : extern_type =
   match edesc with
   | FuncExport x ->
     let fts =
-      funcs its @ List.map (fun f -> f.ftype) m.funcs
+      funcs its @ List.map (fun f -> func_type_for m f.ftype) m.funcs
     in ExternFuncType (nth fts x.index)
   | TableExport x ->
     let tts = tables its @ List.map (fun t -> t.ttype) m.tables in
@@ -280,6 +282,9 @@ let export_type (m : module_) (ex : export) : extern_type =
     let gts = globals its @ List.map (fun g -> g.gtype) m.globals in
     ExternGlobalType (nth gts x.index)
 
+let int_list_of_name n = List.init (String.length n) (function i -> Char.code (String.get n i))
+
+(* 
 let string_of_name n =
   let b = Buffer.create 16 in
   let escape uc =
@@ -293,3 +298,4 @@ let string_of_name n =
   in
   List.iter escape n;
   Buffer.contents b
+*)

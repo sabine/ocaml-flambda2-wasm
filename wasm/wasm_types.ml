@@ -37,20 +37,20 @@ type mutability = Immutable | Mutable
 
 type num_type = I32Type | I64Type | F32Type | F64Type
 (*GC*)type ref_type = 
-  | AnyRef
-  | FuncRef
-  | NullRef
-  | OptRef of typeidx
-  | I31Ref
-  | EqRef
-  | RttRef of typeidx
+  | AnyRefType
+  | FuncRefType
+  | NullRefType of typeidx
+  | RefType of typeidx
+  | I31RefType
+  | EqRefType
+  | RttRefType of Int32.t * typeidx
 (*exception-handling| ExnRef*)
 (*GC*)type packed_type = I8Type | I16Type
 type value_type = NumValueType of num_type | (*GC*)RefValueType of ref_type
 (*GC*)type storage_type = StorageTypeValue of value_type | StorageTypePacked of packed_type
 (*GC*)type field_type = FieldType of mutability * storage_type
 
-type elem_type = AnyFuncType
+type elem_type = FuncRefType
 type named_value_type = NamedValueType of {name: string option; t: value_type }
 type param_stack_type = named_value_type list
 type result_stack_type = value_type list

@@ -10,7 +10,7 @@ end
 
 module A = struct
   type t = int
-  let x = 40
+  let x = 42
   let hello a = a + x
 end
 
