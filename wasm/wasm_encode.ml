@@ -93,18 +93,24 @@ let encode m =
 
     let heap_type t = vs33 t.index
 
+    let num_value_type = function 
+      | I32Type -> vs7 (-0x01)
+      | I64Type -> vs7 (-0x02)
+      | F32Type -> vs7 (-0x03)
+      | F64Type -> vs7 (-0x04)
+
+    let ref_value_type (t: ref_type) = match t with
+      | FuncRefType -> vs7 (-0x10)
+      | AnyRefType -> vs7 (-0x12)
+      | EqRefType -> vs7 (-0x13)
+      | NullRefType t -> vs7 (-0x14); heap_type t
+      | RefType t -> vs7 (-0x15); heap_type t
+      | I31RefType -> vs7 (-0x16)
+      | RttRefType (n, t) -> vs7 (-0x17); vu32 n; heap_type t
+
     let value_type = function
-      | RefValueType(FuncRefType) -> vs7 (-0x10)
-      | RefValueType(AnyRefType) -> vs7 (-0x12)
-      | RefValueType(EqRefType) -> vs7 (-0x13)
-      | RefValueType(NullRefType t) -> vs7 (-0x14); heap_type t
-      | RefValueType(RefType t) -> vs7 (-0x15); heap_type t
-      | RefValueType(I31RefType) -> vs7 (-0x16)
-      | RefValueType(RttRefType (n, t)) -> vs7 (-0x17); vu32 n; heap_type t
-      | NumValueType(I32Type) -> vs7 (-0x01)
-      | NumValueType(I64Type) -> vs7 (-0x02)
-      | NumValueType(F32Type) -> vs7 (-0x03)
-      | NumValueType(F64Type) -> vs7 (-0x04)
+      | NumValueType(t) -> num_value_type t
+      | RefValueType(t) -> ref_value_type t
 
     let elem_type = function
       | FuncRefType -> vs7 (-0x10)
@@ -420,7 +426,7 @@ let encode m =
 
     (* Type section *)
     let storage_type = function
-      | StorageTypeValue value_type -> failwith "TODO"
+      | StorageTypeValue t -> value_type t
       | StorageTypePacked (I8Type) -> vs7 (-0x06)
       | StorageTypePacked (I16Type) -> vs7 (-0x07)
 
